@@ -72,4 +72,57 @@ object SaveNames {
             null
         }
     }
+
+    private val DRIVE_PREFIX = Regex("^[A-Za-z]:")
+
+    /**
+     * Indica si [entryPath] es una ruta relativa segura para un miembro de
+     * archivo (zip o tar), antes de resolverla contra una carpeta destino.
+     *
+     * Rechaza rutas vacías o en blanco, el byte NUL, la barra invertida
+     * (nombre de fichero en Linux, separador en Windows), rutas absolutas, las
+     * letras de unidad de Windows y cualquier componente `..`. Acepta rutas
+     * relativas anidadas (`a/b/c.srm`), barras finales (`dir/`), componentes
+     * vacíos (`a//b`) y componentes `.`; no accede al sistema de ficheros.
+     *
+     * @param entryPath nombre del miembro tal como está guardado en el archivo.
+     * @return `true` solo si el miembro no puede escapar de su carpeta destino.
+     */
+    fun isSafeArchiveEntryPath(entryPath: String): Boolean {
+        if (entryPath.isBlank()) return false
+        if (entryPath.any { it == '\u0000' }) return false
+        if (entryPath.contains('\\')) return false
+        if (entryPath.startsWith("/")) return false
+        if (DRIVE_PREFIX.containsMatchIn(entryPath)) return false
+        if (entryPath.split('/').any { it == ".." }) return false
+        return true
+    }
+
+    /**
+     * Resuelve un miembro de archivo [entryPath] bajo [base] y devuelve
+     * `null` siempre que el miembro pueda escapar.
+     *
+     * Es la regla de contención única que comparten todos los puntos de
+     * extracción de saves. Primero aplica [isSafeArchiveEntryPath] y después
+     * comprueba que la ruta canónica destino quede estrictamente dentro de la
+     * base canónica (así se rechazan `.`, la propia base, las rutas de un
+     * hermano con el mismo prefijo y las fugas por enlace simbólico).
+     *
+     * @param base carpeta destino de la extracción.
+     * @param entryPath nombre del miembro tal como está guardado en el archivo.
+     * @return el fichero canónico destino, o `null` cuando no es seguro.
+     */
+    fun resolveArchiveEntry(base: File, entryPath: String): File? {
+        if (!isSafeArchiveEntryPath(entryPath)) return null
+        return try {
+            val canonicalBase = base.canonicalFile
+            val target = File(canonicalBase, entryPath).canonicalFile
+            val basePrefix = canonicalBase.path + File.separator
+            if (target.path.startsWith(basePrefix)) target else null
+        } catch (_: IOException) {
+            null
+        } catch (_: SecurityException) {
+            null
+        }
+    }
 }

@@ -44,6 +44,18 @@ proyecto se acoge a [Versionado Semántico](https://semver.org/lang/es/).
 - Vincular un archivo a un juego marcado a mano lo convierte en una descarga normal: la ruta es lo que define el estado, así que desaparecen la insignia *Manual*, *Quitar marca* y *Localizar archivo* y en su lugar aparecen las acciones habituales de descarga (borrar el archivo, moverlo a la tarjeta SD, ajustes de sincronización). Es el comportamiento previsto, no un fallo, y es la razón de no necesitar ninguna columna nueva en la base de datos.
 - 91 pruebas unitarias cubren ahora el trabajo de la fase 2: las 73 de la primera pasada más 18 pruebas de regresión añadidas con las correcciones de revisión y seguridad. Abarcan la persistencia de vista/orden/tamaño, el índice alfabético con filtros, la agrupación local de discos y sus falsos positivos, el códec del disco elegido, el tope de 8 segundos, la validación de nombres de partida y el desempate por descriptor.
 
+### Corregido
+
+**Endurecimiento de seguridad de la sincronización de partidas (2026-11-10)**
+
+- Los archivos de partidas usan una única regla compartida para cada miembro, tanto en zip como en tar: se rechazan las rutas absolutas, los componentes `..`, los bytes NUL, las barras invertidas y las letras de unidad de Windows, y cada destino resuelto debe quedar dentro de la carpeta canónica de partidas. Una entrada de zip no válida se omite sin abortar el resto de la sincronización.
+- Las restauraciones de PS3 ya no se fían del nombre de carpeta de destino que trae el archivo: el nombre (primera entrada del archivo, carpeta local existente o serial) debe ser un nombre simple y seguro, y la carpeta debe resolverse estrictamente dentro de `…/savedata`. Primero se valida todo el archivo, después se extrae en una carpeta temporal oculta dentro de `savedata` y solo cuando el árbol está completo se vacía la carpeta existente y se mueve allí el contenido; si falla la extracción, la partida existente queda intacta.
+- Las restauraciones de tar de Android y PS2 en dispositivos rooteados se validan y se extraen como el usuario de la app en una carpeta temporal propia de la aplicación; root solo se usa después, sobre el árbol ya validado, para conservar el propietario y cambiar la carpeta. Los archivos con rutas absolutas o recorridos, enlaces, dispositivos, miembros truncados o más de una carpeta raíz se rechazan antes de cualquier paso privilegiado.
+- El `platform_slug` que llega del servidor y se usa en las rutas de partidas y de gamelists debe cumplir `^[a-z0-9][a-z0-9._-]{0,63}$`. Los valores no válidos se descartan en la entrada de datos de RomM (se guardan como vacío o `unknown`, nunca hacen fallar el análisis) y se vuelven a rechazar donde se construye una ruta de partida, así que los valores guardados antes de esta corrección no pueden salir de la carpeta de partidas. Los slugs válidos se usan tal cual.
+- Las líneas de registro de la sincronización ya no incluyen mensajes de excepción en bruto ni nombres de partida elegidos por el servidor: los nombres pierden los caracteres de control y se limitan en longitud, y los fallos registran una clasificación fija más el nombre de la clase de la excepción.
+- Cambios de comportamiento deliberados: una restauración de tar rechazada o corrupta deja intacta la partida existente en vez de borrarla primero; un archivo de PS3 con cualquier entrada no segura se rechaza entero en vez de extraerse en parte; las entradas de zip que contienen una barra invertida se omiten.
+- 61 pruebas de regresión nuevas cubren estas reglas con árboles temporales reales y sin root (598 pruebas unitarias de JVM en total, todas en verde).
+
 ### Notas
 
 **Mejoras del launcher**

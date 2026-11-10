@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RomHeaderIdReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -104,8 +105,8 @@ class N3dsSaveHandler : SaveHandler {
             ZipInputStream(FileInputStream(tempFile)).use { zipIn ->
                 var entry = zipIn.nextEntry
                 while (entry != null) {
-                    val outFile = File(dataDir, entry.name.removePrefix("${dataDir.name}/"))
-                    if (!outFile.canonicalPath.startsWith(dataDir.canonicalPath)) {
+                    val outFile = SaveNames.resolveArchiveEntry(dataDir, entry.name.removePrefix("${dataDir.name}/"))
+                    if (outFile == null) {
                         zipIn.closeEntry()
                         entry = zipIn.nextEntry
                         continue

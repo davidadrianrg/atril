@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SaveNames
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -96,8 +97,8 @@ class CemuSaveHandler : SaveHandler {
             ZipInputStream(FileInputStream(tempFile)).use { zipIn ->
                 var entry = zipIn.nextEntry
                 while (entry != null) {
-                    val outFile = File(saveDir, entry.name.removePrefix("${saveDir.name}/"))
-                    if (!outFile.canonicalPath.startsWith(saveDir.canonicalPath)) {
+                    val outFile = SaveNames.resolveArchiveEntry(saveDir, entry.name.removePrefix("${saveDir.name}/"))
+                    if (outFile == null) {
                         zipIn.closeEntry()
                         entry = zipIn.nextEntry
                         continue

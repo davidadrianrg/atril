@@ -35,7 +35,9 @@ object DeterministicZip {
 internal fun zipFolderDeterministic(folder: File, output: File) {
     java.util.zip.ZipOutputStream(FileOutputStream(output)).use { zos ->
         folder.walkTopDown().forEach { file ->
-            val relativePath = "${folder.name}/${folder.toPath().relativize(file.toPath())}"
+            // Separador invariante: en Windows Path.toString() emite '\' y el
+            // resolvedor de entradas (SaveNames) rechaza la barra invertida.
+            val relativePath = "${folder.name}/${file.relativeTo(folder).invariantSeparatorsPath}"
             if (file.isFile) {
                 zos.putNextEntry(DeterministicZip.fixedEntry(relativePath))
                 file.inputStream().use { it.copyTo(zos) }
@@ -55,7 +57,7 @@ internal fun zipFoldersDeterministic(folders: List<File>, output: File) {
     java.util.zip.ZipOutputStream(FileOutputStream(output)).use { zos ->
         for (folder in folders) {
             folder.walkTopDown().forEach { file ->
-                val relativePath = "${folder.name}/${folder.toPath().relativize(file.toPath())}"
+                val relativePath = "${folder.name}/${file.relativeTo(folder).invariantSeparatorsPath}"
                 if (file.isFile) {
                     zos.putNextEntry(DeterministicZip.fixedEntry(relativePath))
                     file.inputStream().use { it.copyTo(zos) }
@@ -76,7 +78,7 @@ internal fun zipFoldersDeterministic(folders: List<File>, output: File) {
 internal fun zipFolderRelativeToDeterministic(root: File, folder: File, output: File) {
     java.util.zip.ZipOutputStream(FileOutputStream(output)).use { zos ->
         folder.walkTopDown().forEach { file ->
-            val relativePath = root.toPath().relativize(file.toPath()).toString()
+            val relativePath = file.relativeTo(root).invariantSeparatorsPath
             if (relativePath.isEmpty()) return@forEach
             if (file.isFile) {
                 zos.putNextEntry(DeterministicZip.fixedEntry(relativePath))

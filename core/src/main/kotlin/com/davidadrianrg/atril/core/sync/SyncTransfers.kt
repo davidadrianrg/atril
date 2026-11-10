@@ -33,7 +33,9 @@ object SyncTransfers {
         baseDelayMs: Long = SyncRetry.DEFAULT_BASE_DELAY_MS,
         log: (String) -> Unit = {},
     ): Boolean = try {
-        SyncRetry.withRetry(attempts, baseDelayMs, onRetry = { n, e -> log("upload retry $n for ${save.fileName}: ${e.message}") }) {
+        SyncRetry.withRetry(attempts, baseDelayMs, onRetry = { n, e ->
+            log("upload retry $n for ${LogSafe.fileName(save.fileName)}: ${LogSafe.exception(e)}")
+        }) {
             val fileToUpload = handler.prepareForUpload(save)
             val requestFile = fileToUpload.asRequestBody("application/octet-stream".toMediaType())
             val filePart = MultipartBody.Part.createFormData("saveFile", save.fileName, requestFile)
@@ -49,7 +51,7 @@ object SyncTransfers {
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        log("upload failed for ${save.fileName}: ${e.message}")
+        log("upload failed for ${LogSafe.fileName(save.fileName)}: ${LogSafe.exception(e)}")
         false
     }
 
@@ -79,7 +81,9 @@ object SyncTransfers {
         }
         val tempFile = File(cacheDir, "sync_dl_${romId}_${safeFileName.replace(Regex("[^A-Za-z0-9._ -]"), "_")}")
         return try {
-            SyncRetry.withRetry(attempts, baseDelayMs, onRetry = { n, e -> log("download retry $n for $safeFileName: ${e.message}") }) {
+            SyncRetry.withRetry(attempts, baseDelayMs, onRetry = { n, e ->
+                log("download retry $n for ${LogSafe.fileName(safeFileName)}: ${LogSafe.exception(e)}")
+            }) {
                 api.downloadSave(saveId, deviceId).use { body ->
                     tempFile.outputStream().use { out -> body.byteStream().use { it.copyTo(out) } }
                 }
@@ -89,17 +93,24 @@ object SyncTransfers {
                     else -> Unit
                 }
             }
-            handler.extractDownload(
+            val restored = handler.extractDownload(
                 tempFile = tempFile,
                 romFileName = romFileName,
                 platformSlug = platformSlug,
                 savesBasePath = savesBasePath,
                 targetFileName = safeFileName,
             )
+            // Rechazo operativo del handler (archivo hostil, entrada no
+            // contenida): una única línea de clasificación fija, sin nombres
+            // de entrada ni rutas del archivo.
+            if (!restored) {
+                log("download restore rejected for ${LogSafe.fileName(safeFileName)} (rom $romId)")
+            }
+            restored
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log("download failed for $safeFileName (rom $romId): ${e.message}")
+            log("download failed for ${LogSafe.fileName(safeFileName)} (rom $romId): ${LogSafe.exception(e)}")
             false
         } finally {
             tempFile.delete()

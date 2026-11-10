@@ -22,7 +22,7 @@ class GameMediaTest {
         cover: String? = "/assets/romm/resources/roms/1/2/cover/big.png?ts=2026-01-01 10:00:00",
     ) = RomDto(
         id = 7, name = name, fileName = fs, fileNameNoExt = fs.substringBeforeLast('.'),
-        platformId = 1, platformSlug = slug, pathCoverLarge = cover, summary = "A gecko.",
+        platformId = 1, platformSlugRaw = slug, pathCoverLarge = cover, summary = "A gecko.",
         mergedScreenshots = shots, pathVideo = video, pathManual = manual,
     )
 

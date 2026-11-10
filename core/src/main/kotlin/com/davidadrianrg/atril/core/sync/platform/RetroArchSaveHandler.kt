@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.remote.PlatformSlug
 import com.davidadrianrg.atril.core.sync.SaveNames
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,14 +42,17 @@ class RetroArchSaveHandler : SaveHandler {
         val seenNames = mutableSetOf<String>()
 
         // Directorios candidatos en orden de prioridad: slug primero, raíz después.
-        val saveDirs = listOf(
-            File(savesBasePath, "saves/$platformSlug"),
-            File(savesBasePath, "saves"),
-        )
-        val stateDirs = listOf(
-            File(savesBasePath, "states/$platformSlug"),
-            File(savesBasePath, "states"),
-        )
+        // El slug viene del servidor: se sanea una vez y un valor inválido solo
+        // deja la ubicación raíz (nunca se construye `saves/<slug>` con él).
+        val slug = PlatformSlug.sanitize(platformSlug)
+        val saveDirs = buildList {
+            slug?.let { add(File(savesBasePath, "saves/$it")) }
+            add(File(savesBasePath, "saves"))
+        }
+        val stateDirs = buildList {
+            slug?.let { add(File(savesBasePath, "states/$it")) }
+            add(File(savesBasePath, "states"))
+        }
 
         for (dir in saveDirs) {
             if (!dir.isDirectory) continue
@@ -138,17 +142,21 @@ class RetroArchSaveHandler : SaveHandler {
 
         // Restaurar donde viva ya el fichero (slug o raíz); si no existe
         // todavía, preferir la subcarpeta del slug si ya existe, si no la raíz.
-        val slugDir = File(savesBasePath, "$subDir/$platformSlug")
+        // Un slug inválido (p. ej. una fila persistida hostil) no construye
+        // ninguna ruta: se usa la raíz fija de saves/states.
+        val slug = PlatformSlug.sanitize(platformSlug)
+        val slugDir = slug?.let { File(savesBasePath, "$subDir/$it") }
         val rootDir = File(savesBasePath, subDir)
         val targetDir = when {
             // El save ya vive directamente en la ruta configurada (override
             // que apunta a la carpeta real del juego): restaurar ahí.
             File(savesBasePath, targetFileName).isFile -> File(savesBasePath)
-            File(slugDir, targetFileName).isFile -> slugDir
+            slugDir != null && File(slugDir, targetFileName).isFile -> slugDir
             File(rootDir, targetFileName).isFile -> rootDir
-            slugDir.isDirectory -> slugDir
+            slugDir != null && slugDir.isDirectory -> slugDir
             rootDir.isDirectory -> rootDir
-            else -> slugDir
+            slugDir != null -> slugDir
+            else -> rootDir
         }
         targetDir.mkdirs()
 
@@ -188,18 +196,21 @@ class RetroArchSaveHandler : SaveHandler {
                 STATE_PATTERN.matches(name)
         }
 
-        val parts = (
-            scan(File(savesBasePath, "saves/$platformSlug"), isSave) +
-                scan(File(savesBasePath, "saves"), isSave) +
-                subDirsOf(savesBasePath, "saves").flatMap { scan(it, isSave) } +
-                scan(File(savesBasePath, "states/$platformSlug"), isState) +
-                scan(File(savesBasePath, "states"), isState) +
-                subDirsOf(savesBasePath, "states").flatMap { scan(it, isState) } +
-                // Mismos ficheros que el fallback directo de findSaves: la
-                // huella debe cambiar si cambian, o el atajo por fingerprint
-                // se los saltaría.
-                scan(File(savesBasePath)) { name -> isSave(name) || isState(name) }
-            ).sorted()
+        val parts = buildList {
+            val slug = PlatformSlug.sanitize(platformSlug)
+            slug?.let {
+                addAll(scan(File(savesBasePath, "saves/$it"), isSave))
+                addAll(scan(File(savesBasePath, "states/$it"), isState))
+            }
+            addAll(scan(File(savesBasePath, "saves"), isSave))
+            addAll(subDirsOf(savesBasePath, "saves").flatMap { scan(it, isSave) })
+            addAll(scan(File(savesBasePath, "states"), isState))
+            addAll(subDirsOf(savesBasePath, "states").flatMap { scan(it, isState) })
+            // Mismos ficheros que el fallback directo de findSaves: la
+            // huella debe cambiar si cambian, o el atajo por fingerprint
+            // se los saltaría.
+            addAll(scan(File(savesBasePath)) { name -> isSave(name) || isState(name) })
+        }.sorted()
         if (parts.isEmpty()) null else parts.joinToString("|")
     }
 

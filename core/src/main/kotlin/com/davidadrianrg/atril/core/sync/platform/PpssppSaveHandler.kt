@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RomHeaderIdReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -102,9 +103,8 @@ class PpssppSaveHandler : SaveHandler {
             ZipInputStream(FileInputStream(tempFile)).use { zipIn ->
                 var entry = zipIn.nextEntry
                 while (entry != null) {
-                    val outFile = File(saveDataDir, entry.name)
-                    // Protección path traversal
-                    if (!outFile.canonicalPath.startsWith(saveDataDir.canonicalPath)) {
+                    val outFile = SaveNames.resolveArchiveEntry(saveDataDir, entry.name)
+                    if (outFile == null) {
                         zipIn.closeEntry()
                         entry = zipIn.nextEntry
                         continue

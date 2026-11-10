@@ -70,4 +70,20 @@ object RootShell {
 
     /** Escapa una ruta para incrustarla entre comillas simples en un sh -c. */
     fun sq(path: String): String = "'" + path.replace("'", "'\\''") + "'"
+
+    private val OWNER_PATTERN = Regex("""^\d+:\d+$""")
+
+    /**
+     * Devuelve el propietario `uid:gid` de [path] leído con `stat`.
+     *
+     * El valor solo se acepta cuando encaja con `^\d+:\d+$`, de modo que los
+     * handlers nunca interpolen en un comando de shell una salida arbitraria.
+     *
+     * @param path ruta absoluta a consultar (p. ej. la carpeta de saves).
+     * @return `uid:gid`, o null sin root, si falla o si la salida no valida.
+     */
+    fun ownerOf(path: String): String? {
+        val output = run("stat -c '%u:%g' ${sq(path)}")?.trim() ?: return null
+        return output.takeIf { OWNER_PATTERN.matches(it) }
+    }
 }

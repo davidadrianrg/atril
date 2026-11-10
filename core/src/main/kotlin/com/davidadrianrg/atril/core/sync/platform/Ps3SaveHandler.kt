@@ -1,10 +1,12 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SaveNames
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.UUID
 import java.util.zip.ZipInputStream
 
 /**
@@ -91,44 +93,144 @@ class Ps3SaveHandler : SaveHandler {
         // carpeta del save viaja en la primera entrada del zip (es la fuente
         // fiable: los juegos eligen sufijos tipo USERDATA que no se derivan
         // del serial). Fallback: carpeta local existente o el serial pelado.
-        val dirName = firstZipEntryTopDir(tempFile)
-            ?: findSaveDir(savesBasePath, serial)?.name
+        val candidate = firstZipEntryTopDir(tempFile)?.takeIf { SaveNames.isSafeSaveFileName(it) }
+            ?: findSaveDir(savesBasePath, serial)?.name?.takeIf { SaveNames.isSafeSaveFileName(it) }
             ?: serial.replace("-", "")
+        if (!SaveNames.isSafeSaveFileName(candidate)) return@withContext false
 
-        val targetDir = File(savedataRoot, dirName)
-
-        // Borrar saves existentes antes de restaurar
-        if (targetDir.isDirectory) {
-            targetDir.deleteRecursively()
+        // El destino debe quedar estrictamente dentro de savedataRoot.
+        val root = try {
+            savedataRoot.canonicalFile
+        } catch (_: Exception) {
+            return@withContext false
         }
-        targetDir.mkdirs()
+        val targetDir = try {
+            File(root, candidate).canonicalFile
+        } catch (_: Exception) {
+            return@withContext false
+        }
+        val rootPrefix = root.path + File.separator
+        if (targetDir == root || !targetDir.path.startsWith(rootPrefix)) return@withContext false
 
+        // Primera pasada: validar TODO el archivo antes de tocar el destino.
+        if (!forEachSafeEntry(tempFile, candidate, null)) return@withContext false
+
+        // Extraer primero a un staging propio (bajo savedataRoot, mismo
+        // sistema de ficheros para poder renombrar, nunca dentro del destino):
+        // un archivo estructuralmente hostil ('X' como fichero y 'X/Y') o un
+        // fallo de E/S a mitad no puede destruir el save existente.
+        if (!root.isDirectory && !root.mkdirs()) return@withContext false
+        val staging = createStagingDir(root) ?: return@withContext false
         try {
-            ZipInputStream(FileInputStream(tempFile)).use { zipIn ->
-                var entry = zipIn.nextEntry
-                while (entry != null) {
-                    // Quitar el prefijo "{dirName}/" con el que se zipeó.
-                    val outName = entry.name.removePrefix("$dirName/")
-                    if (outName.isBlank()) { zipIn.closeEntry(); entry = zipIn.nextEntry; continue }
-                    val outFile = File(targetDir, outName)
-                    if (!outFile.canonicalPath.startsWith(targetDir.canonicalPath)) {
-                        zipIn.closeEntry()
-                        entry = zipIn.nextEntry
-                        continue
-                    }
-                    if (entry.isDirectory) {
-                        outFile.mkdirs()
-                    } else {
-                        outFile.parentFile?.mkdirs()
-                        FileOutputStream(outFile).use { out -> zipIn.copyTo(out) }
-                    }
-                    zipIn.closeEntry()
-                    entry = zipIn.nextEntry
+            val targetPrefix = targetDir.path + File.separator
+            if (staging.path == targetDir.path || staging.path.startsWith(targetPrefix)) {
+                return@withContext false
+            }
+
+            var failed = false
+            val extracted = forEachSafeEntry(tempFile, candidate) { rel, isDirectory, zipIn ->
+                val outFile = SaveNames.resolveArchiveEntry(staging, rel)
+                if (outFile == null) {
+                    failed = true
+                    return@forEachSafeEntry
+                }
+                if (isDirectory) {
+                    outFile.mkdirs()
+                    if (!outFile.isDirectory) failed = true
+                } else {
+                    outFile.parentFile?.mkdirs()
+                    FileOutputStream(outFile).use { out -> zipIn.copyTo(out) }
                 }
             }
-            true
+            if (!extracted || failed) return@withContext false
+
+            // Sustitución: el staging ya contiene el árbol completo y validado.
+            if (targetDir.isDirectory) clearDirectoryContents(targetDir)
+            targetDir.mkdirs()
+            val staged = staging.listFiles() ?: return@withContext false
+            staged.all { child ->
+                val dest = SaveNames.resolveArchiveEntry(targetDir, child.name) ?: return@all false
+                child.renameTo(dest)
+            }
         } catch (_: Exception) {
             false
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
+    /**
+     * Crea un directorio de staging nuevo bajo [parent].
+     *
+     * Debe colgar de `savedataRoot` para compartir sistema de ficheros con el
+     * destino: el intercambio final se hace con `renameTo`, que solo es
+     * atómico dentro del mismo volumen. Se usa un nombre oculto y aleatorio
+     * para no colisionar con saves ni con restos de una corrida anterior.
+     */
+    private fun createStagingDir(parent: File): File? = try {
+        repeat(4) {
+            val dir = File(parent, ".ps3_restore_stage_${UUID.randomUUID()}")
+            if (!dir.exists() && dir.mkdirs()) return dir
+        }
+        null
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * Recorre las entradas del zip validando cada ruta relativa a [dirName].
+     *
+     * Un `rel` en blanco se salta. Cualquier ruta que no pase
+     * [SaveNames.isSafeArchiveEntryPath] aborta la pasada con `false`. Con
+     * `onEntry == null` solo valida (no escribe nada).
+     */
+    private fun forEachSafeEntry(
+        zip: File,
+        dirName: String,
+        onEntry: ((rel: String, isDirectory: Boolean, input: ZipInputStream) -> Unit)?,
+    ): Boolean = try {
+        ZipInputStream(FileInputStream(zip)).use { zipIn ->
+            var entry = zipIn.nextEntry
+            while (entry != null) {
+                // Quitar el prefijo "{dirName}/" con el que se zipeó.
+                val rel = entry.name.removePrefix("$dirName/")
+                if (rel.isNotBlank()) {
+                    if (!SaveNames.isSafeArchiveEntryPath(rel)) return false
+                    onEntry?.invoke(rel, entry.isDirectory, zipIn)
+                }
+                zipIn.closeEntry()
+                entry = zipIn.nextEntry
+            }
+        }
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
+     * Borra solo el contenido de [dir]; nunca el propio directorio.
+     *
+     * Cada hijo se canonicaliza: si sigue dentro de [dir] se borra
+     * recursivamente; si escapa (enlace simbólico) solo se borra el enlace.
+     */
+    private fun clearDirectoryContents(dir: File) {
+        val canonicalDir = try {
+            dir.canonicalFile
+        } catch (_: Exception) {
+            return
+        }
+        val prefix = canonicalDir.path + File.separator
+        canonicalDir.listFiles()?.forEach { child ->
+            val canonicalChild = try {
+                child.canonicalFile
+            } catch (_: Exception) {
+                null
+            }
+            if (canonicalChild != null && canonicalChild.path.startsWith(prefix)) {
+                canonicalChild.deleteRecursively()
+            } else {
+                child.delete()
+            }
         }
     }
 

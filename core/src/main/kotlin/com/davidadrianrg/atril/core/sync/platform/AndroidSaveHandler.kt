@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RootShell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -149,22 +150,50 @@ class AndroidSaveHandler : SaveHandler {
     }
 
     /**
-     * Restaura un tar creado por [findRootSaves]: limpia el destino y extrae
-     * con root. tar preserva los uid/gid originales, así los ficheros
-     * vuelven a pertenecer al juego.
+     * Restaura un tar creado por [findRootSaves].
+     *
+     * El archivo se valida y se extrae como el usuario de la app en una carpeta
+     * de staging propia; root solo se usa después, sobre el árbol ya validado,
+     * para fijar el propietario y cambiar la carpeta destino. Un tar hostil se
+     * rechaza antes de cualquier operación privilegiada y los saves existentes
+     * quedan intactos.
      */
     private fun extractRootTar(tempFile: File, savesBasePath: String): Boolean {
         val dir = File(savesBasePath)
         val parent = dir.parent ?: return false
         val folderName = dir.name
+        if (!SaveNames.isSafeSaveFileName(folderName)) return false
 
-        val clean = RootShell.runToFile(
-            "rm -rf ${RootShell.sq(savesBasePath)} && mkdir -p ${RootShell.sq(parent)}",
-        )
-        if (!clean) return false
-        return RootShell.runToFile(
-            "tar -xf ${RootShell.sq(tempFile.absolutePath)} -C ${RootShell.sq(parent)}",
-        )
+        val staging = createStagingDir("android_save_stage_") ?: return false
+        try {
+            if (!TarExtractor.extract(tempFile, staging)) return false
+            val stagedTop = staging.listFiles()?.singleOrNull()
+            if (stagedTop == null || !stagedTop.isDirectory || stagedTop.name != folderName) return false
+            if (!RootShell.available) return false
+            val owner = RootShell.ownerOf(dir.absolutePath)
+                ?: RootShell.ownerOf(parent)
+                ?: return false
+
+            val targetExists = RootShell.run("test -e ${RootShell.sq(dir.absolutePath)}") != null
+            val swap = File(parent, "$folderName.swap").absolutePath
+            val cmd = "chown -R $owner ${RootShell.sq(stagedTop.absolutePath)}" +
+                (if (targetExists) " && mv ${RootShell.sq(dir.absolutePath)} ${RootShell.sq(swap)}" else "") +
+                " && mv ${RootShell.sq(stagedTop.absolutePath)} ${RootShell.sq(dir.absolutePath)}" +
+                (if (targetExists) " && rm -rf ${RootShell.sq(swap)}" else "")
+            return RootShell.runToFile(cmd)
+        } catch (_: Exception) {
+            return false
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
+    /** Crea una carpeta temporal accesible que después usa [TarExtractor]. */
+    private fun createStagingDir(prefix: String): File? = try {
+        val staging = File.createTempFile(prefix, ".dir")
+        if (staging.delete() && staging.mkdirs()) staging else null
+    } catch (_: Exception) {
+        null
     }
 
     private fun extractZip(tempFile: File, savesBasePath: String): Boolean {
@@ -186,9 +215,8 @@ class AndroidSaveHandler : SaveHandler {
                         entry = zipIn.nextEntry
                         continue
                     }
-                    val outFile = File(saveDir, entryName)
-                    // Protección path traversal
-                    if (!outFile.canonicalPath.startsWith(saveDir.canonicalPath)) {
+                    val outFile = SaveNames.resolveArchiveEntry(saveDir, entryName)
+                    if (outFile == null) {
                         zipIn.closeEntry()
                         entry = zipIn.nextEntry
                         continue

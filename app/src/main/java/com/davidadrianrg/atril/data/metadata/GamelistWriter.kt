@@ -1,6 +1,7 @@
 package com.davidadrianrg.atril.data.metadata
 
 import android.util.Xml
+import com.davidadrianrg.atril.core.remote.PlatformSlug
 import com.davidadrianrg.atril.domain.model.Rom
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
@@ -224,11 +225,15 @@ object GamelistWriter {
         /** Rutas reales de la media ya descargada ("covers"/"screenshots"/"videos"/"manuals"). */
         mediaFiles: Map<String, String> = emptyMap(),
     ): GameEntry {
+        // El slug es dato del servidor: se normaliza a un componente seguro
+        // (con "unknown" como último recurso) antes de componer rutas.
+        val slug = PlatformSlug.sanitize(platformSlug) ?: "unknown"
+
         // path del ROM: relativo a %ROMPATH%
-        val romPath = "./$platformSlug/${rom.fileName}"
+        val romPath = "./$slug/${rom.fileName}"
 
         // Rutas de media: relativas a %ROMPATH% (ES-DE las resuelve)
-        val mediaBase = "./downloaded_media/$platformSlug"
+        val mediaBase = "./downloaded_media/$slug"
 
         return GameEntry(
             path = romPath,
