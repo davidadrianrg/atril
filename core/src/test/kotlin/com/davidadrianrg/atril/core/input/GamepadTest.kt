@@ -31,6 +31,34 @@ class GamepadTest {
         assertNull(PadKeyMap.fromEvdevKey(999, 1))
     }
 
+    @Test fun `X is favorite and Y opens the details on Android`() {
+        assertEquals(PadAction.FAVORITE, PadKeyMap.fromAndroidKeyCode(99)) // BUTTON_X
+        assertEquals(PadAction.DETAILS, PadKeyMap.fromAndroidKeyCode(100)) // BUTTON_Y
+    }
+
+    @Test fun `X is favorite and Y opens the details on evdev`() {
+        assertEquals(PadAction.FAVORITE, PadKeyMap.fromEvdevKey(308, 1)) // BTN_WEST
+        assertEquals(PadAction.DETAILS, PadKeyMap.fromEvdevKey(307, 1))  // BTN_NORTH
+    }
+
+    @Test fun `the new buttons only fire on press`() {
+        assertNull(PadKeyMap.fromEvdevKey(308, 0))
+        assertNull(PadKeyMap.fromEvdevKey(308, 2))
+        assertNull(PadKeyMap.fromEvdevKey(307, 0))
+    }
+
+    @Test fun `Start keeps opening the details`() {
+        assertEquals(PadAction.DETAILS, PadKeyMap.fromAndroidKeyCode(108)) // BUTTON_START
+        assertEquals(PadAction.DETAILS, PadKeyMap.fromEvdevKey(315, 1))   // BTN_START
+    }
+
+    @Test fun `the existing A and B mappings are unchanged`() {
+        assertEquals(PadAction.SELECT, PadKeyMap.fromAndroidKeyCode(96))
+        assertEquals(PadAction.BACK, PadKeyMap.fromAndroidKeyCode(97))
+        assertEquals(PadAction.SELECT, PadKeyMap.fromEvdevKey(304, 1))
+        assertEquals(PadAction.BACK, PadKeyMap.fromEvdevKey(305, 1))
+    }
+
     @Test fun evdevHatMapsEdges() {
         assertEquals(PadAction.LEFT, PadKeyMap.fromEvdevHat(PadKeyMap.ABS_HAT0X, -1))
         assertEquals(PadAction.DOWN, PadKeyMap.fromEvdevHat(PadKeyMap.ABS_HAT0Y, 1))

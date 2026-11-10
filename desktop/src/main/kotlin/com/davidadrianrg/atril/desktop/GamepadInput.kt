@@ -101,6 +101,8 @@ class GamepadInput(private val onAction: (PadAction) -> Unit) {
             PadAction.DETAILS -> KeyEvent.VK_F9
             PadAction.PREV_PAGE -> KeyEvent.VK_PAGE_UP
             PadAction.NEXT_PAGE -> KeyEvent.VK_PAGE_DOWN
+            // El escritorio no tiene atajo de favorito: X no se traduce a ninguna tecla.
+            PadAction.FAVORITE -> KeyEvent.VK_UNDEFINED
         }
 
         /** Delivers [a] to the focused component exactly like a keyboard press+release would. */
@@ -111,6 +113,8 @@ class GamepadInput(private val onAction: (PadAction) -> Unit) {
                     ?: return@invokeLater
                 if (System.getenv("ATRIL_PAD_SELFTEST") != null) System.err.println("[pad] $a → ${target.javaClass.simpleName}")
                 val code = keyCodeFor(a)
+                // Sin atajo de teclado equivalente (favorito en escritorio): no se envía nada.
+                if (code == KeyEvent.VK_UNDEFINED) return@invokeLater
                 val now = System.currentTimeMillis()
                 target.dispatchEvent(KeyEvent(target, KeyEvent.KEY_PRESSED, now, 0, code, KeyEvent.CHAR_UNDEFINED))
                 target.dispatchEvent(KeyEvent(target, KeyEvent.KEY_RELEASED, now + 1, 0, code, KeyEvent.CHAR_UNDEFINED))
