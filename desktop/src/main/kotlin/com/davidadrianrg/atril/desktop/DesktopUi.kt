@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -92,6 +94,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.library.LibrarySource
+import com.davidadrianrg.atril.core.library.LibraryViewMode
 import com.davidadrianrg.atril.core.library.LibraryViewPreferences
 import com.davidadrianrg.atril.core.settings.SettingsCategory
 import com.davidadrianrg.atril.core.launch.DesktopLaunchPlanner
@@ -862,6 +865,10 @@ fun LibraryScreen(state: DesktopAppState) {
                 // Carga incremental: lotes de 60 con detección de fin de scroll
                 var visibleCount by remember { mutableStateOf(60) }
                 val gridState = rememberLazyGridState()
+                // Carrusel: comparte la lista filtrada y el lote visible con la
+                // rejilla, así que cambiar de vista no pierde nada.
+                val coverFlowState = rememberPagerState(pageCount = { games.size })
+                val coverFlowFocus = remember { FocusRequester() }
                 val endReached by remember {
                     derivedStateOf {
                         val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -875,28 +882,52 @@ fun LibraryScreen(state: DesktopAppState) {
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                    LazyVerticalGrid(
-                        state = gridState,
-                        columns = GridCells.Adaptive(150.dp * cardSize.scale),
-                        contentPadding = PaddingValues(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        gridItems(games.take(visibleCount), key = { it.rep.id }) { card ->
-                            GameCardItem(card, state, ratio, tasks, state.gameStats(card).favorite)
-                        }
-                        if (visibleCount < games.size) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
-                                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(Modifier.size(22.dp))
+                    when (viewMode) {
+                        LibraryViewMode.GRID -> LazyVerticalGrid(
+                            state = gridState,
+                            columns = GridCells.Adaptive(150.dp * cardSize.scale),
+                            contentPadding = PaddingValues(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            gridItems(games.take(visibleCount), key = { it.rep.id }) { card ->
+                                GameCardItem(card, state, ratio, tasks, state.gameStats(card).favorite)
+                            }
+                            if (visibleCount < games.size) {
+                                item(span = { GridItemSpan(maxLineSpan) }) {
+                                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                        CircularProgressIndicator(Modifier.size(22.dp))
+                                    }
                                 }
                             }
                         }
+                        LibraryViewMode.COVER_FLOW -> DesktopCoverFlow(
+                            cards = games.take(visibleCount),
+                            pagerState = coverFlowState,
+                            cardScale = cardSize.scale,
+                            serverUrl = state.config.serverUrl,
+                            focusRequester = coverFlowFocus,
+                            isFavorite = { state.gameStats(it).favorite },
+                            isDownloading = { card ->
+                                tasks.any { it.romId in card.groupRoms.map { r -> r.id } && it.active }
+                            },
+                            onOpen = { state.openGame(it) },
+                            onEnqueue = { state.enqueue(it) },
+                            onLoadMore = {
+                                if (visibleCount < games.size) {
+                                    visibleCount = minOf(visibleCount + 60, games.size)
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     }
                     // Botón volver arriba (como el FAB de Android)
-                    val showTop by remember {
-                        derivedStateOf { gridState.firstVisibleItemIndex > 6 }
+                    val showTop by remember(viewMode) {
+                        derivedStateOf {
+                            if (viewMode == LibraryViewMode.COVER_FLOW) coverFlowState.currentPage > 6
+                            else gridState.firstVisibleItemIndex > 6
+                        }
                     }
                     if (showTop) {
                         androidx.compose.animation.AnimatedVisibility(
@@ -909,7 +940,11 @@ fun LibraryScreen(state: DesktopAppState) {
                                 color = MaterialTheme.colorScheme.secondaryContainer,
                                 shadowElevation = 4.dp,
                                 modifier = Modifier.clickable {
-                                    scope.launch { gridState.animateScrollToItem(0) }
+                                    if (viewMode == LibraryViewMode.COVER_FLOW) {
+                                        scope.launch { coverFlowState.animateScrollToPage(0) }
+                                    } else {
+                                        scope.launch { gridState.animateScrollToItem(0) }
+                                    }
                                 },
                             ) {
                                 Icon(
@@ -921,10 +956,12 @@ fun LibraryScreen(state: DesktopAppState) {
                             }
                         }
                     }
-                    VerticalScrollbar(
-                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                        adapter = rememberScrollbarAdapter(gridState),
-                    )
+                    if (viewMode == LibraryViewMode.GRID) {
+                        VerticalScrollbar(
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                            adapter = rememberScrollbarAdapter(gridState),
+                        )
+                    }
                 }
             }
         }
