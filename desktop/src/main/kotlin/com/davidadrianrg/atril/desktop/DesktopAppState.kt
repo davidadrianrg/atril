@@ -39,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -788,10 +789,30 @@ class DesktopAppState(private val scope: CoroutineScope) {
     private val _localDiscChoices = MutableStateFlow(library.localDiscChoices())
     val localDiscChoices: StateFlow<Map<String, String>> = _localDiscChoices
 
-    /** Grupos multidisco de los juegos locales: un grupo por juego, discos dentro. */
+    /** Grupos multidisco de los juegos locales, calculados fuera del hilo de UI. */
+    private val _localDiscGroups = MutableStateFlow<List<com.davidadrianrg.atril.core.localgames.LocalDiscGroup>>(emptyList())
+    val localDiscGroupsFlow: StateFlow<List<com.davidadrianrg.atril.core.localgames.LocalDiscGroup>> = _localDiscGroups
+
+    /**
+     * Grupos multidisco de los juegos locales (último valor calculado).
+     *
+     * El cálculo real (incluida la lectura de `.m3u`) corre en segundo plano y
+     * se publica en [localDiscGroupsFlow]; esta función solo lee la caché, así
+     * que es segura desde composición.
+     */
     fun localDiscGroups(): List<com.davidadrianrg.atril.core.localgames.LocalDiscGroup> =
+        _localDiscGroups.value
+
+    /** Grupo al que pertenece [gameId], o null si el juego no está agrupado. */
+    fun localDiscGroupFor(gameId: String): com.davidadrianrg.atril.core.localgames.LocalDiscGroup? =
+        localDiscGroups().firstOrNull { group -> group.members.any { it.id == gameId } }
+
+    /** Agrupa [games] con [com.davidadrianrg.atril.core.localgames.LocalDiscGrouper]; hace E/S de `.m3u`. */
+    private fun groupLocalGames(
+        games: List<com.davidadrianrg.atril.core.localgames.LocalGame>,
+    ): List<com.davidadrianrg.atril.core.localgames.LocalDiscGroup> =
         com.davidadrianrg.atril.core.localgames.LocalDiscGrouper.group(
-            localGames.games.value.map {
+            games.map {
                 com.davidadrianrg.atril.core.localgames.LocalDiscEntry(
                     id = it.id,
                     title = it.title,
@@ -800,10 +821,6 @@ class DesktopAppState(private val scope: CoroutineScope) {
                 )
             },
         )
-
-    /** Grupo al que pertenece [gameId], o null si el juego no está agrupado. */
-    fun localDiscGroupFor(gameId: String): com.davidadrianrg.atril.core.localgames.LocalDiscGroup? =
-        localDiscGroups().firstOrNull { group -> group.members.any { it.id == gameId } }
 
     /** Disco/playlist elegido del grupo (por defecto disco 1, o el `.m3u` si existe). */
     fun localDiscChoice(
@@ -1681,6 +1698,13 @@ class DesktopAppState(private val scope: CoroutineScope) {
 
     init {
         downloadedIds.addAll(library.roms().map { it.romId })
+        // Agrupación multidisco local fuera del hilo de UI: la composición solo
+        // lee la caché (localDiscGroupsFlow), nunca toca el sistema de ficheros.
+        scope.launch {
+            localGames.games.collectLatest { games ->
+                _localDiscGroups.value = withContext(Dispatchers.IO) { groupLocalGames(games) }
+            }
+        }
         val rawHidden = config.hiddenPlatforms
         if (rawHidden.isNotBlank()) {
             _hiddenPlatforms.value = rawHidden.split(",").filter { it.isNotBlank() }.toSet()

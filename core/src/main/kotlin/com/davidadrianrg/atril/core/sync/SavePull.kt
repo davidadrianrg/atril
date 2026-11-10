@@ -39,7 +39,7 @@ sealed interface SavePullResult {
     /** Se agotó el tope de tiempo; el pull se canceló, el lanzamiento no. */
     data object TimedOut : SavePullResult
 
-    /** El cliente falló (red, HTTP, integridad…); [reason] es solo para el log. */
+    /** El cliente falló (red, HTTP, integridad…); [reason] es solo para diagnóstico y no se registra tal cual. */
     data class Failed(val reason: String?) : SavePullResult
 }
 
@@ -94,11 +94,11 @@ object SavePull {
             // Si el llamador sigue activo, la cancelación vino del cliente y el
             // lanzamiento debe continuar; si no, es una cancelación real.
             currentCoroutineContext().ensureActive()
-            log("Pre-launch save pull cancelled by the client for rom $romId: ${e.message}")
+            log("Pre-launch save pull cancelled by the client for rom $romId (${e.javaClass.simpleName})")
             SavePullResult.Failed(e.message)
         } catch (t: Throwable) {
             currentCoroutineContext().ensureActive()
-            log("Pre-launch save pull failed for rom $romId: ${t.message}")
+            log("Pre-launch save pull failed for rom $romId (${t.javaClass.simpleName})")
             SavePullResult.Failed(t.message)
         }
 
