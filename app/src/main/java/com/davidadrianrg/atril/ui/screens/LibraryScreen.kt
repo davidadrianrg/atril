@@ -110,7 +110,15 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -133,6 +141,7 @@ import com.davidadrianrg.atril.RomMSyncApplication
 import com.davidadrianrg.atril.core.i18n.tr
 import androidx.compose.ui.geometry.isSpecified
 import com.davidadrianrg.atril.core.library.CoverRatio
+import com.davidadrianrg.atril.core.library.LetterIndex
 import com.davidadrianrg.atril.core.library.LibrarySource
 import com.davidadrianrg.atril.core.library.LibraryViewPreferences
 import com.davidadrianrg.atril.core.library.LibraryViewMode
@@ -412,7 +421,33 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
     // El pager vive aquí (y no dentro del composable) para que el botón de
     // volver arriba y el salto del índice alfabético puedan moverlo.
     val coverFlowState = rememberPagerState(pageCount = { filteredRoms.size })
-    val coverFlowFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val coverFlowFocus = remember { FocusRequester() }
+
+    // ── Índice alfabético (A-Z + #) ────────────────────────────────────
+    // Se construye sobre la MISMA lista filtrada que se pinta (búsqueda,
+    // filtros de estado y región incluidos), nunca sobre la lista completa.
+    val letterIndex = remember(filteredRoms) {
+        LetterIndex.of(filteredRoms) { it.rom.name }
+    }
+    val letterBarVisible = LetterIndex.isVisible(filteredRoms.size)
+    val letterBarFocus = remember { FocusRequester() }
+    // Foco de la lista para devolverlo desde la barra (Arriba) sin depender de
+    // la búsqueda de foco de Compose, que no alcanza una superposición.
+    val gridFocus = remember { FocusRequester() }
+    var listFocused by remember { mutableStateOf(false) }
+    // El contenedor de la rejilla también es enfocable (para devolverle el foco
+    // desde la barra). Mientras lo esté, Abajo debe mover el foco a una tarjeta
+    // en vez de volver a entrar en la barra: si no, se crearía un bucle.
+    var gridContainerFocused by remember { mutableStateOf(false) }
+    val currentLetter by remember(filteredRoms, viewPrefs.viewMode) {
+        derivedStateOf {
+            val name = when (viewPrefs.viewMode) {
+                LibraryViewMode.GRID -> filteredRoms.getOrNull(gridState.firstVisibleItemIndex)?.rom?.name
+                LibraryViewMode.COVER_FLOW -> filteredRoms.getOrNull(coverFlowState.currentPage)?.rom?.name
+            }
+            name?.let { LetterIndex.initialOf(it) }
+        }
+    }
 
     // Detect when user scrolls near the bottom -> trigger loadMore
     val reachedBottom by remember {
@@ -483,7 +518,31 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 12.dp)
-                .nestedScroll(headerState.connection),
+                .nestedScroll(headerState.connection)
+                // Entrega de foco explícita a la barra alfabética: Abajo entra
+                // cuando la rejilla ya no puede desplazarse (o siempre en el
+                // carrusel, donde Abajo no tiene otro uso); en el resto de casos
+                // no se consume y la navegación normal sigue intacta.
+                .onPreviewKeyEvent { ev ->
+                    if (ev.type != KeyEventType.KeyDown ||
+                        ev.key != Key.DirectionDown ||
+                        !letterBarVisible ||
+                        !listFocused
+                    ) {
+                        return@onPreviewKeyEvent false
+                    }
+                    val canEnter = if (viewPrefs.viewMode == LibraryViewMode.COVER_FLOW) {
+                        true
+                    } else {
+                        !gridContainerFocused && !gridState.canScrollForward
+                    }
+                    if (canEnter) {
+                        runCatching { letterBarFocus.requestFocus() }
+                        true
+                    } else {
+                        false
+                    }
+                },
         ) {
             // Header colapsable: en pantallas pequeñas recupera ~140dp para
             // la rejilla al hacer scroll hacia abajo. El contenido queda
@@ -789,21 +848,35 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 },
                 modifier = Modifier.fillMaxSize(),
             ) {
-                // La vista persistida decide rejilla o carrusel: ambas reciben la
-                // misma lista filtrada, las mismas acciones y la misma carga
-                // incremental, así que cambiar de vista no pierde estado.
-                when (viewPrefs.viewMode) {
-                    LibraryViewMode.GRID ->
+                // La barra alfabética se superpone al borde final de la lista,
+                // pero el contenido reserva su ancho para que nunca tape una
+                // tarjeta de forma permanente (D8/AC7).
+                Box(Modifier.fillMaxSize()) {
+                    when (viewPrefs.viewMode) {
+                        LibraryViewMode.GRID ->
                 // Rejilla por filas, no escalonada: el ancho de las columnas difiere en 1 px por
                 // redondeo y una escalonada colocaría cada tarjeta en la columna más corta,
                 // desordenando la fila siguiente.
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = gridCardSize),
                     state = gridState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // Foco propio de la lista para poder devolverlo desde la
+                        // barra con Arriba (la búsqueda de foco no llega).
+                        .focusRequester(gridFocus)
+                        .focusable()
+                        .onFocusChanged {
+                            listFocused = it.hasFocus
+                            gridContainerFocused = it.isFocused
+                        },
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp),
+                    contentPadding = PaddingValues(
+                        top = 12.dp,
+                        bottom = 12.dp,
+                        end = if (letterBarVisible) LETTER_BAR_TRAILING_INSET else 0.dp,
+                    ),
                 ) {
                     items(filteredRoms, key = { it.rom.id }) { romStatus ->
                         RomCard(
@@ -842,8 +915,40 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                                 viewModel.loadMore(settings.serverUrl, settings.apiKey)
                             }
                         },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(end = if (letterBarVisible) LETTER_BAR_TRAILING_INSET else 0.dp)
+                            .onFocusChanged { listFocused = it.hasFocus },
                     )
+                    }
+
+                    if (letterBarVisible) {
+                        LibraryLetterBar(
+                            index = letterIndex,
+                            currentLetter = currentLetter,
+                            focusRequester = letterBarFocus,
+                            onJump = { letter ->
+                                letterIndex.firstIndexFor(letter)?.let { target ->
+                                    if (viewPrefs.viewMode == LibraryViewMode.COVER_FLOW) {
+                                        scope.launch { coverFlowState.animateScrollToPage(target) }
+                                    } else {
+                                        scope.launch { gridState.animateScrollToItem(target) }
+                                    }
+                                }
+                            },
+                            onExit = {
+                                listFocused = false
+                                runCatching {
+                                    if (viewPrefs.viewMode == LibraryViewMode.COVER_FLOW) {
+                                        coverFlowFocus.requestFocus()
+                                    } else {
+                                        gridFocus.requestFocus()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
             }
         }
