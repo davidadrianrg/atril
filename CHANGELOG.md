@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pre-launch save pull** — with save sync enabled, launching a RomM game first pulls saves that are new or newer from the server under a hard 8-second cap, with an *Updating saves…* notice. A slow or failing server never blocks or prevents the launch. Games without a RomM id or with save sync disabled keep the previous behaviour.
 - English and Spanish strings for every new label, control and notice, with identical keys and placeholders in both bundles.
 
+**Manual downloads (2026-11-10)**
+
+- **Automatic linking when marking a game** — marking a RomM game as downloaded now looks for its file in the platform folder (`<ROMs>/<platform>/<file name>`) and, when it is not there, in a bounded search by exact name: up to six levels deep and 5000 entries, skipping hidden entries and symbolic links. When the file is found its path is saved and the game is playable at once; otherwise the manual mark is kept as before.
+- **Locate file** — the detail of a manually marked game shows a new *Locate file* button while it has no path. On Android it opens the system document picker and copies the chosen file into `<ROMs>/<platform>/`, asking before replacing a file with the same name; on Linux it uses the native file dialog and saves the chosen path without copying anything.
+- **Lookup when playing** — launching a game that is still marked manually retries the search first: if the file has appeared it is linked and the game starts; if it is still missing, Atril says so and offers *Locate file* without leaving the screen.
+- **APK games on Android** — a `.apk` (or a game from an `android` platform) no longer goes to an emulator: if the app is already installed Atril opens it, otherwise it opens the system installer. On Linux an APK is refused with a clear message.
+- English and Spanish strings for every new button, notice and error message.
+
 ### Changed
 
 - The Library view, sort, source and card size are now persisted on both platforms and restored on the next launch, using the same preference keys defined in `:core`.
@@ -33,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The chosen disc of a local multidisc group is persisted per game, and removing a grouped local game removes every one of its discs.
 - Server-supplied save file names are now validated before any download or write: blank names, absolute paths, path separators, `.`/`..` elements and NUL bytes are rejected, and the resolved target must stay inside the canonical saves directory (symlinks included). A rejected name is skipped without aborting the rest of the sync.
 - When a `.cue`, `.gdi` or `.m3u` descriptor and a raw data file share a disc number, the descriptor wins (`.cue` > `.gdi` > `.m3u`), so a multidisc group launches the file an emulator can start.
+- Linking a file to a manually marked game turns it into a normal download: the path is what defines the state, so the *Manual* badge, *Remove mark* and *Locate file* disappear and the usual download actions (delete the file, move it to the SD card, sync settings) appear instead. This is intended, not a defect, and it is why no new database column was needed.
 - 91 unit tests now cover the phase-2 work: the 73 of the first pass plus 18 regression tests added with the review and security fixes. They span view/sort/size persistence, the letter index with filters, local disc grouping and its false positives, the chosen-disc codec, the 8-second cap, save-name validation and the descriptor tie-break.
 
 ### Notes
@@ -47,3 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The pre-launch pull only downloads saves that are missing or newer and never uploads or resolves conflicts; the normal save sync and its conflict UI remain authoritative.
 - The letter bar indexes the games already loaded, not the whole server library: with paginated RomM results, letters beyond the loaded pages have no target until more pages load.
 - The Android emulator is not used in this environment, so the new views and focus behaviour are validated by compilation and JVM unit tests rather than instrumented UI tests.
+
+**Manual downloads**
+
+- The lookup only reads the filesystem: it never creates, moves or deletes files. On Android *Locate file* always copies into the primary ROMs folder, and a document that already lives under a configured ROMs folder is linked in place instead of duplicated.
+- There is no schema change, no new preference and no new dependency, and the regular RomM download flow (queue, parallel downloads, hash verification, resume) and local games are untouched.
+- APK games are an Android feature only: on Linux the file is detected and refused before the emulator planner, so the error is explicit instead of "no emulator configured".

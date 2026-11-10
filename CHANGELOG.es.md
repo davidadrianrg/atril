@@ -26,6 +26,14 @@ proyecto se acoge a [Versionado Semántico](https://semver.org/lang/es/).
 - **Descarga de partidas antes de lanzar** — con la sincronización de saves activada, al lanzar un juego de RomM se descargan primero las partidas nuevas o más recientes del servidor con un tope duro de 8 segundos y un aviso *Actualizando partidas…*. Un servidor lento o con fallos nunca bloquea ni impide el lanzamiento. Los juegos sin id de RomM o con la sincronización desactivada mantienen el comportamiento anterior.
 - Textos en inglés y español para cada etiqueta, control y aviso nuevos, con las mismas claves y marcadores en los dos ficheros.
 
+**Descargas manuales (2026-11-10)**
+
+- **Vinculación automática al marcar un juego** — al marcar un juego de RomM como descargado, Atril busca su archivo en la carpeta de la plataforma (`<ROMs>/<plataforma>/<nombre del archivo>`) y, cuando no está ahí, en una búsqueda acotada por nombre exacto: hasta seis niveles de profundidad y 5000 entradas, saltando las entradas ocultas y los enlaces simbólicos. Si encuentra el archivo guarda su ruta y el juego queda lanzable al instante; si no, mantiene la marca manual como antes.
+- **Localizar archivo** — la ficha de un juego marcado a mano muestra un botón *Localizar archivo* mientras no tenga ruta. En Android abre el selector de documentos del sistema y copia el archivo elegido a `<ROMs>/<plataforma>/`, preguntando antes de reemplazar un archivo con el mismo nombre; en Linux usa el diálogo nativo de archivos y guarda la ruta elegida sin copiar nada.
+- **Búsqueda al lanzar** — al lanzar un juego que sigue marcado a mano se reintenta primero la búsqueda: si el archivo ha aparecido, se asocia y el juego arranca; si sigue faltando, Atril lo dice y ofrece *Localizar archivo* sin salir de la pantalla.
+- **Juegos APK en Android** — un `.apk` (o un juego de una plataforma `android`) ya no se envía a un emulador: si la app ya está instalada Atril la abre y, si no, abre el instalador del sistema. En Linux el APK se rechaza con un mensaje claro.
+- Textos en inglés y español para cada botón, aviso y mensaje de error nuevos.
+
 ### Cambiado
 
 - La vista, el orden, el origen y el tamaño de la Biblioteca se guardan ahora en las dos plataformas y se restauran al volver a abrir, con las mismas claves de preferencias definidas en `:core`.
@@ -33,6 +41,7 @@ proyecto se acoge a [Versionado Semántico](https://semver.org/lang/es/).
 - El disco elegido de un grupo local multidisco se guarda por juego, y eliminar un juego local agrupado elimina todos sus discos.
 - Los nombres de fichero de partidas que llegan del servidor se validan ahora antes de cualquier descarga o escritura: se rechazan los nombres vacíos, las rutas absolutas, los separadores de ruta, los elementos `.`/`..` y los bytes NUL, y el destino resuelto debe quedar dentro del directorio canónico de partidas (enlaces simbólicos incluidos). Un nombre rechazado se omite sin abortar el resto de la sincronización.
 - Cuando un descriptor `.cue`, `.gdi` o `.m3u` y un fichero de datos comparten número de disco, gana el descriptor (`.cue` > `.gdi` > `.m3u`), así que el grupo multidisco lanza el fichero que un emulador puede arrancar.
+- Vincular un archivo a un juego marcado a mano lo convierte en una descarga normal: la ruta es lo que define el estado, así que desaparecen la insignia *Manual*, *Quitar marca* y *Localizar archivo* y en su lugar aparecen las acciones habituales de descarga (borrar el archivo, moverlo a la tarjeta SD, ajustes de sincronización). Es el comportamiento previsto, no un fallo, y es la razón de no necesitar ninguna columna nueva en la base de datos.
 - 91 pruebas unitarias cubren ahora el trabajo de la fase 2: las 73 de la primera pasada más 18 pruebas de regresión añadidas con las correcciones de revisión y seguridad. Abarcan la persistencia de vista/orden/tamaño, el índice alfabético con filtros, la agrupación local de discos y sus falsos positivos, el códec del disco elegido, el tope de 8 segundos, la validación de nombres de partida y el desempate por descriptor.
 
 ### Notas
@@ -47,3 +56,9 @@ proyecto se acoge a [Versionado Semántico](https://semver.org/lang/es/).
 - La descarga previa al lanzamiento solo baja partidas que faltan o son más nuevas y nunca sube ni resuelve conflictos; la sincronización normal y su interfaz de conflictos siguen siendo la referencia.
 - La barra alfabética indexa los juegos ya cargados, no toda la biblioteca del servidor: con resultados paginados de RomM, las letras más allá de las páginas cargadas no tienen destino hasta que se cargan más.
 - En este entorno no se usa el emulador de Android, así que las vistas y el comportamiento del foco nuevos se validan con compilación y pruebas unitarias de JVM, no con pruebas de UI instrumentadas.
+
+**Descargas manuales**
+
+- La búsqueda solo lee el sistema de archivos: nunca crea, mueve ni borra archivos. En Android *Localizar archivo* copia siempre a la carpeta de ROMs principal, y un documento que ya está bajo una carpeta de ROMs configurada se asocia en su sitio en vez de duplicarse.
+- No hay cambios de esquema, ni preferencias nuevas, ni dependencias nuevas, y el flujo normal de descarga de RomM (cola, descargas en paralelo, verificación por hash, reanudación) y los juegos locales no se tocan.
+- Los juegos APK son una función solo de Android: en Linux el archivo se detecta y se rechaza antes del planificador de emuladores, así que el error es explícito en vez de «no hay emulador configurado».

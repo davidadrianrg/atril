@@ -19,7 +19,9 @@ documentation is in `README.md`; the branch workflow is also summarised in
   and Jetpack Compose (Material 3). `data/` holds Room, DataStore, repositories,
   sync, metadata export and updates; `download/` the WorkManager queue; `ui/`
   the screens, view models, components and input; `launch/` the pre-launch save
-  pull; `util/` Android permissions.
+  pull, the emulator/APK launch routing (`GameLauncher`, `ApkGameLauncher`) and
+  the late lookup of a missing ROM file (`RomLaunchService`); `util/` Android
+  permissions.
 - `:desktop` (`desktop/src/main/kotlin/com/davidadrianrg/atril/desktop/`) —
   Compose Desktop app. The Library, launcher and detail composables live in
   `DesktopUi.kt`, `DesktopLauncher.kt`, `GameDetail.kt` and `LocalGamesUi.kt`;
@@ -97,3 +99,14 @@ files.
 - Desktop tests run against an isolated `user.home` and `java.util.prefs` root
   configured in `desktop/build.gradle.kts`; restore any global preference your
   test touches.
+- A manually downloaded RomM game is a game without a local path: Android
+  derives `isManualDownloaded` from the empty `localPath` and the desktop keeps
+  the ids in the `manualDownloaded` preference. There is no dedicated database
+  column, and linking a file is meant to turn the game into a normal download,
+  so the *Manual* badge, *Unmark* and *Locate file* disappear by design. Do not
+  add a "linked manually" state to keep them.
+- `RomFileLocator` (`:core/download`) is the bounded, side-effect-free lookup
+  used when marking a game manually and when launching a game whose file is
+  missing (depth 6, 5000 entries, no hidden entries, no symlinks). The library
+  scan keeps its own `findRomFileOnDisk` heuristics in `RomRepository`; do not
+  swap one for the other.
