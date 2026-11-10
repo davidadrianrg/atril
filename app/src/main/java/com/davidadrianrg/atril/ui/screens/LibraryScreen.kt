@@ -1069,6 +1069,26 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                             // Misma secuencia que en Play: preparar → overlay de inserción → lanzar.
                             selectedRom = null // la hoja es otra ventana: cerrarla para ver el overlay
                             insertJob = scope.launch {
+                                // Pull de saves con tope de 8 s: si tarda o falla,
+                                // el lanzamiento continúa igualmente.
+                                val pull = container.preLaunchSaveSync.run(rom.id) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = tr("sync.before_launch.updating"),
+                                            duration = SnackbarDuration.Short,
+                                        )
+                                    }
+                                }
+                                if (pull is com.davidadrianrg.atril.core.sync.SavePullResult.Failed ||
+                                    pull is com.davidadrianrg.atril.core.sync.SavePullResult.TimedOut
+                                ) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = tr("sync.before_launch.failed"),
+                                            duration = SnackbarDuration.Short,
+                                        )
+                                    }
+                                }
                                 val plan = container.emulatorLauncher.prepare(
                                     com.davidadrianrg.atril.launch.LaunchRequest(
                                         platformSlug = rom.platformSlug,
