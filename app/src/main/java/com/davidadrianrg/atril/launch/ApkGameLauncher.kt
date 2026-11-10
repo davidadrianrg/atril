@@ -9,6 +9,8 @@ import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.data.update.ApkInstallHelper
 import com.davidadrianrg.atril.data.update.InstallLaunchResult
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Resultado de intentar abrir o instalar un APK. */
 sealed interface ApkLaunchResult {
@@ -35,6 +37,28 @@ sealed interface ApkLaunchResult {
 }
 
 /**
+ * Inspección de un APK hecha fuera del hilo principal: nada de esta clase
+ * toca la UI. [launchSuspending] la ejecuta en IO y luego abre el intent en
+ * Main.
+ */
+sealed interface ApkInspection {
+    /** El paquete está instalado y tiene actividad de lanzamiento. */
+    data class Installed(val packageName: String, val intent: Intent) : ApkInspection
+
+    /** El paquete no está instalado: hay que abrir el instalador. */
+    data class NotInstalled(val packageName: String) : ApkInspection
+
+    /** Está instalado pero no expone actividad de lanzamiento. */
+    data class NoLaunchActivity(val packageName: String) : ApkInspection
+
+    /** El fichero no es un APK legible. */
+    data class NotAnApk(val path: String) : ApkInspection
+
+    /** El fichero ya no existe. */
+    data class Missing(val path: String) : ApkInspection
+}
+
+/**
  * Lanza un juego APK: si el paquete ya está instalado abre la app; si no,
  * delega en [ApkInstallHelper] para abrir el instalador del sistema. No
  * reinstala una app presente y nunca lanza excepciones a la UI.
@@ -44,24 +68,51 @@ class ApkGameLauncher(
     private val installHelper: ApkInstallHelper,
 ) {
 
-    /** Abre o instala [apkFile] y devuelve qué ocurrió realmente. */
-    fun launch(apkFile: File): ApkLaunchResult {
-        if (!apkFile.isFile) return ApkLaunchResult.Missing(apkFile.path)
+    /**
+     * Abre o instala [apkFile] y devuelve qué ocurrió realmente.
+     *
+     * Se conserva para llamantes síncronos y pruebas; la UI usa
+     * [launchSuspending] para no parsear el APK en el hilo principal.
+     */
+    fun launch(apkFile: File): ApkLaunchResult = complete(apkFile, inspect(apkFile))
+
+    /** Igual que [launch] pero con la inspección del APK en `Dispatchers.IO`. */
+    suspend fun launchSuspending(apkFile: File): ApkLaunchResult {
+        val inspection = withContext(Dispatchers.IO) { inspect(apkFile) }
+        return complete(apkFile, inspection)
+    }
+
+    /**
+     * Lee el manifiesto del APK y el estado del paquete. Hace E/S y consultas
+     * al `PackageManager`: debe llamarse fuera del hilo principal.
+     */
+    fun inspect(apkFile: File): ApkInspection {
+        if (!apkFile.isFile) return ApkInspection.Missing(apkFile.path)
 
         val pm = context.packageManager
         val archive = packageArchiveInfo(pm, apkFile)
-        val packageName = archive?.packageName ?: return ApkLaunchResult.NotAnApk(apkFile.path)
+        val packageName = archive?.packageName ?: return ApkInspection.NotAnApk(apkFile.path)
 
-        if (!isInstalled(pm, packageName)) {
-            return when (val result = installHelper.launchInstaller(apkFile)) {
-                InstallLaunchResult.Started -> ApkLaunchResult.InstallerOpened
-                InstallLaunchResult.NeedsPermission -> ApkLaunchResult.NeedsInstallPermission
-                is InstallLaunchResult.Error -> ApkLaunchResult.Error(result.message)
-            }
-        }
+        if (!isInstalled(pm, packageName)) return ApkInspection.NotInstalled(packageName)
 
         val intent = pm.getLaunchIntentForPackage(packageName)
-            ?: return ApkLaunchResult.NoLaunchActivity(packageName)
+            ?: return ApkInspection.NoLaunchActivity(packageName)
+        return ApkInspection.Installed(packageName, intent)
+    }
+
+    private fun complete(apkFile: File, inspection: ApkInspection): ApkLaunchResult = when (inspection) {
+        is ApkInspection.Missing -> ApkLaunchResult.Missing(apkFile.path)
+        is ApkInspection.NotAnApk -> ApkLaunchResult.NotAnApk(apkFile.path)
+        is ApkInspection.NoLaunchActivity -> ApkLaunchResult.NoLaunchActivity(inspection.packageName)
+        is ApkInspection.NotInstalled -> when (val result = installHelper.launchInstaller(apkFile)) {
+            InstallLaunchResult.Started -> ApkLaunchResult.InstallerOpened
+            InstallLaunchResult.NeedsPermission -> ApkLaunchResult.NeedsInstallPermission
+            is InstallLaunchResult.Error -> ApkLaunchResult.Error(result.message)
+        }
+        is ApkInspection.Installed -> openInstalled(inspection.packageName, inspection.intent)
+    }
+
+    private fun openInstalled(packageName: String, intent: Intent): ApkLaunchResult {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return try {
             context.startActivity(intent)

@@ -2,6 +2,7 @@ package com.davidadrianrg.atril.ui.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.davidadrianrg.atril.core.i18n.tr
@@ -84,6 +85,7 @@ class LibraryViewModel(
 
     companion object {
         private const val PAGE_SIZE = 50
+        private const val TAG = "LibraryViewModel"
     }
 
     /** One-shot events for UI feedback (snackbars). */
@@ -465,8 +467,11 @@ class LibraryViewModel(
             else romRepository.locateLocalFile(roots, rom.platformSlug, rom.fileName)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
-        } catch (_: Exception) {
-            // Sin configuración legible se conserva la marca manual ("").
+        } catch (e: Exception) {
+            // Sin configuración legible se conserva la marca manual (""), pero
+            // se deja rastro del motivo para diagnosticar el "no lo encuentra".
+            // Aislado: `android.util.Log` no está mockeado en los tests JVM.
+            runCatching { Log.w(TAG, "Couldn't read ROM roots (${rom.id}): ${e.javaClass.simpleName}") }
             null
         }
     }
@@ -527,8 +532,8 @@ class LibraryViewModel(
     }
 
     /** Arranca un plan ya preparado; null = aceptado o mensaje de error. */
-    fun startLaunch(context: Context, plan: GameLaunchPlan): String? =
-        romLaunchService?.start(context, plan)
+    suspend fun startLaunch(context: Context, plan: GameLaunchPlan): String? =
+        romLaunchService?.startSuspending(context, plan)
             ?: (plan as? GameLaunchPlan.Failed)?.message
 
     /**

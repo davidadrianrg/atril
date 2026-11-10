@@ -1,6 +1,7 @@
 package com.davidadrianrg.atril.launch
 
 import android.content.Context
+import android.util.Log
 import com.davidadrianrg.atril.core.i18n.tr
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -69,10 +70,22 @@ class RomLaunchService(
                 )
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                // Diagnóstico sin rutas ni datos personales (AC-04/AC-10). El
+                // logging se aísla porque `android.util.Log` no está mockeado
+                // en los tests JVM.
+                runCatching {
+                    Log.w(
+                        TAG,
+                        "Couldn't locate ROM ${request.romId} (${request.platformSlug}): ${e.javaClass.simpleName}",
+                    )
+                }
                 null
             }
-            if (!linked.isNullOrBlank()) path = linked
+            // REV-010: si la ruta vieja ya no existe y el relink no encuentra
+            // nada, no se conserva la ruta caducada: el mensaje correcto es
+            // "no se encontró el archivo", no "la ROM ya no está: <ruta>".
+            path = linked?.takeIf { it.isNotBlank() } ?: ""
         }
         if (path.isBlank()) {
             return GameLaunchPlan.Failed(
@@ -86,7 +99,7 @@ class RomLaunchService(
             throw e
         } catch (e: Exception) {
             GameLaunchPlan.Failed(
-                tr("launch.error.failed", request.platformLabel, e.javaClass.simpleName),
+                tr("launch.error.failed", request.fileName, e.javaClass.simpleName),
                 needsLocate = request.romId > 0,
             )
         }
@@ -95,4 +108,12 @@ class RomLaunchService(
     /** Arranca un plan ya preparado (emulador o APK); null = aceptado. */
     fun start(activityContext: Context, plan: GameLaunchPlan): String? =
         launcher.start(activityContext, plan)
+
+    /** Variante suspendida: inspecciona el APK fuera del hilo principal. */
+    suspend fun startSuspending(activityContext: Context, plan: GameLaunchPlan): String? =
+        launcher.startSuspending(activityContext, plan)
+
+    private companion object {
+        const val TAG = "RomLaunchService"
+    }
 }

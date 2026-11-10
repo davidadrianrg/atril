@@ -1,6 +1,7 @@
 package com.davidadrianrg.atril.data.repository
 
 import android.net.Uri
+import android.util.Log
 import com.davidadrianrg.atril.core.download.PathMapper
 import com.davidadrianrg.atril.core.download.RomFileLocator
 import com.davidadrianrg.atril.core.localgames.LocalGamePaths
@@ -21,7 +22,10 @@ sealed interface LocateOutcome {
     /** El documento elegido no tiene un nombre utilizable. */
     data object InvalidFile : LocateOutcome
 
-    /** No se pudo copiar (sin raíz configurada, E/S, stream nulo…). */
+    /** Falta configurar la carpeta de ROMs (o el slug de plataforma no es válido). */
+    data object NoRomsRoot : LocateOutcome
+
+    /** No se pudo copiar (E/S, permiso de la carpeta, stream nulo…). */
     data object CopyFailed : LocateOutcome
 }
 
@@ -54,12 +58,17 @@ class RomFileImportService(
             settingsRepository.settings.first()
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            // Aislado: `android.util.Log` no está mockeado en los tests JVM.
+            runCatching { Log.w(TAG, "Couldn't read ROM roots ($romId): ${e.javaClass.simpleName}") }
             return LocateOutcome.CopyFailed
         }
         val primaryRoot = config.romsRootPath.trim()
         if (primaryRoot.isBlank() || !RomFileLocator.isSafeFileName(platformSlug)) {
-            return LocateOutcome.CopyFailed
+            if (!RomFileLocator.isSafeFileName(platformSlug)) {
+                runCatching { Log.w(TAG, "Invalid platform slug ($romId)") }
+            }
+            return LocateOutcome.NoRomsRoot
         }
 
         val roots = buildList {
@@ -80,7 +89,15 @@ class RomFileImportService(
             return LocateOutcome.CopyFailed
         }
         val targetDir = PathMapper.getPlatformDir(primaryRoot, platformSlug)
-        return when (val result = importer.import(uri, targetDir, fileName, overwrite)) {
+        return when (
+            val result = importer.import(
+                uri = uri,
+                platformDir = targetDir,
+                preferredName = fileName,
+                overwrite = overwrite,
+                rootDir = File(primaryRoot),
+            )
+        ) {
             is RomImportResult.Copied -> {
                 attach(romId, groupRomIds, result.path)
                 LocateOutcome.Linked
@@ -104,5 +121,9 @@ class RomFileImportService(
             val canonicalRoot = runCatching { File(root).canonicalPath }.getOrNull() ?: return@any false
             path == canonicalRoot || path.startsWith(canonicalRoot + File.separator)
         }
+    }
+
+    private companion object {
+        const val TAG = "RomFileImportService"
     }
 }

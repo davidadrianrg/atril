@@ -523,11 +523,11 @@ class ShelfViewModel(
     }
 
     /** Arranca el plan (emulador o APK); null = aceptado. */
-    fun startLaunch(activityContext: android.content.Context, plan: GameLaunchPlan): String? =
-        romLaunchService?.start(activityContext, plan)
+    suspend fun startLaunch(activityContext: android.content.Context, plan: GameLaunchPlan): String? =
+        romLaunchService?.startSuspending(activityContext, plan)
             ?: when (plan) {
                 is GameLaunchPlan.Ready -> emulatorLauncher.start(activityContext, plan.plan)
-                is GameLaunchPlan.Apk -> tr("launch.error.failed", plan.apkFile.name, "")
+                is GameLaunchPlan.Apk -> tr("launch.error.apk_no_opener")
                 is GameLaunchPlan.Failed -> plan.message
             }
 

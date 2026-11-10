@@ -45,13 +45,19 @@ class GameLauncher(
                 if (apk.isFile) {
                     GameLaunchPlan.Apk(apk)
                 } else {
-                    GameLaunchPlan.Failed(tr("launch.error.missing", target.path), needsLocate = true)
+                    GameLaunchPlan.Failed(
+                        tr("launch.error.missing", target.path),
+                        needsLocate = request.romId > 0,
+                    )
                 }
             }
             is LaunchTarget.ApkUnsupported ->
-                GameLaunchPlan.Failed(tr("launch.error.apk_desktop"), needsLocate = true)
+                GameLaunchPlan.Failed(tr("launch.error.apk_desktop"), needsLocate = request.romId > 0)
             is LaunchTarget.Missing ->
-                GameLaunchPlan.Failed(tr("launch.error.missing", target.path), needsLocate = true)
+                GameLaunchPlan.Failed(
+                    tr("launch.error.missing", target.path),
+                    needsLocate = request.romId > 0,
+                )
         }
     }
 
@@ -62,13 +68,26 @@ class GameLauncher(
     fun start(activityContext: Context, plan: GameLaunchPlan): String? = when (plan) {
         is GameLaunchPlan.Ready -> emulatorLauncher.start(activityContext, plan.plan)
         is GameLaunchPlan.Failed -> plan.message
-        is GameLaunchPlan.Apk -> when (val result = apkGameLauncher.launch(plan.apkFile)) {
-            is ApkLaunchResult.Opened, ApkLaunchResult.InstallerOpened -> null
-            ApkLaunchResult.NeedsInstallPermission -> tr("android.apk.install_permission")
-            is ApkLaunchResult.NotAnApk -> tr("launch.error.apk_invalid")
-            is ApkLaunchResult.Missing -> tr("launch.error.missing", result.path)
-            is ApkLaunchResult.NoLaunchActivity -> tr("launch.error.apk_no_launcher", result.packageName)
-            is ApkLaunchResult.Error -> result.message
-        }
+        is GameLaunchPlan.Apk -> apkMessage(apkGameLauncher.launch(plan.apkFile))
+    }
+
+    /**
+     * Variante suspendida para la UI: inspecciona el APK en `Dispatchers.IO`
+     * (parseo del manifiesto y consulta al PackageManager) y deja solo el
+     * `startActivity` en el hilo principal.
+     */
+    suspend fun startSuspending(activityContext: Context, plan: GameLaunchPlan): String? = when (plan) {
+        is GameLaunchPlan.Ready -> emulatorLauncher.start(activityContext, plan.plan)
+        is GameLaunchPlan.Failed -> plan.message
+        is GameLaunchPlan.Apk -> apkMessage(apkGameLauncher.launchSuspending(plan.apkFile))
+    }
+
+    private fun apkMessage(result: ApkLaunchResult): String? = when (result) {
+        is ApkLaunchResult.Opened, ApkLaunchResult.InstallerOpened -> null
+        ApkLaunchResult.NeedsInstallPermission -> tr("android.apk.install_permission")
+        is ApkLaunchResult.NotAnApk -> tr("launch.error.apk_invalid")
+        is ApkLaunchResult.Missing -> tr("launch.error.missing", result.path)
+        is ApkLaunchResult.NoLaunchActivity -> tr("launch.error.apk_no_launcher", result.packageName)
+        is ApkLaunchResult.Error -> result.message
     }
 }
