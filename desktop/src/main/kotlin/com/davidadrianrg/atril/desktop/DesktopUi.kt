@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -93,6 +95,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.library.LetterIndex
 import com.davidadrianrg.atril.core.library.LibrarySource
 import com.davidadrianrg.atril.core.library.LibraryViewMode
 import com.davidadrianrg.atril.core.library.LibraryViewPreferences
@@ -867,7 +870,9 @@ fun LibraryScreen(state: DesktopAppState) {
                 val gridState = rememberLazyGridState()
                 // Carrusel: comparte la lista filtrada y el lote visible con la
                 // rejilla, así que cambiar de vista no pierde nada.
-                val coverFlowState = rememberPagerState(pageCount = { games.size })
+                val coverFlowState = rememberPagerState(
+                    pageCount = { minOf(visibleCount, games.size) },
+                )
                 val coverFlowFocus = remember { FocusRequester() }
                 val endReached by remember {
                     derivedStateOf {
@@ -881,15 +886,96 @@ fun LibraryScreen(state: DesktopAppState) {
                         visibleCount = minOf(visibleCount + 60, games.size)
                     }
                 }
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+
+                // ── Índice alfabético (A-Z + #) ──────────────────────────
+                // Se construye sobre la MISMA lista filtrada que se pinta
+                // (búsqueda, filtros y región ya aplicados).
+                val letterIndex = remember(games) { LetterIndex.of(games) { it.rep.name } }
+                val letterBarVisible = LetterIndex.isVisible(games.size)
+                val letterBarFocus = remember { FocusRequester() }
+                val listFocus = remember { FocusRequester() }
+                var listFocused by remember { mutableStateOf(false) }
+                // El contenedor de la rejilla también es enfocable (para
+                // devolverle el foco desde la barra). Mientras lo esté, Abajo
+                // debe mover el foco a una tarjeta en vez de volver a entrar en
+                // la barra: si no, se crearía un bucle.
+                var gridContainerFocused by remember { mutableStateOf(false) }
+                val currentLetter by remember(games, viewMode) {
+                    derivedStateOf {
+                        val name = when (viewMode) {
+                            LibraryViewMode.GRID ->
+                                games.getOrNull(gridState.firstVisibleItemIndex)?.rep?.name
+                            LibraryViewMode.COVER_FLOW ->
+                                games.getOrNull(coverFlowState.currentPage)?.rep?.name
+                        }
+                        name?.let { LetterIndex.initialOf(it) }
+                    }
+                }
+
+                // Salto pendiente: primero se amplía el lote visible y solo
+                // cuando el destino ya está cargado se desplaza la lista. Si no,
+                // animateScrollToItem caería en un índice sin componer.
+                var pendingJump by remember { mutableStateOf<Int?>(null) }
+                LaunchedEffect(pendingJump, visibleCount, viewMode) {
+                    val target = pendingJump ?: return@LaunchedEffect
+                    if (target >= minOf(visibleCount, games.size)) return@LaunchedEffect
+                    if (viewMode == LibraryViewMode.COVER_FLOW) {
+                        coverFlowState.scrollToPage(target)
+                    } else {
+                        gridState.animateScrollToItem(target)
+                    }
+                    pendingJump = null
+                }
+
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        // Entrega de foco explícita a la barra: Abajo entra cuando
+                        // la rejilla ya no puede desplazarse (o siempre en el
+                        // carrusel); en el resto de casos no se consume.
+                        .onPreviewKeyEvent { ev ->
+                            if (ev.type != KeyEventType.KeyDown ||
+                                ev.key != Key.DirectionDown ||
+                                !letterBarVisible ||
+                                !listFocused
+                            ) {
+                                return@onPreviewKeyEvent false
+                            }
+                            val canEnter = if (viewMode == LibraryViewMode.COVER_FLOW) {
+                                true
+                            } else {
+                                !gridContainerFocused && !gridState.canScrollForward
+                            }
+                            if (canEnter) {
+                                runCatching { letterBarFocus.requestFocus() }
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                ) {
                     when (viewMode) {
                         LibraryViewMode.GRID -> LazyVerticalGrid(
                             state = gridState,
                             columns = GridCells.Adaptive(150.dp * cardSize.scale),
-                            contentPadding = PaddingValues(vertical = 12.dp),
+                            contentPadding = PaddingValues(
+                                top = 12.dp,
+                                bottom = 12.dp,
+                                end = if (letterBarVisible) DESKTOP_LETTER_BAR_TRAILING_INSET else 0.dp,
+                            ),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                // Foco propio de la lista para devolverlo desde la
+                                // barra con Arriba (la búsqueda de foco no llega).
+                                .focusRequester(listFocus)
+                                .focusable()
+                                .onFocusChanged {
+                                    listFocused = it.hasFocus
+                                    gridContainerFocused = it.isFocused
+                                },
                         ) {
                             gridItems(games.take(visibleCount), key = { it.rep.id }) { card ->
                                 GameCardItem(card, state, ratio, tasks, state.gameStats(card).favorite)
@@ -919,9 +1005,42 @@ fun LibraryScreen(state: DesktopAppState) {
                                     visibleCount = minOf(visibleCount + 60, games.size)
                                 }
                             },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    end = if (letterBarVisible) DESKTOP_LETTER_BAR_TRAILING_INSET else 0.dp,
+                                )
+                                .onFocusChanged { listFocused = it.hasFocus },
+                        )
+                    }
+
+                    if (letterBarVisible) {
+                        DesktopLetterBar(
+                            index = letterIndex,
+                            currentLetter = currentLetter,
+                            focusRequester = letterBarFocus,
+                            onJump = { letter ->
+                                letterIndex.firstIndexFor(letter)?.let { target ->
+                                    // El lote visible se amplía ANTES del scroll: si
+                                    // no, el índice destino aún no está compuesto.
+                                    visibleCount = maxOf(visibleCount, target + 1)
+                                    pendingJump = target
+                                }
+                            },
+                            onExit = {
+                                listFocused = false
+                                runCatching {
+                                    if (viewMode == LibraryViewMode.COVER_FLOW) {
+                                        coverFlowFocus.requestFocus()
+                                    } else {
+                                        listFocus.requestFocus()
+                                    }
+                                }
+                            },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
+
                     // Botón volver arriba (como el FAB de Android)
                     val showTop by remember(viewMode) {
                         derivedStateOf {
