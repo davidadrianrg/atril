@@ -62,11 +62,11 @@ data class RomDto(
     @Json(name = "gamelist_metadata") val gamelistMetadata: PhysicalMetadataDto? = null,
 ) {
     /**
-     * Platform slug as read by the rest of the app.
+     * Slug de plataforma tal como lo lee el resto de la app.
      *
-     * The wire value is server-controlled, so the getter only ever exposes a
-     * valid slug (or `null`): see [PlatformSlug]. This gates every Android and
-     * desktop read of `platform_slug` at the DTO boundary.
+     * El valor del cable lo controla el servidor, así que el getter solo
+     * expone un slug válido (o `null`): ver [PlatformSlug]. Esto filtra toda
+     * lectura de `platform_slug` en Android y escritorio en el límite del DTO.
      */
     val platformSlug: String?
         get() = PlatformSlug.sanitize(platformSlugRaw)

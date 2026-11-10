@@ -76,17 +76,17 @@ object SaveNames {
     private val DRIVE_PREFIX = Regex("^[A-Za-z]:")
 
     /**
-     * Indicates whether [entryPath] is a safe relative path for an archive
-     * member (zip or tar), before it is resolved against a destination folder.
+     * Indica si [entryPath] es una ruta relativa segura para un miembro de
+     * archivo (zip o tar), antes de resolverla contra una carpeta destino.
      *
-     * Rejects blank paths, NUL, backslashes (filename on Linux, separator on
-     * Windows), absolute paths, Windows drive letters and any `..` component.
-     * Nested relative paths (`a/b/c.srm`), trailing slashes (`dir/`), empty
-     * components (`a//b`) and `.` components are accepted; no filesystem
-     * access is performed.
+     * Rechaza rutas vacías o en blanco, el byte NUL, la barra invertida
+     * (nombre de fichero en Linux, separador en Windows), rutas absolutas, las
+     * letras de unidad de Windows y cualquier componente `..`. Acepta rutas
+     * relativas anidadas (`a/b/c.srm`), barras finales (`dir/`), componentes
+     * vacíos (`a//b`) y componentes `.`; no accede al sistema de ficheros.
      *
-     * @param entryPath member name as stored in the archive.
-     * @return `true` only when the member cannot escape its destination folder.
+     * @param entryPath nombre del miembro tal como está guardado en el archivo.
+     * @return `true` solo si el miembro no puede escapar de su carpeta destino.
      */
     fun isSafeArchiveEntryPath(entryPath: String): Boolean {
         if (entryPath.isBlank()) return false
@@ -99,17 +99,18 @@ object SaveNames {
     }
 
     /**
-     * Resolves an archive member [entryPath] under [base], returning `null`
-     * whenever the member could escape it.
+     * Resuelve un miembro de archivo [entryPath] bajo [base] y devuelve
+     * `null` siempre que el miembro pueda escapar.
      *
-     * This is the single containment rule shared by every save extraction site.
-     * It first applies [isSafeArchiveEntryPath] and then verifies that the
-     * canonical target lies strictly inside the canonical base (so `.`, the
-     * base itself, sibling-prefix paths and symlink escapes are rejected).
+     * Es la regla de contención única que comparten todos los puntos de
+     * extracción de saves. Primero aplica [isSafeArchiveEntryPath] y después
+     * comprueba que la ruta canónica destino quede estrictamente dentro de la
+     * base canónica (así se rechazan `.`, la propia base, las rutas de un
+     * hermano con el mismo prefijo y las fugas por enlace simbólico).
      *
-     * @param base destination folder of the extraction.
-     * @param entryPath member name as stored in the archive.
-     * @return the canonical target file, or `null` when it is unsafe.
+     * @param base carpeta destino de la extracción.
+     * @param entryPath nombre del miembro tal como está guardado en el archivo.
+     * @return el fichero canónico destino, o `null` cuando no es seguro.
      */
     fun resolveArchiveEntry(base: File, entryPath: String): File? {
         if (!isSafeArchiveEntryPath(entryPath)) return null

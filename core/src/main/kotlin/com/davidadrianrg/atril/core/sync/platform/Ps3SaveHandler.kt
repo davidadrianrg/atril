@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.UUID
 import java.util.zip.ZipInputStream
 
 /**
@@ -114,28 +115,66 @@ class Ps3SaveHandler : SaveHandler {
         // Primera pasada: validar TODO el archivo antes de tocar el destino.
         if (!forEachSafeEntry(tempFile, candidate, null)) return@withContext false
 
+        // Extraer primero a un staging propio (bajo savedataRoot, mismo
+        // sistema de ficheros para poder renombrar, nunca dentro del destino):
+        // un archivo estructuralmente hostil ('X' como fichero y 'X/Y') o un
+        // fallo de E/S a mitad no puede destruir el save existente.
+        if (!root.isDirectory && !root.mkdirs()) return@withContext false
+        val staging = createStagingDir(root) ?: return@withContext false
         try {
-            if (targetDir.isDirectory) clearDirectoryContents(targetDir)
-            targetDir.mkdirs()
+            val targetPrefix = targetDir.path + File.separator
+            if (staging.path == targetDir.path || staging.path.startsWith(targetPrefix)) {
+                return@withContext false
+            }
 
             var failed = false
             val extracted = forEachSafeEntry(tempFile, candidate) { rel, isDirectory, zipIn ->
-                val outFile = SaveNames.resolveArchiveEntry(targetDir, rel)
+                val outFile = SaveNames.resolveArchiveEntry(staging, rel)
                 if (outFile == null) {
                     failed = true
                     return@forEachSafeEntry
                 }
                 if (isDirectory) {
                     outFile.mkdirs()
+                    if (!outFile.isDirectory) failed = true
                 } else {
                     outFile.parentFile?.mkdirs()
                     FileOutputStream(outFile).use { out -> zipIn.copyTo(out) }
                 }
             }
-            extracted && !failed
+            if (!extracted || failed) return@withContext false
+
+            // Sustitución: el staging ya contiene el árbol completo y validado.
+            if (targetDir.isDirectory) clearDirectoryContents(targetDir)
+            targetDir.mkdirs()
+            val staged = staging.listFiles() ?: return@withContext false
+            staged.all { child ->
+                val dest = SaveNames.resolveArchiveEntry(targetDir, child.name) ?: return@all false
+                child.renameTo(dest)
+            }
         } catch (_: Exception) {
             false
+        } finally {
+            staging.deleteRecursively()
         }
+    }
+
+    /**
+     * Crea un directorio de staging nuevo bajo [parent].
+     *
+     * Debe colgar de `savedataRoot` para compartir sistema de ficheros con el
+     * destino: el intercambio final se hace con `renameTo`, que solo es
+     * atómico dentro del mismo volumen. Se usa un nombre oculto y aleatorio
+     * para no colisionar con saves ni con restos de una corrida anterior.
+     */
+    private fun createStagingDir(parent: File): File? = try {
+        repeat(4) {
+            val dir = File(parent, ".ps3_restore_stage_${UUID.randomUUID()}")
+            if (!dir.exists() && dir.mkdirs()) return dir
+        }
+        null
+    } catch (_: Exception) {
+        null
     }
 
     /**

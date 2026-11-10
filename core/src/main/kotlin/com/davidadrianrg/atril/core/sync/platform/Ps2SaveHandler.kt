@@ -282,12 +282,18 @@ class Ps2SaveHandler : SaveHandler {
             // tar de la carpeta del serial dentro de su card dir
             val cardDir = File(cardDirPath)
             val parent = cardDir.parentFile ?: continue
+            val saveFolder = File(cardDir, File(saveFolderPath).name)
             val tarFile = File.createTempFile("ps2_root_${baSerial}_", ".tar")
             if (!tarFile.delete()) continue
+            // El miembro se pasa relativo a -C parent: así los nombres dentro
+            // del tar conservan la estructura "cardDir/serial" (una ruta
+            // absoluta haría que tar archivase todos sus componentes). La ruta
+            // se cita siempre con RootShell.sq, igual que el resto de
+            // comandos de root.
             val ok = RootShell.runToFile(
                 "tar -cf ${RootShell.sq(tarFile.absolutePath)} " +
                     "-C ${RootShell.sq(parent.absolutePath)} " +
-                    "'${cardDir.name}/${File(saveFolderPath).name}'",
+                    RootShell.sq(saveFolder.relativeTo(parent).path),
             )
             if (!ok || !tarFile.isFile || tarFile.length() == 0L) {
                 tarFile.delete()

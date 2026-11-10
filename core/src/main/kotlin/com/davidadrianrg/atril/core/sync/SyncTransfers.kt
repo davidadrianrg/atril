@@ -93,13 +93,20 @@ object SyncTransfers {
                     else -> Unit
                 }
             }
-            handler.extractDownload(
+            val restored = handler.extractDownload(
                 tempFile = tempFile,
                 romFileName = romFileName,
                 platformSlug = platformSlug,
                 savesBasePath = savesBasePath,
                 targetFileName = safeFileName,
             )
+            // Rechazo operativo del handler (archivo hostil, entrada no
+            // contenida): una única línea de clasificación fija, sin nombres
+            // de entrada ni rutas del archivo.
+            if (!restored) {
+                log("download restore rejected for ${LogSafe.fileName(safeFileName)} (rom $romId)")
+            }
+            restored
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
