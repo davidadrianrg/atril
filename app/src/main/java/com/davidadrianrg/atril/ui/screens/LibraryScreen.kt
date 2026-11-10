@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.GridView
@@ -109,6 +110,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -122,6 +124,7 @@ import android.net.Uri
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
@@ -130,6 +133,8 @@ import com.davidadrianrg.atril.RomMSyncApplication
 import com.davidadrianrg.atril.core.i18n.tr
 import androidx.compose.ui.geometry.isSpecified
 import com.davidadrianrg.atril.core.library.CoverRatio
+import com.davidadrianrg.atril.core.library.LibrarySource
+import com.davidadrianrg.atril.core.library.LibraryViewPreferences
 import com.davidadrianrg.atril.core.library.PlatformAbbreviation
 import com.davidadrianrg.atril.core.playstats.GamePlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
@@ -181,6 +186,15 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
     val loadError by viewModel.error.collectAsState()
     val selectedPlatformId by viewModel.selectedPlatformId.collectAsState()
 
+    // Preferencias persistentes de la biblioteca (vista, orden, origen y tamaño).
+    // Es la única fuente de verdad: el panel escribe aquí y la lista reacciona.
+    val viewPrefs by container.settingsRepository.libraryViewPreferences
+        .collectAsState(initial = LibraryViewPreferences.DEFAULT)
+    var showViewOptions by remember { mutableStateOf(false) }
+    // R1 abre el panel solo si el buscador no tiene el foco (no debe robar teclas).
+    var searchFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(viewPrefs.sort) { viewModel.setSort(viewPrefs.sort) }
+
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(RomFilter.ALL) }
     var platformMenuExpanded by remember { mutableStateOf(false) }
@@ -202,6 +216,21 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
     val insertion = remember { InsertionState() }
     var insertJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     InsertionDialogLayer(insertion) { insertJob?.cancel() }
+
+    // D3: B/Esc cierra primero el panel de opciones; después, el detalle (que
+    // gestiona su propia hoja); después, la navegación normal de la app.
+    BackHandler(enabled = showViewOptions) { showViewOptions = false }
+
+    // R1 (PadEvents.page +1) abre las opciones de vista solo en la Biblioteca.
+    // L1 (-1) no tiene significado aquí y el resto de guardas evita robar la
+    // pulsación al buscador, al detalle o a la propia hoja.
+    LaunchedEffect(Unit) {
+        com.davidadrianrg.atril.ui.input.PadEvents.page.collect { dir ->
+            if (dir > 0 && !searchFocused && selectedRom == null && !showViewOptions) {
+                showViewOptions = true
+            }
+        }
+    }
 
     val manualIds by viewModel.manualDownloadedIds.collectAsState()
     // ROM pendiente de confirmación de borrado
@@ -368,6 +397,8 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
         windowInfo.isLandscape -> 110.dp
         else -> 140.dp
     }
+    // D6: el tamaño elegido multiplica la base (Mediano = la de siempre).
+    val gridCardSize = minCardSize * viewPrefs.cardSize.scale
 
     val isLandscape = windowInfo.isLandscape
 
@@ -495,6 +526,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         compact = compact,
+                        onSearchFocusChange = { searchFocused = it },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -520,6 +552,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     compact = compact,
+                    onSearchFocusChange = { searchFocused = it },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 6.dp),
@@ -555,7 +588,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 }
                 Spacer(Modifier.weight(1f))
 
-                val sort by viewModel.sort.collectAsState()
+                val sort = viewPrefs.sort
                 val regionFilter by viewModel.regionFilter.collectAsState()
                 val availableRegions by viewModel.availableRegions.collectAsState()
 
@@ -572,6 +605,19 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 // Subir juego al servidor
                 IconButton(onClick = { showUploadGame = true }) {
                     Icon(Icons.Outlined.Upload, contentDescription = tr("library.upload.title"))
+                }
+
+                // Opciones de vista: orden, origen, vista y tamaño (persistidas).
+                IconButton(onClick = { showViewOptions = true }) {
+                    Icon(
+                        Icons.Filled.Tune,
+                        contentDescription = tr("library.view_options.title"),
+                        tint = if (viewPrefs != LibraryViewPreferences.DEFAULT) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
                 }
 
                 // Filtro por región
@@ -616,7 +662,12 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                         RomSort.entries.forEach { s ->
                             DropdownMenuItem(
                                 text = { Text(if (s == sort) "● " + tr(s.labelKey) else tr(s.labelKey)) },
-                                onClick = { viewModel.setSort(s); sortMenu = false },
+                                onClick = {
+                                    // El panel y este menú comparten la misma preferencia persistida.
+                                    viewModel.setSort(s)
+                                    scope.launch { container.settingsRepository.setLibrarySort(s) }
+                                    sortMenu = false
+                                },
                             )
                         }
                     }
@@ -626,10 +677,26 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
             }
 
             // ── Grid of games ───────────────────────────────────────────
+            // D1: la Biblioteca solo lista juegos de RomM. Origen=Local no
+            // filtra una lista vacía: explica dónde viven los juegos locales.
+            if (viewPrefs.source == LibrarySource.LOCAL) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    com.davidadrianrg.atril.ui.components.EmptyState(
+                        icon = Icons.Outlined.SportsEsports,
+                        title = tr("library.source.local_empty.title"),
+                        description = tr("library.source.local_empty.desc"),
+                    )
+                }
+                return@Column
+            }
+
             if (isLoading && romsWithStatus.isEmpty()) {
                 // Estado de carga diseñado: esqueleto de tarjetas en vez de un spinner solitario.
                 com.davidadrianrg.atril.ui.components.SkeletonGrid(
-                    minCardSize = minCardSize,
+                    minCardSize = gridCardSize,
                     cardAspectRatio = UNIFORM_CARD_RATIO,
                 )
                 return@Column
@@ -709,7 +776,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 // redondeo y una escalonada colocaría cada tarjeta en la columna más corta,
                 // desordenando la fila siguiente.
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = minCardSize),
+                    columns = GridCells.Adaptive(minSize = gridCardSize),
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -740,6 +807,24 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 }
             }
         }
+    }
+
+    // ── Panel de opciones de vista ─────────────────────────────────────
+    // Escribe las preferencias persistidas; la lista y la propia hoja se
+    // repintan solas y la hoja sigue abierta mientras se cambian valores.
+    if (showViewOptions) {
+        LibraryViewOptionsSheet(
+            preferences = viewPrefs,
+            showYearSort = romsWithStatus.any { it.rom.igdbMetadata?.firstReleaseDate != null },
+            onSort = { s ->
+                viewModel.setSort(s)
+                scope.launch { container.settingsRepository.setLibrarySort(s) }
+            },
+            onSource = { s -> scope.launch { container.settingsRepository.setLibrarySource(s) } },
+            onViewMode = { m -> scope.launch { container.settingsRepository.setLibraryViewMode(m) } },
+            onCardSize = { c -> scope.launch { container.settingsRepository.setLibraryCardSize(c) } },
+            onDismiss = { showViewOptions = false },
+        )
     }
 
     // ── Bottom sheet: game details ─────────────────────────────────────
@@ -2003,6 +2088,7 @@ private fun LibrarySearchField(
     value: String,
     onValueChange: (String) -> Unit,
     compact: Boolean,
+    onSearchFocusChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
@@ -2013,7 +2099,9 @@ private fun LibrarySearchField(
         singleLine = true,
         shape = RoundedCornerShape(12.dp),
         textStyle = MaterialTheme.typography.bodyMedium,
-        modifier = modifier.height(56.dp),
+        modifier = modifier
+            .height(56.dp)
+            .onFocusChanged { onSearchFocusChange(it.isFocused) },
     )
 }
 

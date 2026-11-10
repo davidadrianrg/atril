@@ -19,7 +19,10 @@ import com.davidadrianrg.atril.core.upload.UploadParts
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import com.davidadrianrg.atril.core.library.DiscEntry
+import com.davidadrianrg.atril.core.library.LibraryCardSize
 import com.davidadrianrg.atril.core.library.LibrarySorting
+import com.davidadrianrg.atril.core.library.LibrarySource
+import com.davidadrianrg.atril.core.library.LibraryViewMode
 import com.davidadrianrg.atril.core.library.MultiDiscGrouper
 import com.davidadrianrg.atril.core.remote.NetworkModule
 import com.davidadrianrg.atril.core.remote.RomMatcher
@@ -379,6 +382,35 @@ class DesktopAppState(private val scope: CoroutineScope) {
     fun setSort(s: LibrarySort) {
         _sort.value = s
         DesktopLibraryViewPrefs.setSort(s)
+    }
+
+    // ── Vista / origen / tamaño de la biblioteca (persistidos) ──────────
+
+    private val _viewMode = MutableStateFlow(DesktopLibraryViewPrefs.load().viewMode)
+    val viewMode: StateFlow<LibraryViewMode> = _viewMode
+
+    /** Cambia rejilla <-> cover flow y lo persiste. */
+    fun setViewMode(mode: LibraryViewMode) {
+        _viewMode.value = mode
+        DesktopLibraryViewPrefs.setViewMode(mode)
+    }
+
+    private val _source = MutableStateFlow(DesktopLibraryViewPrefs.load().source)
+    val source: StateFlow<LibrarySource> = _source
+
+    /** Cambia el origen de la biblioteca y lo persiste. */
+    fun setSource(source: LibrarySource) {
+        _source.value = source
+        DesktopLibraryViewPrefs.setSource(source)
+    }
+
+    private val _cardSize = MutableStateFlow(DesktopLibraryViewPrefs.load().cardSize)
+    val cardSize: StateFlow<LibraryCardSize> = _cardSize
+
+    /** Cambia el tamaño de tarjeta y lo persiste. */
+    fun setCardSize(size: LibraryCardSize) {
+        _cardSize.value = size
+        DesktopLibraryViewPrefs.setCardSize(size)
     }
 
     /** null = todas las regiones. */
@@ -780,6 +812,9 @@ class DesktopAppState(private val scope: CoroutineScope) {
 
     /** Una tarjeta por juego, con discos/variantes agrupados por [MultiDiscGrouper]. */
     fun games(): List<GameCard> {
+        // D1: la Biblioteca solo lista juegos de RomM. Origen=Local no filtra
+        // una lista vacía: la pantalla explica dónde viven los juegos locales.
+        if (_source.value == LibrarySource.LOCAL) return emptyList()
         val q = _search.value.trim().lowercase()
         val region = _regionFilter.value
         val rep = buildCards(_roms.value)
@@ -854,6 +889,7 @@ class DesktopAppState(private val scope: CoroutineScope) {
 
     /** Juegos no descargados de la vista actual, SIN aplicar búsqueda. */
     fun missingGames(): List<GameCard> {
+        if (_source.value == LibrarySource.LOCAL) return emptyList()
         val region = _regionFilter.value
         return buildCards(_roms.value)
             .filter { !it.downloaded && (region == null || it.rep.regions.any { r -> r.equals(region, ignoreCase = true) }) }
