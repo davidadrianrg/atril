@@ -78,6 +78,33 @@ class AppContainer(private val appContext: Context) {
         backupManager = saveBackupManager,
     )
 
+    /**
+     * Coordinador de sync para un pull puntual desde la UI (sin WorkManager, que
+     * no puede respetar el tope de 8 s del lanzamiento). El pull nunca resuelve
+     * conflictos, así que la política configurada no aplica.
+     */
+    fun newSyncCoordinator(): com.davidadrianrg.atril.data.sync.SyncCoordinator =
+        com.davidadrianrg.atril.data.sync.SyncCoordinator(
+            settingsDataStore = settingsDataStore,
+            romDao = database.romDao(),
+            platformDao = database.platformDao(),
+            cacheDir = appContext.cacheDir,
+            syncedHashStore = com.davidadrianrg.atril.data.sync.SyncedHashStore(appContext),
+            backupManager = saveBackupManager,
+            conflictPolicy = com.davidadrianrg.atril.core.sync.ConflictPolicy.ASK,
+            appContext = appContext,
+        )
+
+    /**
+     * Pull de saves previo al lanzamiento (tope duro de 8 s). Lo comparten la
+     * pantalla Jugar y el detalle de la Biblioteca.
+     */
+    val preLaunchSaveSync = com.davidadrianrg.atril.launch.PreLaunchSaveSync(
+        saveSyncEnabled = settingsRepository.saveSyncEnabled,
+        clientFactory = { newSyncCoordinator() },
+        serverConfigured = { settingsRepository.settings.first().isConfigured },
+    )
+
     val metadataExportManager = MetadataExportManager(appContext)
 
     val appUpdateChecker = AppUpdateChecker()

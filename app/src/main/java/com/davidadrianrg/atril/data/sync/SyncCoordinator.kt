@@ -13,6 +13,7 @@ import com.davidadrianrg.atril.core.remote.dto.NegotiateRequest
 import com.davidadrianrg.atril.core.remote.dto.SessionCompleteRequest
 import com.davidadrianrg.atril.core.sync.ConflictPolicy
 import com.davidadrianrg.atril.core.sync.SaveBackupManager
+import com.davidadrianrg.atril.core.sync.SavePullClient
 import com.davidadrianrg.atril.core.sync.StagedPath
 import com.davidadrianrg.atril.core.sync.platform.LocalSave
 import com.davidadrianrg.atril.core.sync.platform.SaveHandler
@@ -47,7 +48,7 @@ class SyncCoordinator(
     private val backupManager: SaveBackupManager? = null,
     private val conflictPolicy: ConflictPolicy = ConflictPolicy.ASK,
     private val appContext: Context,
-) {
+) : SavePullClient {
 
     /** Copias staged de rutas restringidas de esta corrida. */
     private val stagedPaths = mutableMapOf<String, StagedPath>()
@@ -405,6 +406,127 @@ class SyncCoordinator(
      */
     private fun isPathReadable(path: String): Boolean =
         SavePathAccess.isUsable(path, appContext)
+
+    /**
+     * Pull de saves SOLO de [romId], pensado para el lanzamiento.
+     *
+     * Reutiliza los mismos helpers que [runSync] (handler, rutas, staging,
+     * descarga y backup) pero:
+     * - no sube nada, no resuelve conflictos y no sella fingerprints;
+     * - no escanea la biblioteca: solo el ROM pedido;
+     * - devuelve cuántos saves se escribieron (`0` si no hay servidor, el ROM
+     *   no está descargado/excluido o no hay descargas pendientes).
+     *
+     * Los fallos de red/HTTP se propagan a propósito para que [SavePull] los
+     * clasifique; el lanzamiento nunca depende de este resultado.
+     *
+     * @throws java.io.IOException o `retrofit2.HttpException` si falla la red.
+     */
+    suspend fun pullRom(romId: Int): Int = withContext(Dispatchers.IO) {
+        try {
+            val serverUrl = settingsDataStore.getServerUrlBlocking()
+            val apiKey = settingsDataStore.getApiKeyBlocking()
+            if (serverUrl.isEmpty() || apiKey.isEmpty()) return@withContext 0
+
+            val rom = romDao.getAllDownloadedRomsBlocking().firstOrNull { it.romId == romId }
+                ?: return@withContext 0
+            if (rom.excludedFromSync) return@withContext 0
+
+            val api = NetworkModule.createApiService(serverUrl, apiKey)
+            val deviceId = ensureDeviceRegistered(api) ?: return@withContext 0
+            val retroArchBase = settingsDataStore.getRetroArchBasePathBlocking()
+            val config = platformDao.getAllPlatformsBlocking().firstOrNull { it.slug == rom.platformSlug }
+            val handler = SaveHandlerRegistry.getHandler(
+                platformSlug = rom.platformSlug,
+                emulatorId = config?.emulatorId,
+            )
+            val rawBasePath = resolveSavesBasePath(rom, config, retroArchBase)
+            val effectiveBasePath = stageFor(rawBasePath)
+
+            val localSaves = handler.findSaves(
+                romId = rom.romId,
+                romFileName = rom.fileName,
+                platformSlug = rom.platformSlug,
+                savesBasePath = effectiveBasePath,
+                romLocalPath = rom.localPath,
+            )
+            val clientSaves = localSaves.map { save ->
+                ClientSaveState(
+                    romId = rom.romId,
+                    fileName = save.fileName,
+                    slot = com.davidadrianrg.atril.core.sync.SyncSlots.DEFAULT,
+                    contentHash = save.contentHash,
+                    updatedAt = formatIso8601(save.lastModified),
+                    fileSizeBytes = save.file.length().toInt(),
+                )
+            }
+            val negotiateResponse = api.negotiateSync(
+                NegotiateRequest(deviceId = deviceId, saves = clientSaves),
+            )
+            val downloads = negotiateResponse.operations.filter {
+                it.action == "download" && it.romId == rom.romId
+            }
+
+            var pulled = 0
+            for (op in downloads) {
+                val saveId = op.saveId ?: continue
+                // El servidor etiqueta las versiones con slot; el fichero local
+                // conserva el nombre canónico del emulador.
+                val localFileName = com.davidadrianrg.atril.core.sync.SaveNames
+                    .stripVersionTag(op.fileName)
+                backupLocalSave(op.romId, localFileName, localSaves, handler)
+                val ok = executeDownload(
+                    api = api,
+                    saveId = saveId,
+                    deviceId = deviceId,
+                    rom = rom,
+                    fileName = op.fileName,
+                    savesBasePath = effectiveBasePath,
+                    handler = handler,
+                    expectedHash = op.serverContentHash,
+                )
+                if (ok) {
+                    pulled++
+                    // Ruta restringida staged: devolver la descarga al original.
+                    commitStaged(rawBasePath)
+                    op.serverContentHash?.let { hash ->
+                        syncedHashStore?.setSyncedHash(op.romId, localFileName, hash)
+                    }
+                }
+            }
+
+            if (downloads.isNotEmpty()) {
+                // Cierre de sesión best-effort: nunca debe hacer fallar el pull.
+                try {
+                    api.completeSession(
+                        sessionId = negotiateResponse.sessionId,
+                        request = SessionCompleteRequest(
+                            operationsCompleted = pulled,
+                            operationsFailed = downloads.size - pulled,
+                        ),
+                    )
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Sesión no cerrada: irrelevante para el lanzamiento.
+                }
+            }
+            pulled
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Timeout o cancelación real: no es un error, no se registra.
+            throw e
+        } catch (e: Exception) {
+            // Se registra y se relanza para que SavePull lo clasifique como
+            // Failed; el lanzamiento continúa. Solo id y mensaje, sin rutas.
+            Log.w(TAG, "Pre-launch save pull failed (rom $romId): ${e.message}")
+            throw e
+        } finally {
+            cleanupStaged()
+        }
+    }
+
+    /** Implementación del puerto del pull previo al lanzamiento. */
+    override suspend fun pullNewSaves(romId: Int): Int = pullRom(romId)
 
     /**
      * Resuelve un conflicto pendiente forzando la dirección elegida por el

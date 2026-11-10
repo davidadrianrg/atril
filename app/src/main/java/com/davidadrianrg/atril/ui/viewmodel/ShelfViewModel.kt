@@ -99,6 +99,7 @@ class ShelfViewModel(
     private val emulatorLauncher: EmulatorLauncher,
     private val localGames: com.davidadrianrg.atril.core.localgames.LocalGamesRepository,
     private val playStatsRepository: com.davidadrianrg.atril.core.playstats.PlayStatsRepository,
+    private val preLaunchSaveSync: com.davidadrianrg.atril.launch.PreLaunchSaveSync? = null,
 ) : ViewModel() {
 
     private val dtoCache = mutableMapOf<Int, RomDto>()
@@ -468,16 +469,30 @@ class ShelfViewModel(
     }
     fun setLocalCover(id: String, input: java.io.InputStream) { viewModelScope.launch { localGames.setManualCover(id, input) } }
 
-    suspend fun prepareLaunch(item: ShelfItem): LaunchPlan = emulatorLauncher.prepare(
-        LaunchRequest(
-            platformSlug = item.rom.platformSlug,
-            platformLabel = item.platformLabel,
-            localPath = item.localLaunchPath,
-            knownFileNames = item.knownFileNames,
-            overrideFamilyId = item.launchOverride,
-            saveEmulatorId = item.platformEmulatorId,
-        ),
-    )
+    suspend fun prepareLaunch(item: ShelfItem): LaunchPlan {
+        // Pull de saves con tope de 8 s: nunca impide ni retrasa más el lanzamiento.
+        val sync = preLaunchSaveSync
+        if (sync != null && item.rom.id > 0) {
+            val result = sync.run(item.rom.id) {
+                _messages.tryEmit(tr("sync.before_launch.updating"))
+            }
+            if (result is com.davidadrianrg.atril.core.sync.SavePullResult.Failed ||
+                result is com.davidadrianrg.atril.core.sync.SavePullResult.TimedOut
+            ) {
+                _messages.tryEmit(tr("sync.before_launch.failed"))
+            }
+        }
+        return emulatorLauncher.prepare(
+            LaunchRequest(
+                platformSlug = item.rom.platformSlug,
+                platformLabel = item.platformLabel,
+                localPath = item.localLaunchPath,
+                knownFileNames = item.knownFileNames,
+                overrideFamilyId = item.launchOverride,
+                saveEmulatorId = item.platformEmulatorId,
+            ),
+        )
+    }
 
     fun startLaunch(activityContext: android.content.Context, plan: LaunchPlan.Ready): String? =
         emulatorLauncher.start(activityContext, plan)

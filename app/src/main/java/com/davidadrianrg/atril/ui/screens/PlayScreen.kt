@@ -147,6 +147,7 @@ fun PlayScreen(
                     emulatorLauncher = container.emulatorLauncher,
                     localGames = container.localGamesRepository,
                     playStatsRepository = container.playStats,
+                    preLaunchSaveSync = container.preLaunchSaveSync,
                 )
             }
         }

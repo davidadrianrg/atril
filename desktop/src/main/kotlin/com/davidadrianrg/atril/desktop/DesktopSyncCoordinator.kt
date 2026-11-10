@@ -10,6 +10,7 @@ import com.davidadrianrg.atril.core.remote.dto.NegotiateRequest
 import com.davidadrianrg.atril.core.remote.dto.SessionCompleteRequest
 import com.davidadrianrg.atril.core.sync.ConflictPolicy
 import com.davidadrianrg.atril.core.sync.SaveBackupManager
+import com.davidadrianrg.atril.core.sync.SavePullClient
 import com.davidadrianrg.atril.core.sync.platform.LocalSave
 import com.davidadrianrg.atril.core.sync.platform.SaveHandler
 import com.davidadrianrg.atril.core.sync.platform.SaveHandlerRegistry
@@ -40,7 +41,7 @@ class DesktopSyncCoordinator(
     private val backupManager: SaveBackupManager? = null,
     private val hashStore: DesktopHashStore? = null,
     private val conflictPolicy: ConflictPolicy = ConflictPolicy.ASK,
-) {
+) : SavePullClient {
 
     suspend fun runSync(): SyncResult = withContext(Dispatchers.IO) {
         val serverUrl = config.serverUrl
@@ -336,6 +337,96 @@ class DesktopSyncCoordinator(
             message = buildResultMessage(completed, failed, conflicts.size),
         )
     }
+
+    /**
+     * Pull de saves SOLO de [romId] para el lanzamiento.
+     *
+     * Reutiliza los helpers del sync completo (registro, rutas, handler,
+     * descarga y backup) pero no sube, no resuelve conflictos, no sella
+     * fingerprints y no recorre la biblioteca. Devuelve cuántos saves se
+     * escribieron; los fallos de red/HTTP se propagan para que [SavePull] los
+     * clasifique y el lanzamiento siga igual.
+     */
+    suspend fun pullRom(romId: Int): Int = withContext(Dispatchers.IO) {
+        val serverUrl = config.serverUrl
+        val apiKey = config.apiKey
+        if (serverUrl.isEmpty() || apiKey.isEmpty()) return@withContext 0
+
+        val rom = library.rom(romId) ?: return@withContext 0
+        if (rom.excludedFromSync) return@withContext 0
+
+        val api = NetworkModule.createApiService(serverUrl, apiKey)
+        val deviceId = ensureDeviceRegistered(api) ?: return@withContext 0
+        val platformConfig = library.platform(rom.platformSlug)
+        val handler = SaveHandlerRegistry.getHandler(
+            platformSlug = rom.platformSlug,
+            emulatorId = platformConfig.emulatorId,
+        )
+        val savesBasePath = resolveSavesBasePath(rom, platformConfig, "")
+
+        val localSaves = handler.findSaves(
+            romId = rom.romId,
+            romFileName = rom.fileName,
+            platformSlug = rom.platformSlug,
+            savesBasePath = savesBasePath,
+            romLocalPath = rom.localPath,
+        )
+        val clientSaves = localSaves.map { save ->
+            ClientSaveState(
+                romId = rom.romId,
+                fileName = save.fileName,
+                slot = com.davidadrianrg.atril.core.sync.SyncSlots.DEFAULT,
+                contentHash = save.contentHash,
+                updatedAt = formatIso8601(save.lastModified),
+                fileSizeBytes = save.file.length().toInt(),
+            )
+        }
+        val negotiateResponse = api.negotiateSync(
+            NegotiateRequest(deviceId = deviceId, saves = clientSaves),
+        )
+        val downloads = negotiateResponse.operations.filter {
+            it.action == "download" && it.romId == rom.romId
+        }
+
+        var pulled = 0
+        for (op in downloads) {
+            val saveId = op.saveId ?: continue
+            val localFileName = com.davidadrianrg.atril.core.sync.SaveNames.stripVersionTag(op.fileName)
+            backupLocalSave(op.romId, localFileName, localSaves, handler)
+            val ok = executeDownload(
+                api = api,
+                saveId = saveId,
+                deviceId = deviceId,
+                rom = rom,
+                fileName = op.fileName,
+                savesBasePath = savesBasePath,
+                handler = handler,
+                expectedHash = op.serverContentHash,
+            )
+            if (ok) pulled++
+        }
+
+        if (downloads.isNotEmpty()) {
+            // Cierre de sesión best-effort: nunca debe hacer fallar el pull.
+            try {
+                api.completeSession(
+                    sessionId = negotiateResponse.sessionId,
+                    request = SessionCompleteRequest(
+                        operationsCompleted = pulled,
+                        operationsFailed = downloads.size - pulled,
+                    ),
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Sesión no cerrada: irrelevante para el lanzamiento.
+            }
+        }
+        pulled
+    }
+
+    /** Implementación del puerto del pull previo al lanzamiento. */
+    override suspend fun pullNewSaves(romId: Int): Int = pullRom(romId)
 
     /**
      * Negociación sin efectos: lista qué subidas/bajadas haría un runSync y

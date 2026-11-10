@@ -31,6 +31,8 @@ import com.davidadrianrg.atril.core.remote.dto.PlatformDto
 import com.davidadrianrg.atril.core.remote.dto.RomDto
 import com.davidadrianrg.atril.core.sync.ConflictPolicy
 import com.davidadrianrg.atril.core.sync.SaveBackupManager
+import com.davidadrianrg.atril.core.sync.SavePull
+import com.davidadrianrg.atril.core.sync.SavePullResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -732,14 +734,27 @@ class DesktopAppState(private val scope: CoroutineScope) {
      * Lanza la ROM local con el emulador configurado para su plataforma
      * (Plataformas → Ajustes → Lanzar juegos). No hay fallback al «abrir con»
      * del sistema: sin emulador configurado se explica cómo configurarlo.
+     *
+     * Antes de lanzar, si es un juego de RomM con sync activo y servidor
+     * configurado, baja los saves nuevos con un tope duro de 8 s. Un fallo o un
+     * timeout no impide el lanzamiento.
      */
-    fun openLocalGame(card: GameCard): Boolean {
+    suspend fun openLocalGame(card: GameCard): Boolean {
         val entry = library.rom(card.rep.id)
             ?: card.groupRoms.asSequence().mapNotNull { library.rom(it.id) }.firstOrNull()
         val path = entry?.localPath?.takeIf { it.isNotBlank() }
         if (entry == null || path == null) {
             showSnackbar(tr("launcher.desktop.no_file"))
             return false
+        }
+        if (entry.romId > 0 && _saveSyncEnabled.value &&
+            config.serverUrl.isNotBlank() && config.apiKey.isNotBlank()
+        ) {
+            showSnackbar(tr("sync.before_launch.updating"))
+            val result = SavePull.beforeLaunch(makeSyncCoordinator(), entry.romId, log = { println(it) })
+            if (result is SavePullResult.Failed || result is SavePullResult.TimedOut) {
+                showSnackbar(tr("sync.before_launch.failed"))
+            }
         }
         return launchFile(entry.platformSlug, File(path), entry.romId)
     }
