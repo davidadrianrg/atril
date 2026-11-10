@@ -10,7 +10,11 @@ import com.davidadrianrg.atril.core.media.GameMediaPaths
 import com.davidadrianrg.atril.core.playstats.GamePlayStats
 import com.davidadrianrg.atril.core.playstats.JsonPlayStatsStore
 import com.davidadrianrg.atril.core.playstats.PlayStatsRepository
+import com.davidadrianrg.atril.core.download.RomFileLocator
 import com.davidadrianrg.atril.core.launch.DesktopLaunchPlanner
+import com.davidadrianrg.atril.core.launch.LaunchHost
+import com.davidadrianrg.atril.core.launch.LaunchTarget
+import com.davidadrianrg.atril.core.launch.LaunchTargetResolver
 import com.davidadrianrg.atril.core.remote.dto.SaveDto
 import com.davidadrianrg.atril.core.remote.dto.SearchRomDto
 import com.davidadrianrg.atril.core.remote.dto.StateDto
@@ -674,15 +678,41 @@ class DesktopAppState(private val scope: CoroutineScope) {
     fun isManualDownloaded(card: GameCard): Boolean =
         card.groupRoms.isNotEmpty() && card.groupRoms.all { it.id in manualIds }
 
+    /**
+     * Marca el juego como descargado y, si el fichero ya está en la carpeta de
+     * su plataforma, persiste la ruta para que quede lanzable. Lo que no
+     * aparece se queda como marca manual (sin ruta).
+     */
     fun markDownloadedManually(card: GameCard) {
-        card.groupRoms.forEach { manualIds.add(it.id) }
+        var linked = false
+        card.groupRoms.forEach { rom ->
+            val file = findLocalFile(rom)
+            if (file != null) {
+                attachPath(rom, file.absolutePath)
+                manualIds.remove(rom.id)
+                linked = true
+            } else {
+                manualIds.add(rom.id)
+            }
+        }
         persistManualIds()
         _downloadedVersion.value = _downloadedVersion.value + 1
-        showSnackbar(tr("library.marked_downloaded", card.rep.name))
+        showSnackbar(
+            if (linked) tr("library.file_linked") else tr("library.marked_downloaded", card.rep.name),
+        )
     }
 
+    /**
+     * Quita la marca manual. Solo elimina de `library.properties` los ids que
+     * estaban marcados a mano: nunca borra entradas de descargas reales.
+     */
     fun unmarkDownloadedManually(card: GameCard) {
+        val previouslyManual = card.groupRoms.map { it.id }.filter { it in manualIds }.toSet()
         card.groupRoms.forEach { manualIds.remove(it.id) }
+        previouslyManual.forEach { id ->
+            library.removeRom(id)
+            downloadedIds.remove(id)
+        }
         persistManualIds()
         _downloadedVersion.value = _downloadedVersion.value + 1
         showSnackbar(tr("library.unmarked_downloaded", card.rep.name))
@@ -690,6 +720,63 @@ class DesktopAppState(private val scope: CoroutineScope) {
 
     /** IDs marcados a mano; el launcher los incluye aunque no tengan fichero. */
     fun manualDownloadedIds(): Set<Int> = manualIds.toSet()
+
+    /** Ruta local asociada a la carta (representante o cualquier disco del grupo). */
+    fun localPathOf(card: GameCard): String? =
+        library.rom(card.rep.id)?.localPath?.takeIf { it.isNotBlank() }
+            ?: card.groupRoms.asSequence()
+                .mapNotNull { library.rom(it.id)?.localPath?.takeIf { path -> path.isNotBlank() } }
+                .firstOrNull()
+
+    /**
+     * Asocia el fichero elegido con el selector nativo al representante del
+     * juego. Rechaza `.apk` antes de guardar nada.
+     */
+    fun locateFile(card: GameCard, path: String) {
+        val file = File(path)
+        if (!file.isFile) {
+            showSnackbar(tr("launcher.desktop.file_missing", path))
+            return
+        }
+        val slug = card.rep.platformSlug.orEmpty().ifBlank { "unknown" }
+        if (LaunchTargetResolver.resolve(slug, path, LaunchHost.DESKTOP) is LaunchTarget.ApkUnsupported) {
+            showSnackbar(tr("launch.error.apk_desktop"))
+            return
+        }
+        attachPath(card.rep, file.absolutePath)
+        card.groupRoms.forEach { manualIds.remove(it.id) }
+        persistManualIds()
+        _downloadedVersion.value = _downloadedVersion.value + 1
+        showSnackbar(tr("library.file_linked"))
+    }
+
+    /** Carpeta de la plataforma: `romsFolderOverride` si existe, si no el slug. */
+    private fun romsFolder(slug: String): String =
+        library.platform(slug).romsFolderOverride?.takeIf { it.isNotBlank() } ?: slug
+
+    /** Busca el fichero de [rom] bajo la raíz de ROMs configurada. */
+    private fun findLocalFile(rom: RomDto): File? {
+        val slug = rom.platformSlug.orEmpty().ifBlank { "unknown" }
+        val dir = File(config.romsRoot, romsFolder(slug))
+        return RomFileLocator.locateInDirs(listOf(dir), rom.fileName)
+    }
+
+    /** Registra la ruta en `library.properties` conservando el resto de campos. */
+    private fun attachPath(rom: RomDto, path: String) {
+        val slug = rom.platformSlug.orEmpty().ifBlank { "unknown" }
+        val existing = library.rom(rom.id)
+        library.upsertRom(
+            existing?.copy(localPath = path)
+                ?: DesktopLibrary.RomEntry(
+                    romId = rom.id,
+                    name = rom.name,
+                    fileName = rom.fileName,
+                    platformSlug = slug,
+                    localPath = path,
+                ),
+        )
+        downloadedIds.add(rom.id)
+    }
 
     // ── Launcher: medio físico y apertura local ─────────────────────────
 
@@ -741,11 +828,38 @@ class DesktopAppState(private val scope: CoroutineScope) {
      * timeout no impide el lanzamiento.
      */
     suspend fun openLocalGame(card: GameCard): Boolean {
-        val entry = library.rom(card.rep.id)
+        var entry = library.rom(card.rep.id)
             ?: card.groupRoms.asSequence().mapNotNull { library.rom(it.id) }.firstOrNull()
-        val path = entry?.localPath?.takeIf { it.isNotBlank() }
+        var path = entry?.localPath?.takeIf { it.isNotBlank() }
+
+        // Resolución perezosa: un juego manual guarda `""` hasta que el
+        // fichero aparece bajo `<romsRoot>/<plataforma>`. Se persiste al hallarlo.
+        if (path == null || !File(path).isFile) {
+            val located = withContext(Dispatchers.IO) {
+                card.groupRoms.asSequence()
+                    .mapNotNull { rom -> findLocalFile(rom)?.let { rom to it } }
+                    .firstOrNull()
+            }
+            if (located != null) {
+                attachPath(located.first, located.second.absolutePath)
+                card.groupRoms.forEach { manualIds.remove(it.id) }
+                persistManualIds()
+                _downloadedVersion.value = _downloadedVersion.value + 1
+                entry = library.rom(located.first.id)
+                path = located.second.absolutePath
+            }
+        }
+
         if (entry == null || path == null) {
-            showSnackbar(tr("launcher.desktop.no_file"))
+            showSnackbar(
+                if (card.groupRoms.any { it.id > 0 }) tr("launch.error.manual_not_found")
+                else tr("launcher.desktop.no_file"),
+            )
+            return false
+        }
+        // Rechazo del APK antes del pull y del planner (D4).
+        if (LaunchTargetResolver.resolve(entry.platformSlug, path, LaunchHost.DESKTOP) is LaunchTarget.ApkUnsupported) {
+            showSnackbar(tr("launch.error.apk_desktop"))
             return false
         }
         if (entry.romId > 0 && _saveSyncEnabled.value &&
@@ -841,6 +955,12 @@ class DesktopAppState(private val scope: CoroutineScope) {
     private fun launchFile(slug: String, file: File, romId: Int?): Boolean {
         if (!file.exists()) {
             showSnackbar(tr("launcher.desktop.file_missing", file.path))
+            return false
+        }
+        // Rechazo explícito antes del planner: un APK no se lanza en escritorio
+        // y "no hay emulador configurado" sería un mensaje engañoso.
+        if (LaunchTargetResolver.resolve(slug, file.path, LaunchHost.DESKTOP) is LaunchTarget.ApkUnsupported) {
+            showSnackbar(tr("launch.error.apk_desktop"))
             return false
         }
         val platformName = _platforms.value.firstOrNull { it.slug == slug }?.let { it.displayName ?: it.name } ?: slug

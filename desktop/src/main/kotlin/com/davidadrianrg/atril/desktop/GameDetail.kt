@@ -41,6 +41,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +55,9 @@ import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
 import com.davidadrianrg.atril.core.remote.dto.RomDto
 import java.net.URI
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Detalle de juego — paridad con el RomDetailSheet de Android: portada,
@@ -74,6 +78,7 @@ fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
     var expandedSummary by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMatchDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -169,6 +174,19 @@ fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
                                 Spacer(Modifier.width(16.dp))
                                 OutlinedButton(onClick = { state.unmarkDownloadedManually(card) }) {
                                     Text(tr("library.unmark_downloaded"))
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val file = withContext(Dispatchers.IO) {
+                                                pickFile(tr("library.locate_file"))
+                                            } ?: return@launch
+                                            state.locateFile(card, file.absolutePath)
+                                        }
+                                    },
+                                ) {
+                                    Text(tr("library.locate_file"))
                                 }
                             }
                         }

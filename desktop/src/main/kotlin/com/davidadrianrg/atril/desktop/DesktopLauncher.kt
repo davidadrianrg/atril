@@ -1089,6 +1089,8 @@ private fun PlayCaption(
     modifier: Modifier = Modifier,
 ) {
     val manual = state.isManualDownloaded(entry.card)
+    // Un juego manual sin ruta sigue siendo lanzable: se busca al pulsar Jugar.
+    val hasLocalPath = state.localPathOf(entry.card) != null
     val physicalAvailable = entry.physicalUrl != null
     val physical = physicalAvailable && state.isPhysicalMedia(entry.card.rep.id)
     Column(
@@ -1116,10 +1118,10 @@ private fun PlayCaption(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        if (manual) {
+        if (manual && !hasLocalPath) {
             Spacer(Modifier.height(4.dp))
             Text(
-                tr("launcher.not_launchable"),
+                tr("launcher.manual_hint"),
                 style = MaterialTheme.typography.labelSmall,
                 color = PlayAmber.copy(alpha = 0.8f),
             )
@@ -1129,7 +1131,7 @@ private fun PlayCaption(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Button(onClick = onPlay, enabled = !manual) {
+            Button(onClick = onPlay) {
                 Icon(AppIcons.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(tr("launcher.play"))
