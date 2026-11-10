@@ -31,7 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Library view, sort, source and card size are now persisted on both platforms and restored on the next launch, using the same preference keys defined in `:core`.
 - Android and desktop share one sort implementation with nine criteria, including *Last played*; the toolbar sort menu keeps the full list while the view-options panel offers name, last played and year.
 - The chosen disc of a local multidisc group is persisted per game, and removing a grouped local game removes every one of its discs.
-- 73 new unit tests cover the view/sort/size persistence, the letter index with filters, local disc grouping and its false positives, the chosen-disc codec and the 8-second cap.
+- Server-supplied save file names are now validated before any download or write: blank names, absolute paths, path separators, `.`/`..` elements and NUL bytes are rejected, and the resolved target must stay inside the canonical saves directory (symlinks included). A rejected name is skipped without aborting the rest of the sync.
+- When a `.cue`, `.gdi` or `.m3u` descriptor and a raw data file share a disc number, the descriptor wins (`.cue` > `.gdi` > `.m3u`), so a multidisc group launches the file an emulator can start.
+- 91 unit tests now cover the phase-2 work: the 73 of the first pass plus 18 regression tests added with the review and security fixes. They span view/sort/size persistence, the letter index with filters, local disc grouping and its false positives, the chosen-disc codec, the 8-second cap, save-name validation and the descriptor tie-break.
 
 ### Notes
 

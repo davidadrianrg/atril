@@ -31,7 +31,9 @@ proyecto se acoge a [Versionado Semántico](https://semver.org/lang/es/).
 - La vista, el orden, el origen y el tamaño de la Biblioteca se guardan ahora en las dos plataformas y se restauran al volver a abrir, con las mismas claves de preferencias definidas en `:core`.
 - Android y escritorio comparten una única implementación de orden con nueve criterios, incluido *Jugado recientemente*; el menú de orden de la barra mantiene la lista completa mientras el panel de opciones ofrece nombre, jugado recientemente y año.
 - El disco elegido de un grupo local multidisco se guarda por juego, y eliminar un juego local agrupado elimina todos sus discos.
-- 73 pruebas unitarias nuevas cubren la persistencia de vista/orden/tamaño, el índice alfabético con filtros, la agrupación local de discos y sus falsos positivos, el códec del disco elegido y el tope de 8 segundos.
+- Los nombres de fichero de partidas que llegan del servidor se validan ahora antes de cualquier descarga o escritura: se rechazan los nombres vacíos, las rutas absolutas, los separadores de ruta, los elementos `.`/`..` y los bytes NUL, y el destino resuelto debe quedar dentro del directorio canónico de partidas (enlaces simbólicos incluidos). Un nombre rechazado se omite sin abortar el resto de la sincronización.
+- Cuando un descriptor `.cue`, `.gdi` o `.m3u` y un fichero de datos comparten número de disco, gana el descriptor (`.cue` > `.gdi` > `.m3u`), así que el grupo multidisco lanza el fichero que un emulador puede arrancar.
+- 91 pruebas unitarias cubren ahora el trabajo de la fase 2: las 73 de la primera pasada más 18 pruebas de regresión añadidas con las correcciones de revisión y seguridad. Abarcan la persistencia de vista/orden/tamaño, el índice alfabético con filtros, la agrupación local de discos y sus falsos positivos, el códec del disco elegido, el tope de 8 segundos, la validación de nombres de partida y el desempate por descriptor.
 
 ### Notas
 
