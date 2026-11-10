@@ -265,4 +265,91 @@ class SyncTransfersTest {
         assertTrue(lines.contains("upload retry 1 for GexINJECTED.srm: IOException"))
         assertEquals("upload failed for GexINJECTED.srm: IOException", lines.last())
     }
+
+    // ── REV-003: el rechazo operativo del handler deja una línea fija ──────
+
+    private fun rejectingHandler(): SaveHandler = fake { name, args ->
+        when (name) {
+            "extractDownload" -> false
+            "prepareForUpload" -> (args[0] as LocalSave).file
+            else -> null
+        }
+    }
+
+    @Test
+    fun `a rejected restore logs exactly one fixed classification line`() {
+        val cache = cache()
+        val lines = mutableListOf<String>()
+        val api = fake<RomMApiService> { _, _ -> good.toResponseBody() }
+
+        val ok = runBlocking {
+            SyncTransfers.download(
+                api = api, saveId = 1, deviceId = "d", romId = 7, romFileName = "g.chd",
+                platformSlug = "3do", fileName = "Gex [2026-11-03_06-57-36].srm",
+                savesBasePath = "/saves", handler = rejectingHandler(), cacheDir = cache,
+                expectedHash = goodMd5, attempts = 3, baseDelayMs = 1,
+                log = { lines.add(it) },
+            )
+        }
+
+        assertFalse(ok)
+        assertEquals("una sola línea de clasificación", 1, lines.size)
+        assertEquals("download restore rejected for Gex.srm (rom 7)", lines.single())
+        assertFalse("sin salto de línea", lines.single().contains('\n') || lines.single().contains('\r'))
+        assertFalse("sin caracteres de control", lines.single().any { it.isISOControl() })
+        assertEquals("el temporal se borra", 0, cache.listFiles()!!.size)
+    }
+
+    @Test
+    fun `an exception path logs the failure and never the rejected line`() {
+        val cache = cache()
+        val lines = mutableListOf<String>()
+        val api = fake<RomMApiService> { _, _ -> throw IOException("down") }
+
+        val ok = runBlocking {
+            SyncTransfers.download(
+                api = api, saveId = 1, deviceId = "d", romId = 7, romFileName = "g.chd",
+                platformSlug = "3do", fileName = "Gex [2026-11-03_06-57-36].srm",
+                savesBasePath = "/saves", handler = rejectingHandler(), cacheDir = cache,
+                expectedHash = goodMd5, attempts = 3, baseDelayMs = 1,
+                log = { lines.add(it) },
+            )
+        }
+
+        assertFalse(ok)
+        assertEquals(
+            "una sola línea de fallo",
+            1,
+            lines.count { it.startsWith("download failed for ") },
+        )
+        assertEquals(
+            "download failed for Gex.srm (rom 7): IOException",
+            lines.last(),
+        )
+        assertFalse(
+            "la ruta de excepción no debe emitir la clasificación de rechazo",
+            lines.any { it.contains("restore rejected") },
+        )
+        assertEquals("el temporal se borra", 0, cache.listFiles()!!.size)
+    }
+
+    @Test
+    fun `a rejected server file name logs no rejected classification`() {
+        val cache = cache()
+        val lines = mutableListOf<String>()
+        val api = fake<RomMApiService> { _, _ -> good.toResponseBody() }
+
+        val ok = runBlocking {
+            SyncTransfers.download(
+                api = api, saveId = 1, deviceId = "d", romId = 7, romFileName = "g.chd",
+                platformSlug = "3do", fileName = "../escape.srm",
+                savesBasePath = "/saves", handler = rejectingHandler(), cacheDir = cache,
+                expectedHash = goodMd5, attempts = 3, baseDelayMs = 1,
+                log = { lines.add(it) },
+            )
+        }
+
+        assertFalse(ok)
+        assertEquals(listOf("download skipped for rom 7: unsafe server file name"), lines)
+    }
 }
