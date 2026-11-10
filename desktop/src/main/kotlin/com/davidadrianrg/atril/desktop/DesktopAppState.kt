@@ -211,6 +211,13 @@ class DesktopAppState(private val scope: CoroutineScope) {
      * refresca nombre/fichero/plataforma desde [DesktopLibrary.rom] y recalcula
      * `downloaded` con los ids registrados o marcados a mano, con la misma
      * regla que [buildCards].
+     *
+     * Conserva el invariante de [GameCard] que ya cumplen los dos productores
+     * de tarjetas ([buildCards] usa los ids de descarga y la Pantalla Jugar
+     * todos los del grupo): `groupRoms` incluye siempre al representante y `rep`
+     * es su primera entrada. Excluirlo dejaba al detalle operando sobre un grupo
+     * incompleto: no borraba la descarga del representante, no lo volvía a
+     * marcar como descargado y hacía vacuo a `isManualDownloaded` (REV-019).
      */
     private fun rebuildFromLocalLibrary(current: GameCard): GameCard {
         val group = (listOf(current.rep) + current.groupRoms).distinctBy { it.id }
@@ -220,8 +227,8 @@ class DesktopAppState(private val scope: CoroutineScope) {
         }
         return current.copy(
             rep = roms.first(),
-            groupRoms = roms.drop(1),
-            downloaded = group.all { it.id in downloadedIds || it.id in manualIds },
+            groupRoms = roms,
+            downloaded = roms.all { it.id in downloadedIds || it.id in manualIds },
         )
     }
 
