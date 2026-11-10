@@ -53,9 +53,11 @@ object RomFileLocator {
             .sortedBy { it.name.lowercase() }
         if (dirs.isEmpty()) return null
 
-        // Hijo directo: el caso normal de una ROM descargada por la app.
+        // Hijo directo: el caso normal de una ROM descargada por la app. El
+        // listado también respeta MAX_ENTRIES para no materializar directorios
+        // gigantes (SEC-005).
         for (dir in dirs) {
-            val match = dir.listChildren()
+            val match = dir.listChildren(MAX_ENTRIES)
                 ?.firstOrNull {
                     it.isVisibleEntry() && !it.isSymlink() && it.isFile &&
                         it.name.equals(fileName, ignoreCase = true)
@@ -65,7 +67,7 @@ object RomFileLocator {
 
         // BFS acotado para ficheros movidos a subcarpetas (juego/carpeta/...).
         val queue = ArrayDeque<Pair<File, Int>>()
-        dirs.sortedBy { it.name.lowercase() }.forEach { queue.addLast(it to 0) }
+        dirs.forEach { queue.addLast(it to 0) }
         val visitedDirs = mutableSetOf<String>()
         var visitedEntries = 0
 
@@ -75,7 +77,7 @@ object RomFileLocator {
             if (!visitedDirs.add(key)) continue
             if (depth >= MAX_DEPTH) continue
 
-            val children = dir.listChildren()?.sortedBy { it.name.lowercase() } ?: continue
+            val children = dir.listChildren(MAX_ENTRIES)?.sortedBy { it.name.lowercase() } ?: continue
             for (child in children) {
                 if (!child.isVisibleEntry()) continue
                 if (child.isSymlink()) continue
@@ -91,17 +93,28 @@ object RomFileLocator {
     /**
      * Valida un nombre de fichero proveniente de una frontera no confiable.
      *
-     * Rechaza vacío, `.`, `..`, separadores de ruta (`/`, `\`) y NUL.
+     * Rechaza vacío, los componentes `.` y `..`, separadores de ruta (`/`, `\`)
+     * y NUL. Un nombre legítimo puede contener `..` en medio (`Game..v2.gba`):
+     * solo son peligrosos los componentes de navegación completos.
      */
     fun isSafeFileName(name: String): Boolean {
         if (name.isBlank()) return false
         if (name == "." || name == "..") return false
-        if (name.contains("..")) return false
         return name.none { it == '/' || it == '\\' || it == '\u0000' }
     }
 
-    private fun File.listChildren(): List<File>? =
-        runCatching { listFiles()?.toList() }.getOrNull()
+    /**
+     * Lista como mucho [max] hijos con un `DirectoryStream` acotado: evita
+     * materializar un directorio con cientos de miles de entradas.
+     */
+    private fun File.listChildren(max: Int): List<File>? = runCatching {
+        val out = ArrayList<File>(minOf(max, 256))
+        Files.newDirectoryStream(toPath()).use { stream ->
+            val iterator = stream.iterator()
+            while (iterator.hasNext() && out.size < max) out.add(iterator.next().toFile())
+        }
+        out
+    }.getOrNull()
 
     private fun File.isVisibleEntry(): Boolean = !name.startsWith(".")
 
