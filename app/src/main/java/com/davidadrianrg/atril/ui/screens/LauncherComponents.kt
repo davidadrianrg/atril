@@ -17,6 +17,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +26,7 @@ import com.davidadrianrg.atril.ui.input.focusRing
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -79,6 +82,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.playstats.GamePlayStats
+import com.davidadrianrg.atril.core.playstats.PlayStats
+import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
 import com.davidadrianrg.atril.core.playstats.PlayTimeFormat
 import com.davidadrianrg.atril.ui.navigation.Screen
 import com.davidadrianrg.atril.ui.theme.LocalLauncherColors
@@ -286,6 +291,74 @@ private fun CardBadge(text: String, subtle: Boolean = false) {
             .background(if (subtle) Color(0xCC0B0907) else LauncherAmber)
             .padding(horizontal = 7.dp, vertical = 2.dp),
     )
+}
+
+/**
+ * Fila compacta «Seguir jugando»: los últimos juegos jugados con carátula,
+ * nombre y tiempo jugado. No es un segundo carrusel (sin pager ni centrado
+ * automático): es una tira secundaria desplazable que se oculta sin datos.
+ */
+@Composable
+internal fun ContinuePlayingRow(
+    games: List<ShelfItem>,
+    playStats: Map<Int, PlayStats>,
+    onSelect: (ShelfItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (games.isEmpty()) return
+    Column(modifier.fillMaxWidth()) {
+        Text(
+            tr("play.continue.title"),
+            style = MaterialTheme.typography.labelLarge,
+            color = LauncherCream.copy(alpha = 0.72f),
+            modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 6.dp),
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            items(games, key = { it.rom.id }) { item ->
+                val played = PlayTimeFormat.duration(
+                    PlayStatsLogic.aggregate(item.groupRomIds + item.rom.id, playStats).totalPlayedMs,
+                )
+                ContinuePlayingCard(item = item, played = played, onClick = { onSelect(item) })
+            }
+        }
+    }
+}
+
+/** Mini-carta de «Seguir jugando»: carátula, nombre y tiempo jugado. */
+@Composable
+private fun ContinuePlayingCard(item: ShelfItem, played: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(76.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(role = Role.Button, onClickLabel = tr("launcher.play"), onClick = onClick)
+            .semantics { contentDescription = tr("play.continue.item", item.rom.name, played) }
+            .padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        LauncherCoverArt(
+            item,
+            Modifier.fillMaxWidth().aspectRatio(CARD_ASPECT).clip(RoundedCornerShape(6.dp)),
+        )
+        Spacer(Modifier.height(5.dp))
+        Text(
+            item.rom.name,
+            style = MaterialTheme.typography.labelSmall,
+            color = LauncherCream,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            played,
+            style = MaterialTheme.typography.labelSmall,
+            color = LauncherCream.copy(alpha = 0.55f),
+            maxLines = 1,
+        )
+    }
 }
 
 @Composable

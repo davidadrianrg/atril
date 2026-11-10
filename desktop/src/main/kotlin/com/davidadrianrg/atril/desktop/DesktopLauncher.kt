@@ -72,6 +72,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,7 +85,9 @@ import com.davidadrianrg.atril.core.launch.LaunchPlatforms
 import com.davidadrianrg.atril.core.library.DiscEntry
 import com.davidadrianrg.atril.core.library.MultiDiscGrouper
 import com.davidadrianrg.atril.core.library.PhysicalMedia
+import com.davidadrianrg.atril.core.playstats.PlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
+import com.davidadrianrg.atril.core.playstats.PlayTimeFormat
 import com.davidadrianrg.atril.desktop.theme.LocalLauncherColors
 import com.davidadrianrg.atril.core.remote.dto.RomDto
 import java.io.File
@@ -228,6 +233,23 @@ fun DesktopPlayScreen(
     }
     val current = visible.getOrNull(pagerState.currentPage.coerceIn(0, (visible.size - 1).coerceAtLeast(0)))
 
+    // Juegos jugados recientemente (vacío = tira oculta) y salto pendiente desde ella.
+    val continueEntries = remember(entries, playStats) {
+        PlayStatsLogic.recent(
+            entries.map { it.card.groupRoms.map { rom -> rom.id } + it.card.rep.id },
+            playStats,
+        ).mapNotNull { aggregate -> entries.firstOrNull { it.card.rep.id in aggregate.groupIds } }
+    }
+    var pendingSelectId by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(pendingSelectId, visible) {
+        val id = pendingSelectId ?: return@LaunchedEffect
+        val index = visible.indexOfFirst { it.card.rep.id == id }
+        if (index >= 0) {
+            pagerState.scrollToPage(index)
+            pendingSelectId = null
+        }
+    }
+
     val selected = selectedGame
     if (selected != null) {
         Surface(Modifier.fillMaxSize().background(PlayBgBottom)) {
@@ -340,6 +362,17 @@ fun DesktopPlayScreen(
                 }
                 Spacer(Modifier.height(10.dp))
             }
+
+            ContinuePlayingStrip(
+                entries = continueEntries,
+                playStats = playStats,
+                serverUrl = state.config.serverUrl,
+                onSelect = { entry ->
+                    pendingSelectId = entry.card.rep.id
+                    // Si el filtro de plataforma lo deja fuera, se quita para poder centrarlo.
+                    if (visible.none { it.card.rep.id == entry.card.rep.id }) platformFilter = null
+                },
+            )
 
             when {
                 loading && entries.isEmpty() -> Box(
@@ -792,6 +825,73 @@ private fun RoundIconButton(
                     .background(MaterialTheme.colorScheme.error)
                     .padding(horizontal = 4.dp, vertical = 1.dp),
             )
+        }
+    }
+}
+
+/**
+ * Tira compacta «Seguir jugando» del launcher de escritorio: los últimos juegos
+ * jugados con carátula, nombre y tiempo jugado. Sin pager ni centrado
+ * automático y oculta cuando no hay datos de partida.
+ */
+@Composable
+private fun ContinuePlayingStrip(
+    entries: List<LauncherEntry>,
+    playStats: Map<Int, PlayStats>,
+    serverUrl: String,
+    onSelect: (LauncherEntry) -> Unit,
+) {
+    if (entries.isEmpty()) return
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            tr("play.continue.title"),
+            style = MaterialTheme.typography.labelLarge,
+            color = PlayCream.copy(alpha = 0.72f),
+            modifier = Modifier.padding(start = 20.dp, bottom = 6.dp),
+        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            entries.forEach { entry ->
+                val played = PlayTimeFormat.duration(
+                    PlayStatsLogic
+                        .aggregate(entry.card.groupRoms.map { it.id } + entry.card.rep.id, playStats)
+                        .totalPlayedMs,
+                )
+                Column(
+                    modifier = Modifier
+                        .width(76.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(role = Role.Button, onClick = { onSelect(entry) })
+                        .semantics { contentDescription = tr("play.continue.item", entry.card.rep.name, played) }
+                        .padding(4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    PlayCover(
+                        entry.card.rep,
+                        serverUrl,
+                        Modifier.fillMaxWidth().aspectRatio(0.70f).clip(RoundedCornerShape(6.dp)),
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        entry.card.rep.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PlayCream,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        played,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PlayCream.copy(alpha = 0.55f),
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }

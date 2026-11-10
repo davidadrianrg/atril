@@ -207,8 +207,28 @@ fun PlayScreen(
         platformFilter == null || it.rom.platformSlug == platformFilter
     }
     val pagerState = rememberPagerState(pageCount = { visibleItems.size })
-    LaunchedEffect(platformFilter) { pagerState.scrollToPage(0) }
+    // Juego elegido desde «Seguir jugando»: se lleva el carrusel a su página.
+    var pendingSelectId by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(platformFilter) {
+        // Un cambio de filtro vuelve al principio, salvo que la selección
+        // venga de «Seguir jugando» (entonces manda esa página).
+        if (pendingSelectId == null) pagerState.scrollToPage(0)
+    }
+    LaunchedEffect(pendingSelectId, visibleItems) {
+        val id = pendingSelectId ?: return@LaunchedEffect
+        val index = visibleItems.indexOfFirst { it.rom.id == id }
+        if (index >= 0) {
+            pagerState.scrollToPage(index)
+            pendingSelectId = null
+        }
+    }
     val current = visibleItems.getOrNull(pagerState.currentPage)
+
+    // Juegos jugados recientemente, con su tiempo jugado; vacío = fila oculta.
+    val continueGames = remember(items, playStats) {
+        PlayStatsLogic.recent(items.map { it.groupRomIds + it.rom.id }, playStats)
+            .mapNotNull { aggregate -> items.firstOrNull { it.rom.id in aggregate.groupIds } }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg -> snackbar.showSnackbar(msg) }
@@ -340,6 +360,16 @@ fun PlayScreen(
                     }
                 }
             }
+
+            ContinuePlayingRow(
+                games = continueGames,
+                playStats = playStats,
+                onSelect = { item ->
+                    pendingSelectId = item.rom.id
+                    // Si el filtro de plataforma lo deja fuera, se quita para poder centrarlo.
+                    if (visibleItems.none { it.rom.id == item.rom.id }) platformFilter = null
+                },
+            )
 
             when {
                 loading && items.isEmpty() -> Box(
