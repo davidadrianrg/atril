@@ -104,7 +104,9 @@ files.
   the ids in the `manualDownloaded` preference. There is no dedicated database
   column, and linking a file is meant to turn the game into a normal download,
   so the *Manual* badge, *Unmark* and *Locate file* disappear by design. Do not
-  add a "linked manually" state to keep them.
+  add a "linked manually" state to keep them. When the user marks a game or
+  picks a file, both platforms persist the same path for every id of a
+  multi-disc group, so the group stays downloaded and keeps its disc count.
 - `RomFileLocator` (`:core/download`) is the bounded, side-effect-free lookup
   used when marking a game manually and when launching a game whose file is
   missing (depth 6, 5000 entries, no hidden entries, no symlinks). The library

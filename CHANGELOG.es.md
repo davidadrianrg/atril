@@ -29,8 +29,8 @@ proyecto se acoge a [Versionado Semántico](https://semver.org/lang/es/).
 **Descargas manuales (2026-11-10)**
 
 - **Vinculación automática al marcar un juego** — al marcar un juego de RomM como descargado, Atril busca su archivo en la carpeta de la plataforma (`<ROMs>/<plataforma>/<nombre del archivo>`) y, cuando no está ahí, en una búsqueda acotada por nombre exacto: hasta seis niveles de profundidad y 5000 entradas, saltando las entradas ocultas y los enlaces simbólicos. Si encuentra el archivo guarda su ruta y el juego queda lanzable al instante; si no, mantiene la marca manual como antes.
-- **Localizar archivo** — la ficha de un juego marcado a mano muestra un botón *Localizar archivo* mientras no tenga ruta. En Android abre el selector de documentos del sistema y copia el archivo elegido a `<ROMs>/<plataforma>/`, preguntando antes de reemplazar un archivo con el mismo nombre; en Linux usa el diálogo nativo de archivos y guarda la ruta elegida sin copiar nada.
-- **Búsqueda al lanzar** — al lanzar un juego que sigue marcado a mano se reintenta primero la búsqueda: si el archivo ha aparecido, se asocia y el juego arranca; si sigue faltando, Atril lo dice y ofrece *Localizar archivo* sin salir de la pantalla.
+- **Localizar archivo** — la ficha de un juego marcado a mano muestra un botón *Localizar archivo* mientras no tenga ruta. En Android abre el selector de documentos del sistema y copia el archivo elegido a `<ROMs>/<plataforma>/`, preguntando antes de reemplazar un archivo con el mismo nombre, rechazando los archivos de más de 16 GiB o que no caben en el espacio libre, y pidiendo que configures la carpeta de ROMs cuando no hay ninguna; en Linux usa el diálogo nativo de archivos y guarda la ruta elegida sin copiar nada.
+- **Búsqueda al lanzar** — al lanzar un juego que sigue marcado a mano se reintenta primero la búsqueda: si el archivo ha aparecido, se asocia y el juego arranca; si sigue faltando, Atril lo dice. En Android el aviso ofrece *Localizar archivo* y abre el selector de documentos sin salir de la pantalla Jugar; en Linux el aviso solo explica el problema y el botón *Localizar archivo* está en la ficha del juego.
 - **Juegos APK en Android** — un `.apk` (o un juego de una plataforma `android`) ya no se envía a un emulador: si la app ya está instalada Atril la abre y, si no, abre el instalador del sistema. En Linux el APK se rechaza con un mensaje claro.
 - Textos en inglés y español para cada botón, aviso y mensaje de error nuevos.
 
@@ -59,6 +59,6 @@ proyecto se acoge a [Versionado Semántico](https://semver.org/lang/es/).
 
 **Descargas manuales**
 
-- La búsqueda solo lee el sistema de archivos: nunca crea, mueve ni borra archivos. En Android *Localizar archivo* copia siempre a la carpeta de ROMs principal, y un documento que ya está bajo una carpeta de ROMs configurada se asocia en su sitio en vez de duplicarse.
+- La búsqueda solo lee el sistema de archivos: nunca crea, mueve ni borra archivos. En Android *Localizar archivo* copia siempre a la carpeta de ROMs principal, y un documento que ya está bajo una carpeta de ROMs configurada se asocia en su sitio en vez de duplicarse. La copia escribe un archivo `.part` y lo renombra al final, y rechaza una carpeta de destino o un archivo parcial que sea un enlace simbólico, así como un destino fuera de la carpeta de ROMs configurada.
 - No hay cambios de esquema, ni preferencias nuevas, ni dependencias nuevas, y el flujo normal de descarga de RomM (cola, descargas en paralelo, verificación por hash, reanudación) y los juegos locales no se tocan.
 - Los juegos APK son una función solo de Android: en Linux el archivo se detecta y se rechaza antes del planificador de emuladores, así que el error es explícito en vez de «no hay emulador configurado».

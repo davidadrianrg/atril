@@ -29,8 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Manual downloads (2026-11-10)**
 
 - **Automatic linking when marking a game** — marking a RomM game as downloaded now looks for its file in the platform folder (`<ROMs>/<platform>/<file name>`) and, when it is not there, in a bounded search by exact name: up to six levels deep and 5000 entries, skipping hidden entries and symbolic links. When the file is found its path is saved and the game is playable at once; otherwise the manual mark is kept as before.
-- **Locate file** — the detail of a manually marked game shows a new *Locate file* button while it has no path. On Android it opens the system document picker and copies the chosen file into `<ROMs>/<platform>/`, asking before replacing a file with the same name; on Linux it uses the native file dialog and saves the chosen path without copying anything.
-- **Lookup when playing** — launching a game that is still marked manually retries the search first: if the file has appeared it is linked and the game starts; if it is still missing, Atril says so and offers *Locate file* without leaving the screen.
+- **Locate file** — the detail of a manually marked game shows a new *Locate file* button while it has no path. On Android it opens the system document picker and copies the chosen file into `<ROMs>/<platform>/`, asking before replacing a file with the same name, refusing files over 16 GiB or that do not fit in the free space, and asking you to configure the ROMs folder when none is set; on Linux it uses the native file dialog and saves the chosen path without copying anything.
+- **Lookup when playing** — launching a game that is still marked manually retries the search first: if the file has appeared it is linked and the game starts; if it is still missing, Atril says so. On Android the notice offers *Locate file* and opens the document picker without leaving the Play screen; on Linux the notice only explains the problem and the *Locate file* button is in the game detail.
 - **APK games on Android** — a `.apk` (or a game from an `android` platform) no longer goes to an emulator: if the app is already installed Atril opens it, otherwise it opens the system installer. On Linux an APK is refused with a clear message.
 - English and Spanish strings for every new button, notice and error message.
 
@@ -59,6 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Manual downloads**
 
-- The lookup only reads the filesystem: it never creates, moves or deletes files. On Android *Locate file* always copies into the primary ROMs folder, and a document that already lives under a configured ROMs folder is linked in place instead of duplicated.
+- The lookup only reads the filesystem: it never creates, moves or deletes files. On Android *Locate file* always copies into the primary ROMs folder, and a document that already lives under a configured ROMs folder is linked in place instead of duplicated. The copy writes a `.part` file and renames it at the end, and it rejects a target folder or partial file that is a symbolic link, as well as a destination outside the configured ROMs folder.
 - There is no schema change, no new preference and no new dependency, and the regular RomM download flow (queue, parallel downloads, hash verification, resume) and local games are untouched.
 - APK games are an Android feature only: on Linux the file is detected and refused before the emulator planner, so the error is explicit instead of "no emulator configured".
