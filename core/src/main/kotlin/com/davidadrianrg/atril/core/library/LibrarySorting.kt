@@ -51,7 +51,8 @@ enum class LibrarySort(val id: String) {
  * - size: raw bytes.
  * - year: missing year sorts last in both directions (`0` descending,
  *   [Long.MAX_VALUE] ascending).
- * - rating: missing rating sorts last in both directions (`-1.0`).
+ * - rating: a missing rating uses the `-1.0` sentinel, so it sorts last when
+ *   descending and first when ascending.
  * - last played: newest first, never-played items always last.
  *
  * The sort is stable: ties keep their input order. The input list is never

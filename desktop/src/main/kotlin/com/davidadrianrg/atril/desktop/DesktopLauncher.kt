@@ -141,19 +141,12 @@ private fun com.davidadrianrg.atril.core.localgames.LocalGame.toRomDto(): RomDto
  */
 private fun localLauncherEntries(
     games: List<com.davidadrianrg.atril.core.localgames.LocalGame>,
+    groups: List<com.davidadrianrg.atril.core.localgames.LocalDiscGroup>,
     discChoices: Map<String, String>,
     platformNames: Map<String, String>,
 ): List<LauncherEntry> {
     val byId = games.associateBy { it.id }
-    val entries = games.map {
-        com.davidadrianrg.atril.core.localgames.LocalDiscEntry(
-            id = it.id,
-            title = it.title,
-            path = it.path,
-            platformSlug = it.platformSlug,
-        )
-    }
-    return com.davidadrianrg.atril.core.localgames.LocalDiscGrouper.group(entries).mapNotNull { group ->
+    return groups.mapNotNull { group ->
         val representative = byId[group.representativeId] ?: return@mapNotNull null
         val isGroup = group.discCount > 1
         val choice = com.davidadrianrg.atril.core.localgames.LocalDiscGrouper
@@ -199,10 +192,11 @@ fun DesktopPlayScreen(
     var remoteEntries by remember { mutableStateOf<List<LauncherEntry>>(emptyList()) }
     val localGames by state.localGames.games.collectAsState()
     val discChoices by state.localDiscChoices.collectAsState()
+    val discGroups by state.localDiscGroupsFlow.collectAsState()
     val platformsState by state.platforms.collectAsState()
-    val entries = remember(remoteEntries, localGames, discChoices, platformsState) {
+    val entries = remember(remoteEntries, localGames, discGroups, discChoices, platformsState) {
         val names = platformsState.associate { it.slug to (it.displayName ?: it.name) }
-        (remoteEntries + localLauncherEntries(localGames, discChoices, names))
+        (remoteEntries + localLauncherEntries(localGames, discGroups, discChoices, names))
             .sortedBy { it.card.rep.name.lowercase() }
     }
     var pendingAddPath by remember { mutableStateOf<String?>(null) }

@@ -10,7 +10,7 @@ enum class PadAction { UP, DOWN, LEFT, RIGHT, SELECT, BACK, MENU, DETAILS, PREV_
  *  D-pad / left stick = move focus · A (south) = select / play · B (east) = back ·
  *  X (west) = favorite · Y (north) = open the game details (Play) ·
  *  Start = open the game details (Play) · Select/Back/Home = open the menu ·
- *  L1/R1 = previous/next platform filter.
+ *  L1/R1 = previous/next platform filter (Play); R1 opens the Library view options.
  */
 object PadKeyMap {
     // android.view.KeyEvent codes (kept as ints so this module stays pure JVM).

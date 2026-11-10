@@ -122,9 +122,10 @@ internal fun LocalGameDetailPanel(game: LocalGame, state: DesktopAppState, onPla
     val romId = game.syntheticRomId()
     val stats = PlayStatsLogic.aggregate(listOf(romId), playStats)
     val discChoices by state.localDiscChoices.collectAsState()
-    val discGroup = remember(game.id, discChoices) { state.localDiscGroupFor(game.id) }
+    val discGroups by state.localDiscGroupsFlow.collectAsState()
+    val discGroup = remember(game.id, discGroups) { state.localDiscGroupFor(game.id) }
         ?.takeIf { it.discCount > 1 }
-    val discChoice = discGroup?.let { state.localDiscChoice(it) }
+    val discChoice = remember(discGroup, discChoices) { discGroup?.let { state.localDiscChoice(it) } }
 
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         Column(Modifier.width(280.dp)) {

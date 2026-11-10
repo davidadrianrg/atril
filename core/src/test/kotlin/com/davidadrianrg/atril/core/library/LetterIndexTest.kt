@@ -34,12 +34,14 @@ class LetterIndexTest {
     }
 
     @Test
-    fun `digits, symbols, blank and emoji go to the other bucket`() {
+    fun `digits, symbols, blank and non Latin initials go to the other bucket`() {
         assertEquals("#", LetterIndex.initialOf("007"))
         assertEquals("#", LetterIndex.initialOf("!Bang"))
         assertEquals("#", LetterIndex.initialOf(""))
         assertEquals("#", LetterIndex.initialOf("   "))
-        assertEquals("#", LetterIndex.initialOf("🎮 Game"))
+        // Símbolo y escritura no latina: fuera de A-Z, siempre a "#".
+        assertEquals("#", LetterIndex.initialOf("\u2605 Game"))
+        assertEquals("#", LetterIndex.initialOf("\u65E5\u672C\u8A9E Game"))
     }
 
     @Test

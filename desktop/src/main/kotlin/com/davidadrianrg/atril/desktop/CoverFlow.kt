@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -173,7 +172,7 @@ fun DesktopCoverFlow(
                     }
                 },
         ) { page ->
-            val card = cards[page]
+            val card = cards.getOrNull(page) ?: return@HorizontalPager
             val selected = page == pagerState.currentPage
             DesktopCoverFlowPage(
                 card = card,

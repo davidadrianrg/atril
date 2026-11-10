@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SaveNames
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -129,6 +130,9 @@ class RetroArchSaveHandler : SaveHandler {
         savesBasePath: String,
         targetFileName: String,
     ): Boolean = withContext(Dispatchers.IO) {
+        // Nombre del servidor: se valida y se confina al directorio destino
+        // antes de tocar el disco (misma protección que las entradas zip).
+        if (!SaveNames.isSafeSaveFileName(targetFileName)) return@withContext false
         val isState = STATE_PATTERN.matches(targetFileName)
         val subDir = if (isState) "states" else "saves"
 
@@ -148,7 +152,8 @@ class RetroArchSaveHandler : SaveHandler {
         }
         targetDir.mkdirs()
 
-        val targetFile = File(targetDir, targetFileName)
+        val targetFile = SaveNames.resolveInsideDirectory(targetDir, targetFileName)
+            ?: return@withContext false
         try {
             tempFile.copyTo(targetFile, overwrite = true)
             true

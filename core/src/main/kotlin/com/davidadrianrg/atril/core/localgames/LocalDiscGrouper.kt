@@ -91,8 +91,10 @@ fun interface PlaylistLocator {
  * - Un cubo solo se convierte en grupo multidisco si al menos DOS entradas
  *   distintas llevan marca de disco. `Game.iso` junto a `Game (Disc 1).iso`
  *   NO se fusionan, y un `(Disc 1)` solitario se queda como un juego.
- * - Dos ficheros con el mismo número de disco se colapsan en un miembro (gana
- *   el primero por ruta), así que un `.cue` y su `.bin` no duplican el disco.
+ * - Dos ficheros con el mismo número de disco se colapsan en un miembro: gana
+ *   el descriptor lanzable (`.cue`, luego `.gdi`, luego `.m3u`) y, entre
+ *   iguales, el primero por ruta. Así un `.cue` y su `.bin` no duplican el
+ *   disco y el superviviente es el índice que los emuladores pueden arrancar.
  * - Las entradas sin marca de un cubo multidisco se quedan como juegos sueltos.
  *
  * No toca RomM: opera solo sobre [LocalDiscEntry].
@@ -100,6 +102,13 @@ fun interface PlaylistLocator {
 object LocalDiscGrouper {
 
     private val EXTENSION = Regex("""\.[A-Za-z0-9]{1,5}$""")
+
+    /**
+     * Extensiones de descriptor lanzable, en orden de preferencia cuando dos
+     * entradas comparten número de disco: el `.cue` manda sobre el `.bin` que
+     * describe, y lo mismo con `.gdi`/`.m3u`.
+     */
+    private val PREFERRED_EXTENSIONS = listOf(".cue", ".gdi", ".m3u")
 
     /** Localizador de producción: el `.m3u` hermano real en disco. */
     val DEFAULT_PLAYLIST_LOCATOR: PlaylistLocator =
@@ -134,10 +143,16 @@ object LocalDiscGrouper {
                 return@forEach
             }
 
-            // Un miembro por número de disco: gana el primero por ruta.
+            // Un miembro por número de disco: gana el descriptor lanzable
+            // (.cue > .gdi > .m3u); entre iguales, el primero por ruta.
             val memberIndexByDisc = LinkedHashMap<Int, Int>()
-            marked.sortedWith(compareBy({ it.second }, { entries[it.first].path }))
-                .forEach { (index, disc) -> memberIndexByDisc.getOrPut(disc) { index } }
+            marked.sortedWith(
+                compareBy(
+                    { it.second },
+                    { descriptorRank(entries[it.first].path) },
+                    { entries[it.first].path },
+                ),
+            ).forEach { (index, disc) -> memberIndexByDisc.getOrPut(disc) { index } }
             val members = memberIndexByDisc.values
                 .map { index -> entries[index].toMember() }
                 .sortedWith(compareBy({ it.discNumber }, { it.path }))
@@ -207,4 +222,14 @@ object LocalDiscGrouper {
 
     private fun fileNameOf(path: String): String =
         path.substringAfterLast('/').substringAfterLast('\\')
+
+    /**
+     * Posición de [path] en [PREFERRED_EXTENSIONS]; las extensiones de datos
+     * (`.bin`, `.iso`, ...) quedan al final.
+     */
+    private fun descriptorRank(path: String): Int {
+        val extension = fileNameOf(path).substringAfterLast('.', "").lowercase()
+        val rank = PREFERRED_EXTENSIONS.indexOf(".$extension")
+        return if (rank >= 0) rank else PREFERRED_EXTENSIONS.size
+    }
 }

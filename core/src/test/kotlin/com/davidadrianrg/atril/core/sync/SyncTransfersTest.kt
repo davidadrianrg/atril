@@ -55,10 +55,16 @@ class SyncTransfersTest {
 
     private fun cache(): File = createTempDir("synccache")
 
-    private fun download(api: RomMApiService, rec: Recorder, cache: File, hash: String?) = runBlocking {
+    private fun download(
+        api: RomMApiService,
+        rec: Recorder,
+        cache: File,
+        hash: String?,
+        fileName: String = "Gex [2026-11-03_06-57-36].srm",
+    ) = runBlocking {
         SyncTransfers.download(
             api = api, saveId = 1, deviceId = "d", romId = 7, romFileName = "g.chd", platformSlug = "3do",
-            fileName = "Gex [2026-11-03_06-57-36].srm", savesBasePath = "/saves", handler = handler(rec),
+            fileName = fileName, savesBasePath = "/saves", handler = handler(rec),
             cacheDir = cache, expectedHash = hash, attempts = 3, baseDelayMs = 1,
         )
     }
@@ -125,6 +131,42 @@ class SyncTransfersTest {
         assertFalse(download(api, rec, cache, goodMd5))
         assertEquals(3, calls)
         assertEquals(0, cache.listFiles()!!.size)
+    }
+
+    @Test
+    fun `a hostile server file name is skipped before any download`() {
+        listOf("../../../.bashrc", "/etc/passwd", "C:\\x", "..", "sub/game.srm", "game\u0000.srm").forEach { hostile ->
+            val rec = Recorder(); val cache = cache(); var calls = 0
+            val api = fake<RomMApiService> { _, _ -> calls++; good.toResponseBody() }
+
+            assertFalse("debe rechazar '$hostile'", download(api, rec, cache, goodMd5, fileName = hostile))
+            assertEquals("sin petición al servidor para '$hostile'", 0, calls)
+            assertEquals("sin extracción para '$hostile'", 0, rec.extractCalls)
+            assertEquals("sin temporal para '$hostile'", 0, cache.listFiles()!!.size)
+        }
+    }
+
+    @Test
+    fun `a rejected server file name does not stop the next download`() {
+        val rec = Recorder(); val cache = cache()
+        val api = fake<RomMApiService> { _, _ -> good.toResponseBody() }
+
+        assertFalse(download(api, rec, cache, goodMd5, fileName = "../../../.bashrc"))
+        assertTrue(download(api, rec, cache, goodMd5))
+
+        assertEquals(1, rec.extractCalls)
+        assertTrue(good.contentEquals(rec.extractedBytes))
+        assertEquals(0, cache.listFiles()!!.size)
+    }
+
+    @Test
+    fun `a version tag does not make a hostile name safe`() {
+        val rec = Recorder(); val cache = cache(); var calls = 0
+        val api = fake<RomMApiService> { _, _ -> calls++; good.toResponseBody() }
+
+        assertFalse(download(api, rec, cache, goodMd5, fileName = "../../../.bashrc [2026-11-03_06-57-36].srm"))
+        assertEquals(0, calls)
+        assertEquals(0, rec.extractCalls)
     }
 
     private fun upload(api: RomMApiService) = runBlocking {

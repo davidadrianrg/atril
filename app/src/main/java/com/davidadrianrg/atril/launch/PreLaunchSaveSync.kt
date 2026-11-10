@@ -3,6 +3,7 @@ package com.davidadrianrg.atril.launch
 import com.davidadrianrg.atril.core.sync.SavePull
 import com.davidadrianrg.atril.core.sync.SavePullClient
 import com.davidadrianrg.atril.core.sync.SavePullResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -32,8 +33,24 @@ class PreLaunchSaveSync(
      */
     suspend fun run(romId: Int, onUpdating: () -> Unit): SavePullResult {
         if (romId <= 0) return SavePullResult.Skipped
-        if (!saveSyncEnabled.first()) return SavePullResult.Skipped
-        if (!serverConfigured()) return SavePullResult.Skipped
+        // Los ajustes se leen fuera del tope de 8 s: si DataStore falla o se
+        // cuelga, el lanzamiento debe continuar igualmente (nunca abortarlo).
+        val enabled = try {
+            saveSyncEnabled.first()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return SavePullResult.Skipped
+        }
+        if (!enabled) return SavePullResult.Skipped
+        val configured = try {
+            serverConfigured()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return SavePullResult.Skipped
+        }
+        if (!configured) return SavePullResult.Skipped
         onUpdating()
         return SavePull.beforeLaunch(clientFactory(), romId)
     }

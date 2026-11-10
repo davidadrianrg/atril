@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -57,7 +57,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.focusable
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.davidadrianrg.atril.core.i18n.tr
@@ -184,7 +183,7 @@ fun LibraryCoverFlow(
                     }
                 },
         ) { page ->
-            val item = items[page]
+            val item = items.getOrNull(page) ?: return@HorizontalPager
             val selected = page == pagerState.currentPage
             CoverFlowPage(
                 item = item,
@@ -389,7 +388,7 @@ private fun CoverArtwork(
                         modifier = Modifier.size(13.dp),
                     )
                     Text(
-                        "${item.discCount}",
+                        tr("library.card.discs", item.discCount),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White,
                     )

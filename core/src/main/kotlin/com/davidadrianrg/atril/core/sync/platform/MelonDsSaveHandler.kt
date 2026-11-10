@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SaveNames
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -71,10 +72,13 @@ class MelonDsSaveHandler : SaveHandler {
         savesBasePath: String,
         targetFileName: String,
     ): Boolean = withContext(Dispatchers.IO) {
-        val targetDir = File(savesBasePath)
+        // El nombre lo elige el servidor: solo se escribe un componente simple
+        // y confinado a la carpeta de saves.
+        val targetFile = SaveNames.resolveInsideDirectory(File(savesBasePath), targetFileName)
+            ?: return@withContext false
+        val targetDir = targetFile.parentFile ?: File(savesBasePath)
         targetDir.mkdirs()
 
-        val targetFile = File(targetDir, targetFileName)
         try {
             tempFile.copyTo(targetFile, overwrite = true)
             true

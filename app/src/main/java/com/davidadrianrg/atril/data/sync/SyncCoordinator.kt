@@ -517,8 +517,9 @@ class SyncCoordinator(
             throw e
         } catch (e: Exception) {
             // Se registra y se relanza para que SavePull lo clasifique como
-            // Failed; el lanzamiento continúa. Solo id y mensaje, sin rutas.
-            Log.w(TAG, "Pre-launch save pull failed (rom $romId): ${e.message}")
+            // Failed; el lanzamiento continúa. Solo el id y la clase de la
+            // excepción: el mensaje podría contener una ruta absoluta.
+            Log.w(TAG, "Pre-launch save pull failed (rom $romId, ${e.javaClass.simpleName})")
             throw e
         } finally {
             cleanupStaged()

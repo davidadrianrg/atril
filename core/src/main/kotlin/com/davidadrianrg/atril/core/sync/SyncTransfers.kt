@@ -69,9 +69,17 @@ object SyncTransfers {
         baseDelayMs: Long = SyncRetry.DEFAULT_BASE_DELAY_MS,
         log: (String) -> Unit = {},
     ): Boolean {
-        val tempFile = File(cacheDir, "sync_dl_${romId}_${SaveNames.stripVersionTag(fileName).replace(Regex("[^A-Za-z0-9._ -]"), "_")}")
+        // El nombre lo elige el servidor: se valida ANTES de descargar y de
+        // construir cualquier ruta. Un nombre hostil (ruta absoluta, `..`,
+        // separadores o NUL) se salta sin escribirlo ni registrarlo tal cual.
+        val safeFileName = SaveNames.stripVersionTag(fileName)
+        if (!SaveNames.isSafeSaveFileName(safeFileName)) {
+            log("download skipped for rom $romId: unsafe server file name")
+            return false
+        }
+        val tempFile = File(cacheDir, "sync_dl_${romId}_${safeFileName.replace(Regex("[^A-Za-z0-9._ -]"), "_")}")
         return try {
-            SyncRetry.withRetry(attempts, baseDelayMs, onRetry = { n, e -> log("download retry $n for $fileName: ${e.message}") }) {
+            SyncRetry.withRetry(attempts, baseDelayMs, onRetry = { n, e -> log("download retry $n for $safeFileName: ${e.message}") }) {
                 api.downloadSave(saveId, deviceId).use { body ->
                     tempFile.outputStream().use { out -> body.byteStream().use { it.copyTo(out) } }
                 }
@@ -86,12 +94,12 @@ object SyncTransfers {
                 romFileName = romFileName,
                 platformSlug = platformSlug,
                 savesBasePath = savesBasePath,
-                targetFileName = SaveNames.stripVersionTag(fileName),
+                targetFileName = safeFileName,
             )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log("download failed for $fileName (rom $romId): ${e.message}")
+            log("download failed for $safeFileName (rom $romId): ${e.message}")
             false
         } finally {
             tempFile.delete()
