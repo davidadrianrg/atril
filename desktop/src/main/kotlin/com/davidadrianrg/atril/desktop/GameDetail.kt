@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
 import com.davidadrianrg.atril.core.remote.dto.RomDto
 import java.net.URI
 
@@ -64,6 +65,8 @@ import java.net.URI
 fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
     val tasks by state.tasks.collectAsState()
     val romsVersion by state.downloadedVersion.collectAsState()
+    val playStats by state.playStats.stats.collectAsState()
+    val stats = PlayStatsLogic.aggregate(card.groupRoms.map { it.id } + card.rep.id, playStats)
     val groupIds = card.groupRoms.map { it.id }
     val downloading = tasks.any { it.romId in groupIds && it.active }
     val rep = card.rep
@@ -85,6 +88,7 @@ fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            FavoriteStar(favorite = stats.favorite, onClick = { state.toggleFavorite(card) })
         }
         Spacer(Modifier.height(28.dp))
 
@@ -141,6 +145,7 @@ fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
                 }
 
                 Spacer(Modifier.height(20.dp))
+                GameStatsRows(stats)
                 DetailRow(tr("game.info.file"), rep.fileName)
                 DetailRow(tr("game.info.size"), formatBytes(rep.fileSizeBytes))
                 rep.fileNameNoTags?.let { DetailRow(tr("game.info.clean_name"), it) }

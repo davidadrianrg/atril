@@ -53,6 +53,13 @@ class AppContainer(private val appContext: Context) {
         credentials = { settingsRepository.scraperCredentials.first() },
     )
 
+    /** Favoritos, última partida y tiempo jugado por juego (JSON compartido con escritorio). */
+    val playStats = com.davidadrianrg.atril.core.playstats.PlayStatsRepository(
+        store = com.davidadrianrg.atril.core.playstats.JsonPlayStatsStore(
+            java.io.File(appContext.filesDir, "play_stats.json"),
+        ),
+    )
+
     /** Lanza juegos descargados en el emulador que toque. */
     val emulatorLauncher = com.davidadrianrg.atril.launch.EmulatorLauncher(appContext)
 

@@ -82,6 +82,7 @@ import com.davidadrianrg.atril.core.launch.LaunchPlatforms
 import com.davidadrianrg.atril.core.library.DiscEntry
 import com.davidadrianrg.atril.core.library.MultiDiscGrouper
 import com.davidadrianrg.atril.core.library.PhysicalMedia
+import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
 import com.davidadrianrg.atril.desktop.theme.LocalLauncherColors
 import com.davidadrianrg.atril.core.remote.dto.RomDto
 import java.io.File
@@ -111,7 +112,7 @@ private data class LauncherEntry(
 }
 
 /** Id sintético y NEGATIVO para un juego local: nunca choca con un id de RomM. */
-private fun com.davidadrianrg.atril.core.localgames.LocalGame.syntheticRomId(): Int =
+internal fun com.davidadrianrg.atril.core.localgames.LocalGame.syntheticRomId(): Int =
     -((id.hashCode().toLong() and 0x7FFFFFFF).toInt().coerceAtLeast(1))
 
 private fun com.davidadrianrg.atril.core.localgames.LocalGame.toLauncherEntry(platformName: String): LauncherEntry {
@@ -154,6 +155,7 @@ fun DesktopPlayScreen(
     val selectedGame by state.selectedGame.collectAsState()
     val tasks by state.tasks.collectAsState()
     val connected by state.connected.collectAsState()
+    val playStats by state.playStats.stats.collectAsState()
     val activeDownloads = tasks.count { it.active }
 
     var remoteEntries by remember { mutableStateOf<List<LauncherEntry>>(emptyList()) }
@@ -426,7 +428,14 @@ fun DesktopPlayScreen(
                                     if (physical) {
                                         PhysicalMediaArt(entry.physicalUrl!!, entry.card.rep.name)
                                     } else {
-                                        LauncherCard(entry, state, Modifier.fillMaxHeight(0.90f).aspectRatio(0.70f))
+                                        LauncherCard(
+                                            entry = entry,
+                                            state = state,
+                                            favorite = PlayStatsLogic
+                                                .aggregate(entry.card.groupRoms.map { it.id } + entry.card.rep.id, playStats)
+                                                .favorite,
+                                            modifier = Modifier.fillMaxHeight(0.90f).aspectRatio(0.70f),
+                                        )
                                     }
                                 }
                             }
@@ -577,6 +586,7 @@ private fun InsertionOverlay(
                 LauncherCard(
                     entry = entry,
                     state = state,
+                    favorite = state.gameStats(entry.card).favorite,
                     modifier = Modifier.fillMaxHeight().aspectRatio(0.70f),
                 )
             }
@@ -814,7 +824,7 @@ private fun PlayPill(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun LauncherCard(entry: LauncherEntry, state: DesktopAppState, modifier: Modifier) {
+private fun LauncherCard(entry: LauncherEntry, state: DesktopAppState, favorite: Boolean, modifier: Modifier) {
     val shape = RoundedCornerShape(18.dp)
     Box(
         modifier
@@ -864,6 +874,7 @@ private fun LauncherCard(entry: LauncherEntry, state: DesktopAppState, modifier:
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (entry.card.discCount > 1) CardBadge(tr("launcher.badge.discs", entry.card.discCount))
             if (state.isManualDownloaded(entry.card)) CardBadge(tr("launcher.badge.manual"), subtle = true)
+            if (favorite) FavoriteBadge()
         }
     }
 }

@@ -32,11 +32,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.localgames.LocalGameNames
 import com.davidadrianrg.atril.core.localgames.ScrapeStatus
+import com.davidadrianrg.atril.core.playstats.GamePlayStats
 import com.davidadrianrg.atril.ui.viewmodel.ShelfItem
 
 /** Alta de un juego local: título (editable) + plataforma tras elegir el fichero. */
@@ -101,6 +103,8 @@ internal fun AddLocalGameDialog(
 internal fun LocalGameSheet(
     item: ShelfItem,
     scraping: Boolean,
+    stats: GamePlayStats = GamePlayStats(listOf(item.rom.id), favorite = false, lastPlayedAt = null, totalPlayedMs = 0L),
+    onToggleFavorite: () -> Unit = {},
     onPlay: () -> Unit,
     onRename: (String) -> Unit,
     onRetryScrape: () -> Unit,
@@ -122,7 +126,15 @@ internal fun LocalGameSheet(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(item.platformLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    item.platformLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                FavoriteStar(favorite = stats.favorite, onClick = onToggleFavorite)
+            }
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
@@ -137,6 +149,7 @@ internal fun LocalGameSheet(
             )
             Text(tr("local.source_note"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(tr("local.path", game.path), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            GameStatsRows(stats)
 
             Button(onClick = onPlay, enabled = item.launchable, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null)

@@ -92,12 +92,17 @@ class ShelfViewModel(
     private val physicalMediaRepository: PhysicalMediaRepository,
     private val emulatorLauncher: EmulatorLauncher,
     private val localGames: com.davidadrianrg.atril.core.localgames.LocalGamesRepository,
+    private val playStatsRepository: com.davidadrianrg.atril.core.playstats.PlayStatsRepository,
 ) : ViewModel() {
 
     private val dtoCache = mutableMapOf<Int, RomDto>()
 
     /** Juegos hidratados (Room + servidor), sin la capa de presentación. */
     private val _items = MutableStateFlow<List<ShelfItem>>(emptyList())
+
+    /** Estadísticas por juego: favoritos, última partida y tiempo jugado. */
+    val playStats: StateFlow<Map<Int, com.davidadrianrg.atril.core.playstats.PlayStats>> =
+        playStatsRepository.stats
 
     /**
      * Juegos listos para el launcher: se combina la hidratación con la
@@ -303,6 +308,21 @@ class ShelfViewModel(
                 physicalMediaRepository.remove((item.groupRomIds + item.rom.id).distinct())
             }
         }
+    }
+
+    // ── Favoritos y tiempo jugado ──────────────────────────────────────
+
+    /**
+     * Invierte el favorito del juego completo (todos los ids del grupo, para
+     * que el agregado del multidisco siga siendo exacto).
+     */
+    fun toggleFavorite(item: ShelfItem) {
+        playStatsRepository.toggleFavorite(item.groupRomIds + item.rom.id)
+    }
+
+    /** Empieza a contar la partida: solo cuando el lanzamiento se ha aceptado. */
+    fun onGameLaunched(item: ShelfItem) {
+        playStatsRepository.beginSession(item.rom.id)
     }
 
     // ── Lanzamiento ────────────────────────────────────────────────────

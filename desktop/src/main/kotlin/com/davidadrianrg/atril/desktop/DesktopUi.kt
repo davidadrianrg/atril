@@ -709,6 +709,12 @@ fun LibraryScreen(state: DesktopAppState) {
                 onClick = { state.setFilter(LibraryFilter.DOWNLOADED) },
                 label = { Text(tr("library.filter.downloaded")) },
             )
+            Spacer(Modifier.width(8.dp))
+            FilterChip(
+                selected = filter == LibraryFilter.FAVORITES,
+                onClick = { state.setFilter(LibraryFilter.FAVORITES) },
+                label = { Text(tr("library.filter.favorites")) },
+            )
             Spacer(Modifier.weight(1f))
 
             // Juego aleatorio de la vista actual
@@ -800,7 +806,7 @@ fun LibraryScreen(state: DesktopAppState) {
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         gridItems(games.take(visibleCount), key = { it.rep.id }) { card ->
-                            GameCardItem(card, state, ratio, tasks)
+                            GameCardItem(card, state, ratio, tasks, state.gameStats(card).favorite)
                         }
                         if (visibleCount < games.size) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -906,7 +912,13 @@ private fun LibraryEmptyState(state: DesktopAppState, search: String, filter: Li
 
 /** Card de juego estilo Android: portada con scrim, título sobre la imagen y badges. */
 @Composable
-private fun GameCardItem(card: GameCard, state: DesktopAppState, ratio: Float, tasks: List<DesktopTask>) {
+private fun GameCardItem(
+    card: GameCard,
+    state: DesktopAppState,
+    ratio: Float,
+    tasks: List<DesktopTask>,
+    favorite: Boolean,
+) {
     val downloading = tasks.any { it.romId in card.groupRoms.map { r -> r.id } && it.active }
     Card(
         modifier = Modifier
@@ -928,8 +940,8 @@ private fun GameCardItem(card: GameCard, state: DesktopAppState, ratio: Float, t
                 placeholderSlug = card.rep.platformSlug,
             )
 
-            // Badge multi-disco (arriba-izquierda)
-            if (card.discCount > 1) {
+            // Badge multi-disco y favorito (arriba-izquierda)
+            if (card.discCount > 1 || favorite) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -938,18 +950,29 @@ private fun GameCardItem(card: GameCard, state: DesktopAppState, ratio: Float, t
                         .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(50))
                         .padding(horizontal = 8.dp, vertical = 3.dp),
                 ) {
-                    Icon(
-                        AppIcons.Album,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(12.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        tr("library.card.discs", card.discCount),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                    )
+                    if (favorite) {
+                        Icon(
+                            AppIcons.Star,
+                            contentDescription = tr("launcher.badge.favorite"),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        if (card.discCount > 1) Spacer(Modifier.width(4.dp))
+                    }
+                    if (card.discCount > 1) {
+                        Icon(
+                            AppIcons.Album,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            tr("library.card.discs", card.discCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                        )
+                    }
                 }
             }
 

@@ -24,18 +24,21 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.localgames.LocalGame
 import com.davidadrianrg.atril.core.localgames.LocalGameNames
 import com.davidadrianrg.atril.core.localgames.ScrapeStatus
+import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -112,6 +115,9 @@ internal fun LocalGameDetailPanel(game: LocalGame, state: DesktopAppState, onPla
     var confirmRemove by remember { mutableStateOf(false) }
     val exists = remember(game.path) { File(game.path).isFile }
     val cover = game.coverPath?.let { produceCover("file://$it") }
+    val playStats by state.playStats.stats.collectAsState()
+    val romId = game.syntheticRomId()
+    val stats = PlayStatsLogic.aggregate(listOf(romId), playStats)
 
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         Column(Modifier.width(280.dp)) {
@@ -131,7 +137,15 @@ internal fun LocalGameDetailPanel(game: LocalGame, state: DesktopAppState, onPla
             Modifier.weight(1f).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(tr("local.badge"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    tr("local.badge"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                FavoriteStar(favorite = stats.favorite, onClick = { state.playStats.toggleFavorite(listOf(romId)) })
+            }
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
@@ -146,6 +160,7 @@ internal fun LocalGameDetailPanel(game: LocalGame, state: DesktopAppState, onPla
             )
             Text(tr("local.source_note"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(tr("local.path", game.path), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            GameStatsRows(stats)
             if (!exists) {
                 Text(tr("local.file_missing"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }

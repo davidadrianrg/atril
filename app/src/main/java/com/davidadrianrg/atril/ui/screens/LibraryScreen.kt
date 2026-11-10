@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -130,6 +131,8 @@ import com.davidadrianrg.atril.core.i18n.tr
 import androidx.compose.ui.geometry.isSpecified
 import com.davidadrianrg.atril.core.library.CoverRatio
 import com.davidadrianrg.atril.core.library.PlatformAbbreviation
+import com.davidadrianrg.atril.core.playstats.GamePlayStats
+import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
 import com.davidadrianrg.atril.domain.model.DownloadStatus
 import com.davidadrianrg.atril.domain.model.formatBytesForUi
 import com.davidadrianrg.atril.domain.model.Platform
@@ -144,6 +147,7 @@ private enum class RomFilter(val labelKey: String) {
     ALL("library.filter.all"),
     MISSING("library.filter.missing"),
     DOWNLOADED("library.filter.downloaded"),
+    FAVORITES("library.filter.favorites"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -249,7 +253,8 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
 
     // Filter ROMs by download status only (search is server-side)
     val platformDownloaded by viewModel.platformDownloadedCards.collectAsState()
-    val filteredRoms by remember(romsWithStatus, selectedFilter, platformDownloaded) {
+    val playStats by container.playStats.stats.collectAsState()
+    val filteredRoms by remember(romsWithStatus, selectedFilter, platformDownloaded, playStats) {
         derivedStateOf {
             when (selectedFilter) {
                 RomFilter.ALL -> romsWithStatus
@@ -257,6 +262,10 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 // Descargados de TODA la plataforma, no solo las páginas cargadas.
                 RomFilter.DOWNLOADED -> platformDownloaded.ifEmpty {
                     romsWithStatus.filter { it.status == DownloadStatus.DOWNLOADED }
+                }
+                // Favoritos del grupo completo (multidisco incluido).
+                RomFilter.FAVORITES -> romsWithStatus.filter { romStatus ->
+                    PlayStatsLogic.aggregate(romStatus.groupRomIds + romStatus.rom.id, playStats).favorite
                 }
             }
         }
@@ -709,6 +718,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                     items(filteredRoms, key = { it.rom.id }) { romStatus ->
                         RomCard(
                             romWithStatus = romStatus,
+                            favorite = PlayStatsLogic.aggregate(romStatus.groupRomIds + romStatus.rom.id, playStats).favorite,
                             onDownload = { startDownload(romStatus.rom) },
                             onLongPress = { selectedRom = romStatus.rom },
                         )
@@ -780,6 +790,8 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 isDownloaded = isDownloaded,
                 isDownloading = isDownloading,
                 discCount = romStatus?.discCount ?: 1,
+                stats = PlayStatsLogic.aggregate(syncGroupIds + rom.id, playStats),
+                onToggleFavorite = { container.playStats.toggleFavorite(syncGroupIds + rom.id) },
                 syncEnabled = saveSyncEnabled,
                 savesPathOverride = syncConfig?.savesPathOverride,
                 excludedFromSync = syncConfig?.excludedFromSync ?: false,
@@ -1034,6 +1046,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
 @Composable
 private fun RomCard(
     romWithStatus: RomWithStatus,
+    favorite: Boolean,
     onDownload: (RomWithStatus) -> Unit,
     onLongPress: (RomWithStatus) -> Unit,
 ) {
@@ -1139,7 +1152,7 @@ private fun RomCard(
 
         // Badge multi-disc: nº de discos agrupados en esta card (esquina
         // superior izquierda). Los juegos de un disco no muestran nada.
-        if (romWithStatus.discCount > 1) {
+        if (romWithStatus.discCount > 1 || favorite) {
             Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -1152,17 +1165,27 @@ private fun RomCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                Icon(
-                    Icons.Outlined.Album,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(13.dp),
-                )
-                Text(
-                    "${romWithStatus.discCount}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                )
+                if (favorite) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = tr("launcher.badge.favorite"),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(13.dp),
+                    )
+                }
+                if (romWithStatus.discCount > 1) {
+                    Icon(
+                        Icons.Outlined.Album,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Text(
+                        "${romWithStatus.discCount}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                    )
+                }
             }
         }
 
@@ -1215,6 +1238,10 @@ internal fun RomDetailSheet(
     isDownloaded: Boolean,
     isDownloading: Boolean,
     discCount: Int = 1,
+    /** Agregado del grupo: favorito, última partida y tiempo jugado. */
+    stats: GamePlayStats = GamePlayStats(listOf(rom.id), favorite = false, lastPlayedAt = null, totalPlayedMs = 0L),
+    /** Invierte el favorito del juego completo (todos sus discos). */
+    onToggleFavorite: () -> Unit = {},
     syncEnabled: Boolean,
     savesPathOverride: String?,
     excludedFromSync: Boolean,
@@ -1344,6 +1371,7 @@ internal fun RomDetailSheet(
                     }
                 }
             }
+            FavoriteStar(favorite = stats.favorite, onClick = onToggleFavorite)
             IconButton(onClick = onClose) {
                 Icon(Icons.Filled.Close, contentDescription = tr("game.viewer.close"))
             }
@@ -1448,6 +1476,7 @@ internal fun RomDetailSheet(
         }
 
         // Metadata rows
+        GameStatsRows(stats)
         DetailRow(tr("game.info.file"), rom.fileName)
         DetailRow(tr("game.info.size"), formatFileSize(rom.fileSizeBytes))
         rom.fileNameNoTags?.let { DetailRow(tr("game.info.clean_name"), it) }

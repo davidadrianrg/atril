@@ -46,7 +46,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +78,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.playstats.GamePlayStats
+import com.davidadrianrg.atril.core.playstats.PlayTimeFormat
 import com.davidadrianrg.atril.ui.navigation.Screen
 import com.davidadrianrg.atril.ui.theme.LocalLauncherColors
 import com.davidadrianrg.atril.ui.viewmodel.ShelfItem
@@ -101,7 +105,7 @@ internal const val CARD_ASPECT = 0.70f
  * medio físico. El cambio entre ambos se anima (fundido + escala).
  */
 @Composable
-internal fun LauncherGameObject(item: ShelfItem, modifier: Modifier = Modifier) {
+internal fun LauncherGameObject(item: ShelfItem, favorite: Boolean, modifier: Modifier = Modifier) {
     val physicalFile = item.physicalMediaFile?.takeIf { item.showPhysical }
     AnimatedContent(
         targetState = physicalFile,
@@ -117,7 +121,7 @@ internal fun LauncherGameObject(item: ShelfItem, modifier: Modifier = Modifier) 
             PhysicalMediaArt(file, item.rom.name, Modifier.fillMaxSize())
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                GameCard(item, Modifier.fillMaxHeight(0.92f).aspectRatio(CARD_ASPECT))
+                GameCard(item, favorite, Modifier.fillMaxHeight(0.92f).aspectRatio(CARD_ASPECT))
             }
         }
     }
@@ -125,7 +129,7 @@ internal fun LauncherGameObject(item: ShelfItem, modifier: Modifier = Modifier) 
 
 /** Carta coleccionable: portada, plataforma, título e insignias. */
 @Composable
-internal fun GameCard(item: ShelfItem, modifier: Modifier = Modifier) {
+internal fun GameCard(item: ShelfItem, favorite: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .shadow(22.dp, CardShape, ambientColor = LauncherAmber.copy(alpha = 0.25f), spotColor = Color.Black)
@@ -180,7 +184,93 @@ internal fun GameCard(item: ShelfItem, modifier: Modifier = Modifier) {
         ) {
             if (item.discCount > 1) CardBadge(tr("launcher.badge.discs", item.discCount))
             if (item.isManualDownloaded) CardBadge(tr("launcher.badge.manual"), subtle = true)
+            if (favorite) FavoriteBadge()
         }
+    }
+}
+
+/**
+ * Insignia de favorito de las tarjetas: la misma píldora que [CardBadge] con
+ * una estrella delante. Solo se pinta si el agregado del grupo es favorito.
+ */
+@Composable
+internal fun FavoriteBadge() {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(LauncherAmber)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .semantics { contentDescription = tr("launcher.badge.favorite") },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.Star,
+            contentDescription = null,
+            tint = LauncherInk,
+            modifier = Modifier.size(11.dp),
+        )
+        Spacer(Modifier.width(3.dp))
+        Text(
+            tr("launcher.badge.favorite"),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = LauncherInk,
+        )
+    }
+}
+
+/**
+ * Estrella de favorito de los detalles: rellena cuando el grupo es favorito y
+ * en contorno cuando no. El texto accesible dice la acción que hará.
+ */
+@Composable
+internal fun FavoriteStar(favorite: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            if (favorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+            contentDescription = tr(if (favorite) "game.favorite.remove" else "game.favorite.add"),
+            tint = if (favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * Filas «Última partida» y «Tiempo jugado» de los detalles de juego, con el
+ * formato compartido de [PlayTimeFormat] y el mismo estilo que el resto de
+ * metadatos.
+ */
+@Composable
+internal fun GameStatsRows(stats: GamePlayStats) {
+    GameStatRow(
+        tr("game.info.last_played"),
+        PlayTimeFormat.relativeDate(stats.lastPlayedAt, System.currentTimeMillis()),
+    )
+    GameStatRow(
+        tr("game.info.play_time"),
+        if (stats.totalPlayedMs > 0L) PlayTimeFormat.duration(stats.totalPlayedMs) else tr("game.info.no_time"),
+    )
+}
+
+@Composable
+private fun GameStatRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 12.dp),
+        )
     }
 }
 

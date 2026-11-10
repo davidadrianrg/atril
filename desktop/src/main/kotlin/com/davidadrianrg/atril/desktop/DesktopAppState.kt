@@ -7,6 +7,9 @@ import com.davidadrianrg.atril.core.auth.runQrLogin
 import com.davidadrianrg.atril.core.launch.DesktopEmulatorCatalog
 import com.davidadrianrg.atril.core.media.GameMediaDownloader
 import com.davidadrianrg.atril.core.media.GameMediaPaths
+import com.davidadrianrg.atril.core.playstats.GamePlayStats
+import com.davidadrianrg.atril.core.playstats.JsonPlayStatsStore
+import com.davidadrianrg.atril.core.playstats.PlayStatsRepository
 import com.davidadrianrg.atril.core.launch.DesktopLaunchPlanner
 import com.davidadrianrg.atril.core.remote.dto.SaveDto
 import com.davidadrianrg.atril.core.remote.dto.SearchRomDto
@@ -41,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap
 enum class Section { PLAY, LIBRARY, SAVES, SETTINGS, PLATFORMS, DOWNLOADS }
 
 /** Filtro de la biblioteca. */
-enum class LibraryFilter { ALL, MISSING, DOWNLOADED }
+enum class LibraryFilter { ALL, MISSING, DOWNLOADED, FAVORITES }
 
 /** Criterios de ordenación de la biblioteca. */
 enum class LibrarySort {
@@ -106,6 +109,11 @@ class DesktopAppState(private val scope: CoroutineScope) {
         store = com.davidadrianrg.atril.core.localgames.LocalGameStore(File(DesktopConfig.configDir, "local_games.json")),
         coversDir = File(DesktopConfig.configDir, "local-covers"),
         credentials = { DesktopConfig.scraperCredentials() },
+    )
+
+    /** Favoritos, última partida y tiempo jugado por juego (mismo JSON que Android). */
+    val playStats = PlayStatsRepository(
+        store = JsonPlayStatsStore(File(DesktopConfig.configDir, "play_stats.json")),
     )
 
     /** Versionado local de saves (restaurables desde el detalle de juego). */
@@ -708,14 +716,18 @@ class DesktopAppState(private val scope: CoroutineScope) {
             showSnackbar(tr("launcher.desktop.no_file"))
             return false
         }
-        return launchFile(entry.platformSlug, File(path))
+        return launchFile(entry.platformSlug, File(path), entry.romId)
     }
 
     /** Lanza un juego LOCAL (fuera de RomM) con el emulador configurado de su plataforma. */
     fun launchLocalGame(game: com.davidadrianrg.atril.core.localgames.LocalGame): Boolean =
-        launchFile(game.platformSlug, File(game.path))
+        launchFile(game.platformSlug, File(game.path), game.syntheticRomId())
 
-    private fun launchFile(slug: String, file: File): Boolean {
+    /**
+     * Lanza [file] con el emulador de [slug]. Si el lanzamiento se acepta y hay
+     * [romId], empieza a contar la partida (termina al recuperar el foco).
+     */
+    private fun launchFile(slug: String, file: File, romId: Int?): Boolean {
         if (!file.exists()) {
             showSnackbar(tr("launcher.desktop.file_missing", file.path))
             return false
@@ -726,6 +738,8 @@ class DesktopAppState(private val scope: CoroutineScope) {
 
         return when (val result = gameLauncher.launch(slug, config, file)) {
             is DesktopGameLauncher.Result.Started -> {
+                // Lanzamiento aceptado: la partida empieza a contar.
+                romId?.let { playStats.beginSession(it) }
                 // Si el emulador muere enseguida con error (p. ej. core inexistente), avisar.
                 val emulatorName = DesktopEmulatorCatalog.byId(cfg.launchEmulatorId)?.displayName ?: platformName
                 scope.launch(Dispatchers.IO) {
@@ -783,10 +797,21 @@ class DesktopAppState(private val scope: CoroutineScope) {
                     LibraryFilter.ALL -> true
                     LibraryFilter.MISSING -> !card.downloaded
                     LibraryFilter.DOWNLOADED -> card.downloaded
+                    LibraryFilter.FAVORITES -> gameStats(card).favorite
                 }
                 match && regionMatch && f
             }
         return sorted(rep)
+    }
+
+    /** Agregado de estadísticas del juego: todos sus discos más el representante. */
+    fun gameStats(card: GameCard): GamePlayStats =
+        playStats.aggregate(card.groupRoms.map { it.id } + card.rep.id)
+
+    /** Invierte el favorito del juego completo (todos sus discos). */
+    fun toggleFavorite(card: GameCard) {
+        playStats.toggleFavorite(card.groupRoms.map { it.id } + card.rep.id)
+        _downloadedVersion.value = _downloadedVersion.value + 1
     }
 
     /**
