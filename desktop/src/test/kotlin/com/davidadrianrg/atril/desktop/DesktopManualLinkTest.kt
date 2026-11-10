@@ -14,6 +14,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -151,6 +152,75 @@ class DesktopManualLinkTest {
         assertFalse(romId in state.manualDownloadedIds())
         assertFalse(manualPrefContains(romId))
         assertEquals("Downloaded mark removed from Juego $romId", state.snackbar.value)
+    }
+
+    /**
+     * REV-016: la variante suspend de quitar la marca hace la misma limpieza que
+     * la síncrona (marca manual + entrada de `library.properties`) y refresca
+     * la ficha abierta aunque la Biblioteca no se haya cargado (REV-015). Antes
+     * del arreglo, la tarjeta antigua conservaba `downloaded = true` y el
+     * detalle seguía mostrando "Descargado" sin el botón de marcar.
+     */
+    @Test
+    fun `unmarking suspending clears the manual mark and refreshes the open launcher card`() = runBlocking {
+        state.markDownloadedManually(card())
+        state.library.upsertRom(
+            DesktopLibrary.RomEntry(
+                romId = romId,
+                name = "Juego $romId",
+                fileName = "Game.gba",
+                platformSlug = slug,
+                localPath = "/old/location/Game.gba",
+            ),
+        )
+        state.openGame(card())
+        assertTrue(state.roms.value.isEmpty())
+
+        state.unmarkDownloadedManuallySuspending(card())
+
+        assertNull(state.library.rom(romId))
+        assertFalse(romId in state.manualDownloadedIds())
+        assertFalse(manualPrefContains(romId))
+        assertEquals("Downloaded mark removed from Juego $romId", state.snackbar.value)
+
+        val open = state.selectedGame.value
+        assertEquals("the detail must stay open", romId, open?.rep?.id)
+        assertFalse("the open card must stop reading as downloaded", open!!.downloaded)
+        assertFalse(state.isManualDownloaded(open))
+    }
+
+    /**
+     * REV-015: la ficha abierta desde la Pantalla Jugar se reconstruye aunque
+     * la Biblioteca no se haya visitado (`_roms` vacío). Antes del arreglo el
+     * refresco solo buscaba en `buildCards(_roms)`, obtenía null y dejaba la
+     * copia antigua. El escenario reproduce el camino real del lanzador: juego
+     * marcado a mano, `state.openGame` (DesktopLauncher) y
+     * `locateFileSuspending` (botón de la ficha).
+     */
+    @Test
+    fun `locating a file from the launcher detail refreshes the open card without loading the library`() = runBlocking {
+        // Marca manual sin fichero todavía: es lo que el lanzador lista.
+        state.markDownloadedManually(card())
+        assertTrue(state.isManualDownloaded(card()))
+
+        // La Pantalla Jugar abre la misma GameDetailPanel con state.openGame.
+        state.openGame(card())
+        val opened = state.selectedGame.value
+        assertEquals(romId, opened?.rep?.id)
+        assertTrue(
+            "the fallback only applies while the Library has not been loaded",
+            state.roms.value.isEmpty(),
+        )
+
+        val file = placeRom("Game.gba")
+        state.locateFileSuspending(card(), file.absolutePath)
+
+        val open = state.selectedGame.value
+        assertEquals("the detail must stay open", romId, open?.rep?.id)
+        assertNotSame("the open card must be rebuilt from local state", opened, open)
+        assertTrue("the open card must keep reading as downloaded", open!!.downloaded)
+        assertFalse("the open card must no longer be manual", state.isManualDownloaded(open))
+        assertEquals(file.absolutePath, state.library.rom(romId)?.localPath)
     }
 
     @Test

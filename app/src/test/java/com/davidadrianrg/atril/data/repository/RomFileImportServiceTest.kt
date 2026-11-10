@@ -16,10 +16,13 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Contrato de "Localizar archivo" en la frontera de configuración: sin carpeta
- * de ROMs (o con un slug de plataforma no válido) no se ha intentado copiar
- * nada, así que el resultado debe pedir configurar la carpeta y no disfrazarse
- * de fallo de copia (REV-007).
+ * Contrato de "Localizar archivo" en la frontera de configuración. Sin carpeta
+ * de ROMs no se ha intentado copiar nada, así que el resultado pide configurar
+ * la carpeta y no se disfraza de fallo de copia (REV-007). Un slug de
+ * plataforma inseguro es una causa distinta: la raíz sí está configurada, así
+ * que el resultado lo señala como plataforma inválida en vez de pedir una
+ * configuración que ya existe (REV-018). En ninguno de los dos casos se copia
+ * ni se persiste una ruta.
  */
 class RomFileImportServiceTest {
 
@@ -67,7 +70,7 @@ class RomFileImportServiceTest {
     }
 
     @Test
-    fun `an unsafe platform slug asks to configure the folder instead of copying`() = runTest {
+    fun `an unsafe platform slug reports an invalid platform instead of asking to configure the folder`() = runTest {
         val outcome = service(romsRootPath = "/roms").locate(
             romId = 1,
             groupRomIds = emptyList(),
@@ -77,7 +80,7 @@ class RomFileImportServiceTest {
             overwrite = false,
         )
 
-        assertEquals(LocateOutcome.NoRomsRoot, outcome)
+        assertEquals(LocateOutcome.InvalidPlatform, outcome)
         coVerify(exactly = 0) { romRepository.updateLocalPath(any(), any()) }
     }
 }
