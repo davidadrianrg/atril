@@ -1,5 +1,7 @@
 package com.davidadrianrg.atril.desktop
 
+import com.davidadrianrg.atril.core.library.LibraryPreferenceKeys
+import com.davidadrianrg.atril.core.localgames.ChosenDiscCodec
 import java.io.File
 import java.util.Properties
 
@@ -13,6 +15,7 @@ import java.util.Properties
  *   platform.<slug>.emulator = ...
  *   platform.<slug>.savesPath = ...
  *   platform.<slug>.launchEmulator / launchExe / launchArgs = ...  (lanzar juegos)
+ *   library_local_discs = ...  (mapa grupo -> disco elegido, ver [ChosenDiscCodec])
  */
 class DesktopLibrary(private val file: File) {
 
@@ -103,6 +106,23 @@ class DesktopLibrary(private val file: File) {
         persist()
     }
 
+    /**
+     * Disco elegido por grupo local (mapa `clave de grupo -> id de disco`).
+     * Se lee con [ChosenDiscCodec]: una propiedad corrupta da un mapa vacío.
+     */
+    @Synchronized
+    fun localDiscChoices(): Map<String, String> =
+        ChosenDiscCodec.decode(props.getProperty(KEY_LOCAL_DISCS))
+
+    /** Fija (o borra con `null`) el disco elegido de un grupo local. */
+    @Synchronized
+    fun setLocalDiscChoice(groupKey: String, choiceId: String?) {
+        val choices = ChosenDiscCodec.decode(props.getProperty(KEY_LOCAL_DISCS)).toMutableMap()
+        if (choiceId.isNullOrBlank()) choices.remove(groupKey) else choices[groupKey] = choiceId
+        props[KEY_LOCAL_DISCS] = ChosenDiscCodec.encode(choices)
+        persist()
+    }
+
     private fun readRom(id: Int): RomEntry? {
         val name = props.getProperty("rom.$id.name") ?: return null
         return RomEntry(
@@ -114,5 +134,10 @@ class DesktopLibrary(private val file: File) {
             savesPathOverride = props.getProperty("rom.$id.savesPath")?.takeIf { it.isNotBlank() },
             excludedFromSync = props.getProperty("rom.$id.excluded") == "true",
         )
+    }
+
+    companion object {
+        /** Clave canónica compartida con Android (`LibraryPreferenceKeys.LOCAL_DISCS`). */
+        private const val KEY_LOCAL_DISCS = LibraryPreferenceKeys.LOCAL_DISCS
     }
 }

@@ -71,8 +71,14 @@ data class ShelfItem(
     /** Juego añadido a mano (NO está en RomM): sin descargas, saves ni medio físico de RomM. */
     val isLocalSource: Boolean = false,
     val localGame: com.davidadrianrg.atril.core.localgames.LocalGame? = null,
+    /** Grupo multidisco local (solo cuando el juego local tiene más de un disco). */
+    val localDiscGroup: com.davidadrianrg.atril.core.localgames.LocalDiscGroup? = null,
+    /** Disco/playlist elegido dentro del grupo local (null = juego de un solo fichero). */
+    val localDiscChoice: com.davidadrianrg.atril.core.localgames.LocalDiscChoice? = null,
 ) {
-    val launchable: Boolean get() = localPath.isNotBlank()
+    /** Ruta que se entrega al emulador: el disco elegido o la ruta del juego. */
+    val localLaunchPath: String get() = localDiscChoice?.launchPath ?: localPath
+    val launchable: Boolean get() = localLaunchPath.isNotBlank()
     val hasRemotePhysicalMedia: Boolean get() = rom.physicalMediaUrl != null
     val isOptical: Boolean get() = LaunchPlatforms.isOptical(rom.platformSlug)
 }
@@ -111,13 +117,13 @@ class ShelfViewModel(
      */
     /** Juegos de RomM descargados + juegos locales, en una sola lista. */
     private val allItems: kotlinx.coroutines.flow.Flow<List<ShelfItem>> =
-        combine(_items, localGames.games) { remote, local ->
+        combine(_items, localGames.games, settingsRepository.localDiscChoices) { remote, local, discChoices ->
             if (local.isEmpty()) {
                 remote
             } else {
                 val labels = runCatching { platformDao.getAllPlatformsBlocking() }
                     .getOrDefault(emptyList()).associate { it.slug to it.name }
-                remote + local.map { it.toShelfItem(labels[it.platformSlug] ?: it.platformSlug.uppercase()) }
+                remote + localShelfItems(local, labels, discChoices)
             }
         }.flowOn(kotlinx.coroutines.Dispatchers.IO)
 
@@ -335,7 +341,13 @@ class ShelfViewModel(
     private fun com.davidadrianrg.atril.core.localgames.LocalGame.syntheticRomId(): Int =
         -((id.hashCode().toLong() and 0x7FFFFFFF).toInt().coerceAtLeast(1))
 
-    private fun com.davidadrianrg.atril.core.localgames.LocalGame.toShelfItem(platformLabel: String): ShelfItem {
+    private fun com.davidadrianrg.atril.core.localgames.LocalGame.toShelfItem(
+        platformLabel: String,
+        discGroup: com.davidadrianrg.atril.core.localgames.LocalDiscGroup? = null,
+        discChoice: com.davidadrianrg.atril.core.localgames.LocalDiscChoice? = null,
+        memberRomIds: List<Int> = listOf(syntheticRomId()),
+        discCount: Int = 1,
+    ): ShelfItem {
         val file = File(path)
         val exists = file.isFile
         val rom = Rom(
@@ -356,8 +368,8 @@ class ShelfViewModel(
         return ShelfItem(
             rom = rom,
             platformLabel = "$platformLabel · ${tr("local.badge")}",
-            groupRomIds = listOf(rom.id),
-            discCount = 1,
+            groupRomIds = memberRomIds,
+            discCount = discCount,
             savesPathOverride = null,
             excludedFromSync = true,
             platformSavesPath = "",
@@ -367,7 +379,53 @@ class ShelfViewModel(
             knownFileNames = listOf(file.name),
             isLocalSource = true,
             localGame = this,
+            localDiscGroup = discGroup,
+            localDiscChoice = discChoice,
         )
+    }
+
+    /**
+     * Un ítem por juego local, agrupando los discos del mismo juego con
+     * [LocalDiscGrouper]. La carta muestra el representante (disco 1) y lleva
+     * todos los ids del grupo para que favoritos y tiempo jugado agreguen.
+     */
+    private fun localShelfItems(
+        games: List<com.davidadrianrg.atril.core.localgames.LocalGame>,
+        labels: Map<String, String>,
+        discChoices: Map<String, String>,
+    ): List<ShelfItem> {
+        val byId = games.associateBy { it.id }
+        val entries = games.map {
+            com.davidadrianrg.atril.core.localgames.LocalDiscEntry(
+                id = it.id,
+                title = it.title,
+                path = it.path,
+                platformSlug = it.platformSlug,
+            )
+        }
+        return com.davidadrianrg.atril.core.localgames.LocalDiscGrouper.group(entries).mapNotNull { group ->
+            val representative = byId[group.representativeId] ?: return@mapNotNull null
+            val isGroup = group.discCount > 1
+            val choice = if (isGroup) {
+                com.davidadrianrg.atril.core.localgames.LocalDiscGrouper
+                    .choiceFor(group, discChoices[group.key])
+            } else {
+                null
+            }
+            representative.toShelfItem(
+                platformLabel = labels[representative.platformSlug]
+                    ?: representative.platformSlug.uppercase(),
+                discGroup = group.takeIf { isGroup },
+                discChoice = choice,
+                memberRomIds = group.members.mapNotNull { byId[it.id]?.syntheticRomId() },
+                discCount = group.discCount,
+            )
+        }
+    }
+
+    /** Cambia el disco elegido de un grupo local sin lanzar nada. */
+    fun setLocalDiscChoice(groupKey: String, choiceId: String) {
+        viewModelScope.launch { settingsRepository.setLocalDiscChoice(groupKey, choiceId) }
     }
 
     // ── Acciones sobre juegos locales ─────────────────────────────────
@@ -394,13 +452,27 @@ class ShelfViewModel(
 
     fun renameLocal(id: String, title: String) { viewModelScope.launch { localGames.rename(id, title) } }
     fun removeLocal(id: String) { viewModelScope.launch { localGames.remove(id) } }
+
+    /**
+     * Quita de Play un juego local. Si es un grupo multidisco se borran todos
+     * sus discos (dejar medio grupo crearía discos huérfanos) y se olvida la
+     * elección guardada del grupo.
+     */
+    fun removeLocal(item: ShelfItem) {
+        viewModelScope.launch {
+            val group = item.localDiscGroup
+            val ids = group?.members?.map { it.id } ?: listOfNotNull(item.localGame?.id)
+            ids.forEach { localGames.remove(it) }
+            group?.let { settingsRepository.setLocalDiscChoice(it.key, null) }
+        }
+    }
     fun setLocalCover(id: String, input: java.io.InputStream) { viewModelScope.launch { localGames.setManualCover(id, input) } }
 
     suspend fun prepareLaunch(item: ShelfItem): LaunchPlan = emulatorLauncher.prepare(
         LaunchRequest(
             platformSlug = item.rom.platformSlug,
             platformLabel = item.platformLabel,
-            localPath = item.localPath,
+            localPath = item.localLaunchPath,
             knownFileNames = item.knownFileNames,
             overrideFamilyId = item.launchOverride,
             saveEmulatorId = item.platformEmulatorId,

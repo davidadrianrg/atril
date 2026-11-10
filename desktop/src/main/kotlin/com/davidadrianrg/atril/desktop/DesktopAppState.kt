@@ -749,6 +749,60 @@ class DesktopAppState(private val scope: CoroutineScope) {
         launchFile(game.platformSlug, File(game.path), game.syntheticRomId())
 
     /**
+     * Lanza el disco/playlist elegido de un grupo local multidisco.
+     *
+     * D4: solo los grupos con más de un disco resuelven el `.m3u` hermano (la
+     * misma regla que usa el lanzador de Android); un juego local suelto sigue
+     * lanzando exactamente su ruta con [launchLocalGame].
+     */
+    fun launchLocalGame(
+        group: com.davidadrianrg.atril.core.localgames.LocalDiscGroup,
+        choice: com.davidadrianrg.atril.core.localgames.LocalDiscChoice,
+    ): Boolean {
+        val game = localGames.games.value.firstOrNull { it.id == group.representativeId }
+        val path = if (group.discCount > 1) {
+            com.davidadrianrg.atril.core.launch.PlaylistFiles.siblingPlaylist(File(choice.launchPath))?.path
+                ?: choice.launchPath
+        } else {
+            choice.launchPath
+        }
+        return launchFile(game?.platformSlug ?: "unknown", File(path), game?.syntheticRomId())
+    }
+
+    /** Elección de disco por grupo local, persistida en library.properties. */
+    private val _localDiscChoices = MutableStateFlow(library.localDiscChoices())
+    val localDiscChoices: StateFlow<Map<String, String>> = _localDiscChoices
+
+    /** Grupos multidisco de los juegos locales: un grupo por juego, discos dentro. */
+    fun localDiscGroups(): List<com.davidadrianrg.atril.core.localgames.LocalDiscGroup> =
+        com.davidadrianrg.atril.core.localgames.LocalDiscGrouper.group(
+            localGames.games.value.map {
+                com.davidadrianrg.atril.core.localgames.LocalDiscEntry(
+                    id = it.id,
+                    title = it.title,
+                    path = it.path,
+                    platformSlug = it.platformSlug,
+                )
+            },
+        )
+
+    /** Grupo al que pertenece [gameId], o null si el juego no está agrupado. */
+    fun localDiscGroupFor(gameId: String): com.davidadrianrg.atril.core.localgames.LocalDiscGroup? =
+        localDiscGroups().firstOrNull { group -> group.members.any { it.id == gameId } }
+
+    /** Disco/playlist elegido del grupo (por defecto disco 1, o el `.m3u` si existe). */
+    fun localDiscChoice(
+        group: com.davidadrianrg.atril.core.localgames.LocalDiscGroup,
+    ): com.davidadrianrg.atril.core.localgames.LocalDiscChoice =
+        com.davidadrianrg.atril.core.localgames.LocalDiscGrouper.choiceFor(group, _localDiscChoices.value[group.key])
+
+    /** Persiste el disco elegido de un grupo local sin lanzar nada. */
+    fun setLocalDiscChoice(groupKey: String, choiceId: String?) {
+        library.setLocalDiscChoice(groupKey, choiceId)
+        _localDiscChoices.value = library.localDiscChoices()
+    }
+
+    /**
      * Lanza [file] con el emulador de [slug]. Si el lanzamiento se acepta y hay
      * [romId], empieza a contar la partida (termina al recuperar el foco).
      */
