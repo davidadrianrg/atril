@@ -60,6 +60,10 @@ class MainActivity : ComponentActivity() {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) PadEvents.details.tryEmit(Unit)
                 return true
             }
+            PadAction.FAVORITE -> {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) PadEvents.favorite.tryEmit(Unit)
+                return true
+            }
             PadAction.PREV_PAGE, PadAction.NEXT_PAGE -> {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                     PadEvents.page.tryEmit(if (PadKeyMap.fromAndroidKeyCode(event.keyCode) == PadAction.PREV_PAGE) -1 else 1)

@@ -3,12 +3,14 @@ package com.davidadrianrg.atril.core.input
 import kotlin.math.abs
 
 /** Platform-neutral gamepad intents (Android and Linux map their raw events to these). */
-enum class PadAction { UP, DOWN, LEFT, RIGHT, SELECT, BACK, MENU, DETAILS, PREV_PAGE, NEXT_PAGE }
+enum class PadAction { UP, DOWN, LEFT, RIGHT, SELECT, BACK, MENU, DETAILS, PREV_PAGE, NEXT_PAGE, FAVORITE }
 
 /**
  * Mapping (documented in Settings → Controls):
  *  D-pad / left stick = move focus · A (south) = select / play · B (east) = back ·
- *  Start = open the game details (Play) · Select/Back/Home = open the menu · L1/R1 = previous/next platform filter.
+ *  X (west) = favorite · Y (north) = open the game details (Play) ·
+ *  Start = open the game details (Play) · Select/Back/Home = open the menu ·
+ *  L1/R1 = previous/next platform filter.
  */
 object PadKeyMap {
     // android.view.KeyEvent codes (kept as ints so this module stays pure JVM).
@@ -19,6 +21,8 @@ object PadKeyMap {
     private const val DPAD_CENTER = 23
     private const val BUTTON_A = 96
     private const val BUTTON_B = 97
+    private const val BUTTON_X = 99
+    private const val BUTTON_Y = 100
     private const val BUTTON_MODE = 110
     private const val BUTTON_START = 108
     private const val BUTTON_SELECT = 109
@@ -33,6 +37,8 @@ object PadKeyMap {
         DPAD_RIGHT -> PadAction.RIGHT
         DPAD_CENTER, BUTTON_A -> PadAction.SELECT
         BUTTON_B -> PadAction.BACK
+        BUTTON_X -> PadAction.FAVORITE
+        BUTTON_Y -> PadAction.DETAILS
         BUTTON_START -> PadAction.DETAILS
         BUTTON_SELECT, BUTTON_MODE -> PadAction.MENU
         BUTTON_L1 -> PadAction.PREV_PAGE
@@ -45,6 +51,8 @@ object PadKeyMap {
     const val EV_ABS = 3
     private const val BTN_SOUTH = 304   // A (Xbox) / Cross
     private const val BTN_EAST = 305    // B (Xbox) / Circle
+    private const val BTN_NORTH = 307   // Y (Xbox) / Triangle
+    private const val BTN_WEST = 308    // X (Xbox) / Square
     private const val BTN_TL = 310
     private const val BTN_TR = 311
     private const val BTN_SELECT = 314
@@ -65,6 +73,8 @@ object PadKeyMap {
         return when (code) {
             BTN_SOUTH -> PadAction.SELECT
             BTN_EAST -> PadAction.BACK
+            BTN_WEST -> PadAction.FAVORITE
+            BTN_NORTH -> PadAction.DETAILS
             BTN_START -> PadAction.DETAILS
             BTN_SELECT, BTN_MODE -> PadAction.MENU
             BTN_TL -> PadAction.PREV_PAGE
