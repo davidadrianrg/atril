@@ -104,6 +104,29 @@ class RomLaunchServiceTest {
         coVerify(exactly = 1) { launcher.prepare(match { it.localPath == found.absolutePath }) }
     }
 
+    /**
+     * REV-010: si la ruta guardada ya no existe y el relink no encuentra nada,
+     * no se conserva la ruta caducada. El mensaje debe ser el de "localiza el
+     * archivo", no "la ROM ya no está: <ruta vieja>".
+     */
+    @Test
+    fun `a stored path whose file vanished reports the locate hint instead of a stale path`() = runTest {
+        val gone = File(tmp.root, "Gone.gba").absolutePath
+        coEvery { linker.locateAndAttach(any(), any(), any(), any()) } returns null
+        coEvery { launcher.prepare(any()) } returns GameLaunchPlan.Failed("prepared")
+
+        val plan = service.prepare(request(localPath = gone))
+
+        assertEquals(
+            GameLaunchPlan.Failed(
+                "The file wasn't found. Locate it to be able to play it.",
+                needsLocate = true,
+            ),
+            plan,
+        )
+        coVerify(exactly = 0) { launcher.prepare(any()) }
+    }
+
     @Test
     fun `a linker failure becomes a failed plan instead of an exception`() = runTest {
         coEvery { linker.locateAndAttach(any(), any(), any(), any()) } throws IOException("disk gone")

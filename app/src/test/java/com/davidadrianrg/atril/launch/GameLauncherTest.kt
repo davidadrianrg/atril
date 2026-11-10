@@ -137,6 +137,20 @@ class GameLauncherTest {
         coVerify(exactly = 0) { emulatorLauncher.prepare(any()) }
     }
 
+    /**
+     * REV-002: el selector "Localizar archivo" solo tiene sentido para juegos de
+     * RomM (`romId > 0`). Un juego local que falla no debe ofrecerlo.
+     */
+    @Test
+    fun `a local game failure does not offer the locate picker`() = runBlocking {
+        val path = File(tmp.root, "Gone.gba").absolutePath
+
+        val plan = launcher.prepare(request(path).copy(romId = 0))
+
+        assertEquals(GameLaunchPlan.Failed("The ROM is no longer on this device: $path", needsLocate = false), plan)
+        coVerify(exactly = 0) { emulatorLauncher.prepare(any()) }
+    }
+
     @Test
     fun `a regular rom is delegated to the emulator and its failure is preserved`() = runBlocking {
         val rom = File(tmp.root, "Game.gba").apply { writeText("rom") }

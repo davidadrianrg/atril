@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -191,6 +192,22 @@ class RomFileLocatorTest {
         listOf("../Game.gba", "a/Game.gba", "a\\Game.gba", "..", ".", "   ", "Game\u0000.gba")
             .forEach { unsafe ->
                 assertNull("unsafe name should be rejected: $unsafe", RomFileLocator.locate(listOf(root()), "gba", unsafe))
+            }
+    }
+
+    @Test
+    fun `a name with dots in the middle is safe and is found on disk`() {
+        val rom = file("gba/Game..v2.gba")
+
+        assertTrue("'Game..v2.gba' is a plain file name", RomFileLocator.isSafeFileName("Game..v2.gba"))
+        assertEquals(rom, RomFileLocator.locate(listOf(root()), "gba", "Game..v2.gba"))
+    }
+
+    @Test
+    fun `navigation components, separators, blanks and NUL are still unsafe`() {
+        listOf("..", "../x", "..\\x", "a/b", "a\\b", "   ", "", "Game\u0000.gba")
+            .forEach { unsafe ->
+                assertFalse("unsafe name must be rejected: $unsafe", RomFileLocator.isSafeFileName(unsafe))
             }
     }
 
