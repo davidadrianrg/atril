@@ -2,6 +2,11 @@ package com.davidadrianrg.atril.data.repository
 
 import com.davidadrianrg.atril.data.local.SettingsDataStore
 import com.davidadrianrg.atril.data.local.ServerConfig
+import com.davidadrianrg.atril.core.library.LibraryCardSize
+import com.davidadrianrg.atril.core.library.LibrarySort
+import com.davidadrianrg.atril.core.library.LibrarySource
+import com.davidadrianrg.atril.core.library.LibraryViewMode
+import com.davidadrianrg.atril.core.library.LibraryViewPreferences
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -39,6 +44,12 @@ class SettingsRepository(private val dataStore: SettingsDataStore) {
     suspend fun setSaveSyncWatchEnabled(enabled: Boolean) = dataStore.setSaveSyncWatchEnabled(enabled)
 
     val retroArchBasePath: Flow<String> = dataStore.retroArchBasePath
+    /** Vista, orden, origen y tamaño de la biblioteca, ya validados. */
+    val libraryViewPreferences: Flow<LibraryViewPreferences> = dataStore.libraryViewPreferences
+    suspend fun setLibraryViewMode(mode: LibraryViewMode) = dataStore.setLibraryViewMode(mode)
+    suspend fun setLibrarySort(sort: LibrarySort) = dataStore.setLibrarySort(sort)
+    suspend fun setLibrarySource(source: LibrarySource) = dataStore.setLibrarySource(source)
+    suspend fun setLibraryCardSize(size: LibraryCardSize) = dataStore.setLibraryCardSize(size)
     val launcherDefaultDisplay: Flow<String> = dataStore.launcherDefaultDisplay
     val launchEmulatorOverrides: Flow<Map<String, String>> = dataStore.launchEmulatorOverrides
     suspend fun setLauncherDefaultDisplay(mode: String) = dataStore.setLauncherDefaultDisplay(mode)

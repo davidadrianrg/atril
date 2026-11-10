@@ -19,6 +19,7 @@ import com.davidadrianrg.atril.core.upload.UploadParts
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import com.davidadrianrg.atril.core.library.DiscEntry
+import com.davidadrianrg.atril.core.library.LibrarySorting
 import com.davidadrianrg.atril.core.library.MultiDiscGrouper
 import com.davidadrianrg.atril.core.remote.NetworkModule
 import com.davidadrianrg.atril.core.remote.RomMatcher
@@ -46,20 +47,8 @@ enum class Section { PLAY, LIBRARY, SAVES, SETTINGS, PLATFORMS, DOWNLOADS }
 /** Filtro de la biblioteca. */
 enum class LibraryFilter { ALL, MISSING, DOWNLOADED, FAVORITES }
 
-/** Criterios de ordenación de la biblioteca. */
-enum class LibrarySort {
-    NAME_ASC,
-    NAME_DESC,
-    SIZE_DESC,
-    SIZE_ASC,
-    YEAR_DESC,
-    YEAR_ASC,
-    RATING_DESC,
-    RATING_ASC,
-    ;
-
-    val label: String get() = tr("state.library_sort.${name.lowercase()}")
-}
+/** Criterios de ordenación de la biblioteca: enum compartido con Android desde `:core`. */
+typealias LibrarySort = com.davidadrianrg.atril.core.library.LibrarySort
 
 /** Estado de un elemento de la cola de descargas. */
 data class DesktopTask(
@@ -383,10 +372,14 @@ class DesktopAppState(private val scope: CoroutineScope) {
 
     // ── Orden y filtro por región de la biblioteca ──────────────────────
 
-    private val _sort = MutableStateFlow(LibrarySort.NAME_ASC)
+    private val _sort = MutableStateFlow(DesktopLibraryViewPrefs.load().sort)
     val sort: StateFlow<LibrarySort> = _sort
 
-    fun setSort(s: LibrarySort) { _sort.value = s }
+    /** Cambia el orden de la biblioteca y lo persiste para el próximo arranque. */
+    fun setSort(s: LibrarySort) {
+        _sort.value = s
+        DesktopLibraryViewPrefs.setSort(s)
+    }
 
     /** null = todas las regiones. */
     private val _regionFilter = MutableStateFlow<String?>(null)
@@ -843,16 +836,15 @@ class DesktopAppState(private val scope: CoroutineScope) {
         }
     }
 
-    private fun sorted(cards: List<GameCard>): List<GameCard> = when (_sort.value) {
-        LibrarySort.NAME_ASC -> cards.sortedBy { it.rep.name.lowercase() }
-        LibrarySort.NAME_DESC -> cards.sortedByDescending { it.rep.name.lowercase() }
-        LibrarySort.SIZE_DESC -> cards.sortedByDescending { it.rep.fileSizeBytes }
-        LibrarySort.SIZE_ASC -> cards.sortedBy { it.rep.fileSizeBytes }
-        LibrarySort.YEAR_DESC -> cards.sortedByDescending { releaseYear(it.rep) ?: 0L }
-        LibrarySort.YEAR_ASC -> cards.sortedBy { releaseYear(it.rep) ?: Long.MAX_VALUE }
-        LibrarySort.RATING_DESC -> cards.sortedByDescending { rating(it.rep) }
-        LibrarySort.RATING_ASC -> cards.sortedBy { rating(it.rep) }
-    }
+    private fun sorted(cards: List<GameCard>): List<GameCard> = LibrarySorting.sort(
+        items = cards,
+        sort = _sort.value,
+        name = { it.rep.name },
+        sizeBytes = { it.rep.fileSizeBytes },
+        releaseDate = { releaseYear(it.rep) },
+        rating = { rating(it.rep) },
+        lastPlayedAt = { gameStats(it).lastPlayedAt },
+    )
 
     private fun releaseYear(rep: RomDto): Long? =
         rep.igdbMetadata?.firstReleaseDate?.takeIf { it > 0 }

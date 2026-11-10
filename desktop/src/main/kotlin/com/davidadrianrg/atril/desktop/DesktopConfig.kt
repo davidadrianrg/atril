@@ -2,6 +2,11 @@ package com.davidadrianrg.atril.desktop
 
 import java.io.File
 import java.util.prefs.Preferences
+import com.davidadrianrg.atril.core.library.LibraryCardSize
+import com.davidadrianrg.atril.core.library.LibraryPreferenceKeys
+import com.davidadrianrg.atril.core.library.LibrarySort
+import com.davidadrianrg.atril.core.library.LibrarySource
+import com.davidadrianrg.atril.core.library.LibraryViewMode
 
 /** Configuración persistente de la app desktop (java.util.prefs, sin Android). */
 object DesktopConfig {
@@ -164,6 +169,29 @@ object DesktopConfig {
     var languageTag: String
         get() = prefs.get("language", "")
         set(v) = prefs.put("language", v)
+
+    /**
+     * Vista de la biblioteca (rejilla / cover flow). Se guarda el id canónico
+     * de :core; [DesktopLibraryViewPrefs] valida al leer.
+     */
+    var libraryViewMode: String
+        get() = prefs.get(LibraryPreferenceKeys.VIEW_MODE, LibraryViewMode.DEFAULT.id)
+        set(v) = prefs.put(LibraryPreferenceKeys.VIEW_MODE, v)
+
+    /** Criterio de orden de la biblioteca (id canónico de :core). */
+    var librarySort: String
+        get() = prefs.get(LibraryPreferenceKeys.SORT, LibrarySort.DEFAULT.id)
+        set(v) = prefs.put(LibraryPreferenceKeys.SORT, v)
+
+    /** Origen de la biblioteca (todo / local / RomM). */
+    var librarySource: String
+        get() = prefs.get(LibraryPreferenceKeys.SOURCE, LibrarySource.DEFAULT.id)
+        set(v) = prefs.put(LibraryPreferenceKeys.SOURCE, v)
+
+    /** Tamaño de tarjeta de la biblioteca. */
+    var libraryCardSize: String
+        get() = prefs.get(LibraryPreferenceKeys.CARD_SIZE, LibraryCardSize.DEFAULT.id)
+        set(v) = prefs.put(LibraryPreferenceKeys.CARD_SIZE, v)
 
     /** IDs marcados como descargados a mano (CSV), sin fichero gestionado. */
     var manualDownloaded: String

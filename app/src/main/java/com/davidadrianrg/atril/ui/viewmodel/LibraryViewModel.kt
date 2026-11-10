@@ -4,7 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.library.DiscEntry
+import com.davidadrianrg.atril.core.library.LibrarySort
+import com.davidadrianrg.atril.core.library.LibrarySorting
 import com.davidadrianrg.atril.core.library.MultiDiscGrouper
+import com.davidadrianrg.atril.core.playstats.PlayStats
+import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
+import com.davidadrianrg.atril.core.playstats.PlayStatsRepository
 import com.davidadrianrg.atril.data.repository.RomRepository
 import com.davidadrianrg.atril.domain.model.ApiResult
 import com.davidadrianrg.atril.domain.model.DownloadStatus
@@ -23,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -30,6 +36,7 @@ import kotlinx.coroutines.launch
 class LibraryViewModel(
     private val romRepository: RomRepository,
     private val downloadManager: DownloadManager? = null,
+    private val playStats: PlayStatsRepository? = null,
 ) : ViewModel() {
 
     private val _selectedPlatformId = MutableStateFlow<Int?>(null)
@@ -138,6 +145,11 @@ class LibraryViewModel(
         .map { roms -> roms.flatMap { it.regions }.distinct().sorted() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Roms de la lista con el medio físico recién scrapeado aplicado. */
+    private val effectiveRoms: Flow<List<Rom>> = combine(_roms, romRepository.physicalMediaOverrides) { roms, urls ->
+        if (urls.isEmpty()) roms else roms.map { it.withPhysicalMediaOverride(urls) }
+    }
+
     /**
      * ROMs de la plataforma tal como los devuelve la API de RomM, agrupadas
      * con [MultiDiscGrouper]: una card por juego, con los discos sueltos y
@@ -147,17 +159,12 @@ class LibraryViewModel(
      * NO se agrupa solo por igdbId: Golden Sun 1 y 2 comparten igdb_id y
      * deben seguir siendo juegos distintos.
      *
-     * Se aplica además el filtro por región y el orden elegidos en la barra
-     * de la biblioteca (client-side sobre las páginas ya cargadas).
+     * El filtro por región se aplica aquí; el orden elegido se aplica después
+     * en [romsWithStatus], porque "última partida" necesita las estadísticas.
      */
-    /** Roms de la lista con el medio físico recién scrapeado aplicado. */
-    private val effectiveRoms: Flow<List<Rom>> = combine(_roms, romRepository.physicalMediaOverrides) { roms, urls ->
-        if (urls.isEmpty()) roms else roms.map { it.withPhysicalMediaOverride(urls) }
-    }
-
-    val romsWithStatus: StateFlow<List<RomWithStatus>> = combine(
-        effectiveRoms, downloadedIds, activeDownloads, sort, regionFilter,
-    ) { roms, downloaded, downloading, sortType, region ->
+    private val groupedRoms: Flow<List<RomWithStatus>> = combine(
+        effectiveRoms, downloadedIds, activeDownloads, regionFilter,
+    ) { roms, downloaded, downloading, region ->
         val groups = MultiDiscGrouper.group(
             roms.map { rom ->
                 DiscEntry(
@@ -184,23 +191,38 @@ class LibraryViewModel(
                 groupRomIds = group.downloadIds,
             )
         }
-            // Filtro por región y orden elegidos
             .filter { card ->
                 region == null || card.rom.regions.any { it.equals(region, ignoreCase = true) }
             }
-            .let { grouped ->
-                val list = when (sortType) {
-                    RomSort.NAME_ASC -> grouped.sortedBy { it.rom.name.lowercase() }
-                    RomSort.NAME_DESC -> grouped.sortedByDescending { it.rom.name.lowercase() }
-                    RomSort.SIZE_DESC -> grouped.sortedByDescending { it.rom.fileSizeBytes }
-                    RomSort.SIZE_ASC -> grouped.sortedBy { it.rom.fileSizeBytes }
-                    RomSort.YEAR_DESC -> grouped.sortedByDescending { it.rom.igdbMetadata?.firstReleaseDate ?: 0L }
-                    RomSort.YEAR_ASC -> grouped.sortedBy { it.rom.igdbMetadata?.firstReleaseDate ?: Long.MAX_VALUE }
-                    RomSort.RATING_DESC -> grouped.sortedByDescending { it.rom.igdbMetadata?.totalRating ?: -1.0 }
-                    RomSort.RATING_ASC -> grouped.sortedBy { it.rom.igdbMetadata?.totalRating ?: -1.0 }
-                }
-                list
-            }
+    }
+
+    /**
+     * Estadísticas de partida por romId. Sin repositorio (tests que solo
+     * prueban la carga) todos los juegos cuentan como nunca jugados.
+     */
+    private val playStatsById: Flow<Map<Int, PlayStats>> =
+        playStats?.stats ?: flowOf(emptyMap())
+
+    /**
+     * Cards visibles de la biblioteca: agrupadas, filtradas por región y
+     * ordenadas con [LibrarySorting] según el criterio persistido. El orden
+     * por última partida agrega las estadísticas del grupo completo, igual que
+     * las tarjetas y el detalle.
+     */
+    val romsWithStatus: StateFlow<List<RomWithStatus>> = combine(
+        groupedRoms, playStatsById, sort,
+    ) { grouped, stats, sortType ->
+        LibrarySorting.sort(
+            items = grouped,
+            sort = sortType,
+            name = { it.rom.name },
+            sizeBytes = { it.rom.fileSizeBytes },
+            releaseDate = { it.rom.igdbMetadata?.firstReleaseDate },
+            rating = { it.rom.igdbMetadata?.totalRating },
+            lastPlayedAt = {
+                PlayStatsLogic.aggregate(it.groupRomIds + it.rom.id, stats).lastPlayedAt
+            },
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -533,14 +555,9 @@ sealed class LibraryEvent {
     data class Error(val message: String) : LibraryEvent()
 }
 
-/** Criterios de ordenación de la biblioteca (paridad con el desktop). */
-enum class RomSort(val labelKey: String) {
-    NAME_ASC("state.library_sort.name_asc"),
-    NAME_DESC("state.library_sort.name_desc"),
-    SIZE_DESC("state.library_sort.size_desc"),
-    SIZE_ASC("state.library_sort.size_asc"),
-    YEAR_DESC("state.library_sort.year_desc"),
-    YEAR_ASC("state.library_sort.year_asc"),
-    RATING_DESC("state.library_sort.rating_desc"),
-    RATING_ASC("state.library_sort.rating_asc"),
-}
+/**
+ * Criterios de ordenación de la biblioteca: un alias del enum compartido de
+ * :core, para que Android y desktop no puedan divergir. El alias mantiene
+ * todos los puntos de llamada existentes (`RomSort.entries`, `s.labelKey`).
+ */
+typealias RomSort = LibrarySort
