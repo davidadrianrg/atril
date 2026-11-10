@@ -172,7 +172,7 @@ fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
                             Text(tr("common.downloaded"), color = MaterialTheme.colorScheme.secondary)
                             if (state.isManualDownloaded(card)) {
                                 Spacer(Modifier.width(16.dp))
-                                OutlinedButton(onClick = { state.unmarkDownloadedManually(card) }) {
+                                OutlinedButton(onClick = { scope.launch { state.unmarkDownloadedManuallySuspending(card) } }) {
                                     Text(tr("library.unmark_downloaded"))
                                 }
                                 Spacer(Modifier.width(8.dp))

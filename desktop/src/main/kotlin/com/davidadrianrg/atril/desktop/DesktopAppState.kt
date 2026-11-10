@@ -188,10 +188,41 @@ class DesktopAppState(private val scope: CoroutineScope) {
         refreshSelectedGame()
     }
 
+    /**
+     * Reconstruye por id la ficha abierta tras cambiar el estado de descarga.
+     *
+     * La Biblioteca ([_roms]) solo se carga al visitarla y la Pantalla Jugar es
+     * la sección inicial, así que una ficha abierta desde el lanzador no está
+     * en [buildCards]. En ese caso se reconstruye con el registro local
+     * (`library.properties`) y las marcas manuales, que es la misma fuente que
+     * usa la Pantalla Jugar, conservando el grupo y su `discCount` (REV-015).
+     * Solo lee properties: ni red ni trabajo pesado.
+     */
     private fun refreshSelectedGame() {
         val current = _selectedGame.value ?: return
-        val rebuilt = buildCards(_roms.value).firstOrNull { it.rep.id == current.rep.id }
-        if (rebuilt != null) _selectedGame.value = rebuilt
+        _selectedGame.value = buildCards(_roms.value).firstOrNull { it.rep.id == current.rep.id }
+            ?: rebuildFromLocalLibrary(current)
+    }
+
+    /**
+     * Tarjeta de reserva cuando la Biblioteca no está cargada.
+     *
+     * Reutiliza los DTOs del grupo abierto (metadatos ya resueltos, sin red),
+     * refresca nombre/fichero/plataforma desde [DesktopLibrary.rom] y recalcula
+     * `downloaded` con los ids registrados o marcados a mano, con la misma
+     * regla que [buildCards].
+     */
+    private fun rebuildFromLocalLibrary(current: GameCard): GameCard {
+        val group = (listOf(current.rep) + current.groupRoms).distinctBy { it.id }
+        val roms = group.map { rom ->
+            val entry = library.rom(rom.id) ?: return@map rom
+            rom.copy(name = entry.name, fileName = entry.fileName, platformSlug = entry.platformSlug)
+        }
+        return current.copy(
+            rep = roms.first(),
+            groupRoms = roms.drop(1),
+            downloaded = group.all { it.id in downloadedIds || it.id in manualIds },
+        )
     }
 
     private var api: RomMApiService? = null
@@ -739,8 +770,20 @@ class DesktopAppState(private val scope: CoroutineScope) {
     /**
      * Quita la marca manual. Solo elimina de `library.properties` los ids que
      * estaban marcados a mano: nunca borra entradas de descargas reales.
+     *
+     * Variante síncrona conservada para llamantes sin corrutina; la UI usa
+     * [unmarkDownloadedManuallySuspending] para no escribir en el hilo de Compose.
      */
     fun unmarkDownloadedManually(card: GameCard) {
+        unmarkManually(card)
+    }
+
+    /** Igual que [unmarkDownloadedManually] con la escritura en `Dispatchers.IO`. */
+    suspend fun unmarkDownloadedManuallySuspending(card: GameCard) {
+        withContext(Dispatchers.IO) { unmarkManually(card) }
+    }
+
+    private fun unmarkManually(card: GameCard) {
         val previouslyManual = card.groupRoms.map { it.id }.filter { it in manualIds }.toSet()
         card.groupRoms.forEach { manualIds.remove(it.id) }
         previouslyManual.forEach { id ->
