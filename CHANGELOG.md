@@ -44,6 +44,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Linking a file to a manually marked game turns it into a normal download: the path is what defines the state, so the *Manual* badge, *Remove mark* and *Locate file* disappear and the usual download actions (delete the file, move it to the SD card, sync settings) appear instead. This is intended, not a defect, and it is why no new database column was needed.
 - 91 unit tests now cover the phase-2 work: the 73 of the first pass plus 18 regression tests added with the review and security fixes. They span view/sort/size persistence, the letter index with filters, local disc grouping and its false positives, the chosen-disc codec, the 8-second cap, save-name validation and the descriptor tie-break.
 
+### Fixed
+
+**Save sync security hardening (2026-11-10)**
+
+- Save archives use one shared member rule for zip and tar alike: absolute paths, `..` components, NUL bytes, backslashes and Windows drive letters are rejected, and every resolved target must stay inside the canonical saves folder. A bad zip entry is skipped without aborting the rest of the sync.
+- PS3 restores no longer take the destination folder name from the archive on trust: the name (first archive entry, existing local folder or serial) must be a plain, safe name and the folder must resolve strictly inside `…/savedata`. The whole archive is validated first, then unpacked into a hidden staging folder inside `savedata`, and only once the tree is complete is the existing folder cleared and the staged contents moved in; a failure while unpacking leaves the existing save untouched.
+- Android and PS2 tar restores on rooted devices are validated and unpacked as the app user into an app-owned staging folder; root is used only afterwards, on the validated tree, to keep the owner and swap the folder in. Archives with absolute or traversal names, links, devices, truncated members or more than one top-level folder are rejected before any privileged step.
+- The server-provided `platform_slug` used in save and gamelist paths must match `^[a-z0-9][a-z0-9._-]{0,63}$`. Invalid values are dropped at the RomM data ingress (stored as empty or `unknown`, never a parse failure) and rejected again where a save path is built, so values persisted before this fix cannot escape the saves folder. Valid slugs are used verbatim.
+- Sync log lines no longer carry raw exception messages or server-chosen save names: names lose control characters and are length-capped, and failures log a fixed classification plus the exception class name.
+- Deliberate behavior changes: a rejected or corrupt tar restore leaves the existing save untouched instead of deleting it first; a PS3 archive containing any unsafe entry is rejected as a whole instead of partially extracted; zip entries containing a backslash are skipped.
+- 61 new regression tests cover these rules with real temporary trees and no root (598 JVM unit tests in total, all green).
+
 ### Notes
 
 **Launcher improvements**
