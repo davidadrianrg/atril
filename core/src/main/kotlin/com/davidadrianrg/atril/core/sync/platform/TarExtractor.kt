@@ -1,6 +1,7 @@
 package com.davidadrianrg.atril.core.sync.platform
 
 import com.davidadrianrg.atril.core.sync.SaveNames
+import com.davidadrianrg.atril.core.util.SafeDelete
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -249,12 +250,8 @@ internal object TarExtractor {
     }
 
     private fun clearStaging(stagingDir: File) {
-        stagingDir.listFiles()?.forEach { child ->
-            try {
-                child.deleteRecursively()
-            } catch (_: Exception) {
-                // Best effort: the caller treats the extraction as failed anyway.
-            }
-        }
+        // El staging es app-owned: base y destino coinciden y se vacía con la
+        // misma regla que el resto de restauraciones.
+        SafeDelete.clearDirectoryContents(stagingDir, stagingDir)
     }
 }

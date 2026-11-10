@@ -2,6 +2,7 @@ package com.davidadrianrg.atril.core.sync.platform
 
 import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RomHeaderIdReader
+import com.davidadrianrg.atril.core.util.SafeDelete
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -93,10 +94,10 @@ class PpssppSaveHandler : SaveHandler {
 
         val discId = extractDiscIdFromFileName(romFileName) ?: return@withContext false
 
-        // Borrar carpetas existentes del mismo disc-id antes de extraer
+        // Vaciar carpetas existentes del mismo disc-id antes de extraer.
         saveDataDir.listFiles()?.filter { dir ->
             dir.isDirectory && dir.name.startsWith(discId, ignoreCase = true)
-        }?.forEach { it.deleteRecursively() }
+        }?.forEach { SafeDelete.clearDirectoryContents(saveDataDir, it) }
 
         // Extraer zip en PSP/SAVEDATA/
         try {

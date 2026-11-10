@@ -2,6 +2,7 @@ package com.davidadrianrg.atril.core.sync.platform
 
 import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RomHeaderIdReader
+import com.davidadrianrg.atril.core.util.SafeDelete
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -95,10 +96,8 @@ class N3dsSaveHandler : SaveHandler {
             ?: constructDataDir(savesBasePath, high, low)
             ?: return@withContext false
 
-        // Borrar saves existentes antes de restaurar
-        if (dataDir.isDirectory) {
-            dataDir.deleteRecursively()
-        }
+        // Vaciar saves existentes antes de restaurar (solo el contenido).
+        SafeDelete.clearDirectoryContents(File(savesBasePath), dataDir)
         dataDir.mkdirs()
 
         try {

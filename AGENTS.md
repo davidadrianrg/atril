@@ -112,3 +112,23 @@ files.
   missing (depth 6, 5000 entries, no hidden entries, no symlinks). The library
   scan keeps its own `findRomFileOnDisk` heuristics in `RomRepository`; do not
   swap one for the other.
+- Download zip extraction has a single door: `ZipStreamExtractor`
+  (`:core/download`). `DownloadWorker` and `DownloadEngine` only supply the
+  stream, so any new download path must call it too; it resolves every entry
+  with `SaveNames.resolveArchiveEntry` and skips the rejected ones. Do not add a
+  per-engine extraction loop or a `startsWith` prefix check.
+- Restore-target cleanup has a single door: `SafeDelete.clearDirectoryContents(base, target)`
+  (`:core/util`). It empties the target and never deletes it, never follows symbolic
+  links at any depth (nested ones included), deletes a link as an entry without
+  destroying its target even when the target is inside `base`, and descends only into
+  real directories after revalidating their canonical containment inside `base`. Do not
+  reintroduce `deleteRecursively` on a save destination.
+- A name derived from the filesystem that goes into a root command must pass
+  `RootCommandNames` (`:core/sync`; `^[A-Za-z0-9][A-Za-z0-9._ -]{0,199}$` plus
+  canonical containment under the base) before the command is built.
+  `RootShell.sq` still escapes the token, and names read from inside an archive
+  stay on `SaveNames.isSafeSaveFileName`.
+- `PathMapper.getPlatformDir` sanitizes the slug with `PlatformSlug` after
+  `trim()`/`lowercase()` and falls back to `unknown`; `DownloadWorker` rejects a
+  non-empty invalid slug before any folder is created. Do not add a second slug
+  regex.

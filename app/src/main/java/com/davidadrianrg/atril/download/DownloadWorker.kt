@@ -19,6 +19,7 @@ import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.remote.NetworkModule
 import com.davidadrianrg.atril.core.remote.RomMApiService
 import com.davidadrianrg.atril.core.download.PathMapper
+import com.davidadrianrg.atril.core.download.ZipStreamExtractor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
@@ -29,7 +30,6 @@ import retrofit2.HttpException
 import java.io.File
 import java.io.IOException
 import java.util.Locale
-import java.util.zip.ZipInputStream
 
 /**
  * WorkManager CoroutineWorker that downloads a single ROM from the RomM server.
@@ -71,6 +71,17 @@ class DownloadWorker(
 
         if (romId < 0 || platformId < 0) return@withContext Result.failure()
 
+        // Nombre de carpeta saneado con la regla única de PlatformSlug. Un slug
+        // no vacío pero inválido se rechaza aquí, antes de crear ninguna
+        // carpeta; un slug ausente o vacío sigue siendo el centinela "unknown".
+        // El valor hostil no se devuelve en el fallo: solo un mensaje clasificado.
+        val platformDirName = PathMapper.platformDirName(platformSlug)
+            ?: return@withContext Result.failure(workDataOf(
+                KEY_ROM_NAME to romName,
+                KEY_FILE_NAME to fileName,
+                KEY_ERROR_MESSAGE to tr("library.invalid_platform"),
+            ))
+
         // Read configuration directly from storage (API key lives in
         // EncryptedSharedPreferences — never passed through WorkManager Data).
         val dataStore = SettingsDataStore(applicationContext)
@@ -88,14 +99,14 @@ class DownloadWorker(
         if (apiKey.isEmpty()) return@withContext Result.failure()
 
         // Ensure target platform directory exists
-        PathMapper.ensurePlatformDir(romsRootPath, platformSlug)
+        PathMapper.ensurePlatformDir(romsRootPath, platformDirName)
 
         // ── Space check: fail fast if the target volume can't hold the ROM ──
         // The API doesn't expose file size upfront for all endpoints, so we
         // estimate from the Content-Length of a HEAD-ish first response below.
         // Here we only guard the resume case: if a partial already occupies
         // more than the free space, abort before wasting bytes.
-        val targetFileForSpace = PathMapper.getRomFile(romsRootPath, platformSlug, fileName)
+        val targetFileForSpace = PathMapper.getRomFile(romsRootPath, platformDirName, fileName)
         val spaceCheck = hasEnoughSpace(targetFileForSpace.parentFile, neededBytes = -1L)
         if (spaceCheck == SpaceCheck.NO_STORAGE) {
             return@withContext Result.failure(workDataOf(
@@ -127,7 +138,8 @@ class DownloadWorker(
         return@withContext try {
             currentSemaphore.withPermit {
                 performDownload(
-                    apiService, romsRootPath, fileName, romId, romName, platformSlug,
+                    apiService, romsRootPath, fileName, romId, romName,
+                    platformSlug, platformDirName,
                     expectedHash = inputData.getString(KEY_FILE_HASH),
                 )
             }
@@ -135,7 +147,7 @@ class DownloadWorker(
             // Cancelación del usuario: borrar el parcial. Otras paradas (red,
             // restricciones) lo conservan para reanudar.
             if (!streamCompleted && DownloadCancelRegistry.consumeUserCancel(romId, workStartedAtMs)) {
-                deletePartialFile(PathMapper.getRomFile(romsRootPath, platformSlug, fileName))
+                deletePartialFile(PathMapper.getRomFile(romsRootPath, platformDirName, fileName))
             }
             throw e
         } catch (e: HttpException) {
@@ -218,6 +230,12 @@ class DownloadWorker(
      * On network failure the partial file is **always kept** (fresh and resume
      * mode alike) so the next attempt continues from the largest offset —
      * critical for multi-GB ROMs over unstable Wi-Fi.
+     *
+     * @param platformSlug slug original: identidad para progreso, notificaciones
+     *   y la fila persistida (nunca se usa en rutas).
+     * @param platformDirName nombre de carpeta ya saneado por
+     *   [PathMapper.platformDirName]; es el único valor usado para construir
+     *   rutas.
      */
     private suspend fun performDownload(
         apiService: RomMApiService,
@@ -226,9 +244,10 @@ class DownloadWorker(
         romId: Int,
         romName: String,
         platformSlug: String,
+        platformDirName: String,
         expectedHash: String? = null,
     ): Result {
-        val targetFile = PathMapper.getRomFile(romsRootPath, platformSlug, fileName)
+        val targetFile = PathMapper.getRomFile(romsRootPath, platformDirName, fileName)
 
         // Offset de reanudación: tamaño del parcial si existe y es plausible
         val partialBytes = if (targetFile.exists()) targetFile.length() else 0L
@@ -282,7 +301,10 @@ class DownloadWorker(
                 contentLength <= 0L && response.code() == 200 -> {
                     // mod_zip: Content-Length = -1, stream comprimido al vuelo
                     reportProgress(0, true, romId, romName, fileName, platformSlug)
-                    extractZipStream(response.body()!!, romsRootPath, platformSlug)
+                    extractZipStream(
+                        response.body()!!,
+                        PathMapper.getPlatformDir(romsRootPath, platformDirName),
+                    )
                     wasZipStream = true
                 }
                 else -> {
@@ -713,57 +735,15 @@ class DownloadWorker(
 
     /**
      * Extracts a mod_zip stream directly into the platform folder.
-     * Tracks created files and deletes them all if extraction fails.
-     * Used when RomM dynamically zips multi-file ROMs (Content-Length = -1).
+     *
+     * Delegates the per-entry decision and the cleanup of created files to
+     * [ZipStreamExtractor], shared with the desktop engine. Used when RomM
+     * dynamically zips multi-file ROMs (Content-Length = -1).
+     *
+     * @param targetDir platform folder that receives the extracted files.
      */
-    private suspend fun extractZipStream(
-        body: ResponseBody,
-        romsRootPath: String,
-        platformSlug: String,
-    ) {
-        val targetDir = PathMapper.getPlatformDir(romsRootPath, platformSlug)
-        val createdFiles = mutableListOf<File>()
-
-        try {
-            ZipInputStream(body.byteStream()).use { zipIn ->
-                var entry = zipIn.nextEntry
-                while (entry != null) {
-                    val outFile = File(targetDir, entry.name)
-
-                    // Security: prevent path traversal
-                    if (!outFile.canonicalPath.startsWith(targetDir.canonicalPath)) {
-                        zipIn.closeEntry()
-                        entry = zipIn.nextEntry
-                        continue
-                    }
-
-                    if (entry.isDirectory) {
-                        outFile.mkdirs()
-                    } else {
-                        outFile.parentFile?.mkdirs()
-                        java.io.FileOutputStream(outFile).use { out ->
-                            val buffer = ByteArray(BUFFER_SIZE)
-                            while (true) {
-                                val read = zipIn.read(buffer)
-                                if (read == -1) break
-                                out.write(buffer, 0, read)
-                            }
-                        }
-                        createdFiles.add(outFile)
-                    }
-                    zipIn.closeEntry()
-                    entry = zipIn.nextEntry
-                }
-            }
-        } catch (e: Exception) {
-            // Clean up all files created so far
-            for (file in createdFiles) {
-                if (file.exists()) {
-                    file.delete()
-                }
-            }
-            throw e
-        }
+    private fun extractZipStream(body: ResponseBody, targetDir: File) {
+        ZipStreamExtractor.extract(body.byteStream(), targetDir)
     }
 
     /** Borra solo un fichero regular (nunca un directorio) y registra el resultado. */
