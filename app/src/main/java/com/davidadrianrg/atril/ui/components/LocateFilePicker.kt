@@ -57,6 +57,7 @@ internal fun rememberLocateFilePicker(
             is LocateOutcome.AlreadyExists ->
                 pending = PendingReplace(uri, outcome.fileName)
             LocateOutcome.NoRomsRoot -> currentMessage(tr("library.roms_root_missing"))
+            LocateOutcome.InvalidPlatform -> currentMessage(tr("library.invalid_platform"))
             LocateOutcome.InvalidFile, LocateOutcome.CopyFailed ->
                 currentMessage(tr("library.file_copy_failed"))
         }

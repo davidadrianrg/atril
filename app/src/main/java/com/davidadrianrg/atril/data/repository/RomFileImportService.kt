@@ -22,8 +22,11 @@ sealed interface LocateOutcome {
     /** El documento elegido no tiene un nombre utilizable. */
     data object InvalidFile : LocateOutcome
 
-    /** Falta configurar la carpeta de ROMs (o el slug de plataforma no es válido). */
+    /** Falta configurar la carpeta de ROMs (raíz vacía). */
     data object NoRomsRoot : LocateOutcome
+
+    /** El slug de la plataforma no se puede usar como carpeta del juego (dato inválido). */
+    data object InvalidPlatform : LocateOutcome
 
     /** No se pudo copiar (E/S, permiso de la carpeta, stream nulo…). */
     data object CopyFailed : LocateOutcome
@@ -64,11 +67,12 @@ class RomFileImportService(
             return LocateOutcome.CopyFailed
         }
         val primaryRoot = config.romsRootPath.trim()
-        if (primaryRoot.isBlank() || !RomFileLocator.isSafeFileName(platformSlug)) {
-            if (!RomFileLocator.isSafeFileName(platformSlug)) {
-                runCatching { Log.w(TAG, "Invalid platform slug ($romId)") }
-            }
-            return LocateOutcome.NoRomsRoot
+        if (primaryRoot.isBlank()) return LocateOutcome.NoRomsRoot
+        // Slug corrupto o malicioso de RomM: la raíz sí está configurada, así que
+        // pedir que se configure sería un mensaje engañoso (REV-018).
+        if (!RomFileLocator.isSafeFileName(platformSlug)) {
+            runCatching { Log.w(TAG, "Invalid platform slug ($romId)") }
+            return LocateOutcome.InvalidPlatform
         }
 
         val roots = buildList {
