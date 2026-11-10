@@ -78,7 +78,11 @@ RomM admite login OAuth/OIDC tras proxys (Authentik, Authelia...), que suele rom
 
 ## ✨ Qué hace la app
 
-- **📚 Biblioteca** — Navega por tu servidor RomM con carátulas, búsqueda y filtros (todos / faltantes / descargados). Detecta juegos ya presentes en disco con *Escanear biblioteca*.
+- **📚 Biblioteca** — Navega por tu servidor RomM con carátulas, búsqueda y filtros (todos / faltantes / descargados / favoritos). Detecta juegos ya presentes en disco con *Escanear biblioteca*.
+- **Favoritos** — Marca un juego con la estrella desde su ficha (Android y Linux) para tenerlo a mano: su carta muestra una insignia de estrella y las dos bibliotecas ganan un filtro *Favoritos* junto a todos / faltantes / descargados.
+- **Tiempo jugado y última partida** — Atril cronometra cada partida y muestra *Última partida* y *Tiempo jugado* en la ficha del juego («hace 5 min», «ayer», «1 h 23 min»), con «Nunca» mientras no lo hayas jugado. Las sesiones de menos de 5 segundos no cuentan. Los favoritos y el tiempo jugado se guardan en el dispositivo, por juego: no se sincronizan con tu servidor RomM.
+- **Seguir jugando** — La pantalla Jugar muestra arriba, bajo los filtros de plataforma, una fila compacta con los cinco juegos jugados más recientemente (carátula, nombre y tiempo jugado); toca uno para saltar a él en el carrusel. La fila se oculta mientras no hay datos de partida.
+- **Leyenda del mando (solo Android)** — En la pantalla Jugar, una barra discreta y translúcida indica qué hacen ahora A, B, X e Y: Jugar, Atrás, Favorito y Detalles. No captura toques y Jugar sigue siendo inmersiva.
 - **⬇️ Descargas** — Cola con descargas paralelas configurables (1–5), reanudación automática si se corta la red, verificación de integridad por hash y aviso de espacio insuficiente. Opción *solo WiFi* para no gastar datos.
 - **🔔 Notificaciones de actualización** — comprueba GitHub al abrir la app y una vez al día; envía una notificación cuando hay una versión nueva de Atril.
 - **💾 Sincronización de saves** — Tus partidas guardadas siempre al día en todos los dispositivos, con el [Device Sync Protocol](https://docs.romm.app/latest/developers/device-sync-protocol/) de RomM (v4.9+): sube lo que cambió en el portátil, bájate lo que jugaste en el PC. Resuelve conflictos explícitamente en vez de sobrescribir.
@@ -123,6 +127,7 @@ core/src/main/kotlin/com/davidadrianrg/atril/core/   # JVM puro — compartido A
 ├── remote/              # Retrofit + OkHttp (API RomM, Device Sync Protocol)
 ├── sync/platform/       # Handlers de saves por emulador (RetroArch, melonDS, PS2, PS3, 3DS...)
 ├── download/            # PathMapper (estructura de carpetas por plataforma)
+├── playstats/           # Tiempo jugado, última partida y favoritos (JSON local)
 └── util/                # RootShell, lectura de cabeceras ROM...
 
 app/src/main/java/com/davidadrianrg/atril/           # Android
@@ -145,7 +150,7 @@ desktop/src/main/kotlin/com/davidadrianrg/atril/desktop/  # Linux (Compose Deskt
 - **Android**: Jetpack Compose (Material 3) · Room · WorkManager · DataStore · Coil
 - **Desktop**: Compose Desktop · AppImage (jlink runtime incluido)
 - **Idioma del código**: inglés en identificadores/logs; español en textos de UI.
-- **Tests**: `./gradlew test` (unit tests en `core/src/test` y `app/src/test`).
+- **Tests**: `./gradlew test` (unit tests en `core/src/test`, `desktop/src/test` y `app/src/test`).
 
 ## 🔁 CI/CD
 
