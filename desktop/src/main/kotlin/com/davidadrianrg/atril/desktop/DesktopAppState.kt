@@ -223,7 +223,7 @@ class DesktopAppState(private val scope: CoroutineScope) {
         val group = (listOf(current.rep) + current.groupRoms).distinctBy { it.id }
         val roms = group.map { rom ->
             val entry = library.rom(rom.id) ?: return@map rom
-            rom.copy(name = entry.name, fileName = entry.fileName, platformSlug = entry.platformSlug)
+            rom.copy(name = entry.name, fileName = entry.fileName, platformSlugRaw = entry.platformSlug)
         }
         return current.copy(
             rep = roms.first(),

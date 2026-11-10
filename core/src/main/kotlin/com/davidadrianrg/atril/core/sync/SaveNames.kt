@@ -72,4 +72,56 @@ object SaveNames {
             null
         }
     }
+
+    private val DRIVE_PREFIX = Regex("^[A-Za-z]:")
+
+    /**
+     * Indicates whether [entryPath] is a safe relative path for an archive
+     * member (zip or tar), before it is resolved against a destination folder.
+     *
+     * Rejects blank paths, NUL, backslashes (filename on Linux, separator on
+     * Windows), absolute paths, Windows drive letters and any `..` component.
+     * Nested relative paths (`a/b/c.srm`), trailing slashes (`dir/`), empty
+     * components (`a//b`) and `.` components are accepted; no filesystem
+     * access is performed.
+     *
+     * @param entryPath member name as stored in the archive.
+     * @return `true` only when the member cannot escape its destination folder.
+     */
+    fun isSafeArchiveEntryPath(entryPath: String): Boolean {
+        if (entryPath.isBlank()) return false
+        if (entryPath.any { it == '\u0000' }) return false
+        if (entryPath.contains('\\')) return false
+        if (entryPath.startsWith("/")) return false
+        if (DRIVE_PREFIX.containsMatchIn(entryPath)) return false
+        if (entryPath.split('/').any { it == ".." }) return false
+        return true
+    }
+
+    /**
+     * Resolves an archive member [entryPath] under [base], returning `null`
+     * whenever the member could escape it.
+     *
+     * This is the single containment rule shared by every save extraction site.
+     * It first applies [isSafeArchiveEntryPath] and then verifies that the
+     * canonical target lies strictly inside the canonical base (so `.`, the
+     * base itself, sibling-prefix paths and symlink escapes are rejected).
+     *
+     * @param base destination folder of the extraction.
+     * @param entryPath member name as stored in the archive.
+     * @return the canonical target file, or `null` when it is unsafe.
+     */
+    fun resolveArchiveEntry(base: File, entryPath: String): File? {
+        if (!isSafeArchiveEntryPath(entryPath)) return null
+        return try {
+            val canonicalBase = base.canonicalFile
+            val target = File(canonicalBase, entryPath).canonicalFile
+            val basePrefix = canonicalBase.path + File.separator
+            if (target.path.startsWith(basePrefix)) target else null
+        } catch (_: IOException) {
+            null
+        } catch (_: SecurityException) {
+            null
+        }
+    }
 }

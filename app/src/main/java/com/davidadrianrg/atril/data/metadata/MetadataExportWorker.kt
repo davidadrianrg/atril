@@ -19,6 +19,7 @@ import com.davidadrianrg.atril.core.media.GameMediaPaths
 import com.davidadrianrg.atril.core.media.GameMediaPlanner
 import com.davidadrianrg.atril.core.media.MediaKind
 import com.davidadrianrg.atril.core.remote.NetworkModule
+import com.davidadrianrg.atril.core.remote.PlatformSlug
 import com.davidadrianrg.atril.domain.model.Rom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -44,7 +45,9 @@ class MetadataExportWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val platformId = inputData.getInt(KEY_PLATFORM_ID, -1)
-        val platformSlug = inputData.getString(KEY_PLATFORM_SLUG)
+        // El slug lo elige el servidor y se usa como componente de ruta: se
+        // valida antes de construir cualquier File.
+        val platformSlug = PlatformSlug.sanitize(inputData.getString(KEY_PLATFORM_SLUG))
             ?: return@withContext Result.failure()
 
         if (platformId < 0) return@withContext Result.failure()

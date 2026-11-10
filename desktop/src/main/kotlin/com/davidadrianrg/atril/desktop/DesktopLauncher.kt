@@ -129,7 +129,7 @@ private fun com.davidadrianrg.atril.core.localgames.LocalGame.toRomDto(): RomDto
     name = title,
     fileName = File(path).name,
     platformId = 0,
-    platformSlug = platformSlug,
+    platformSlugRaw = platformSlug,
     fileSizeBytes = File(path).takeIf { it.isFile }?.length() ?: 0L,
     urlCover = coverPath?.let { "file://$it" },
 )
@@ -1223,7 +1223,7 @@ private fun localLauncherEntries(state: DesktopAppState): List<LauncherEntry> {
             name = entry.name,
             fileName = entry.fileName,
             platformId = 0,
-            platformSlug = entry.platformSlug,
+            platformSlugRaw = entry.platformSlug,
         )
     }
     val groups = MultiDiscGrouper.group(
@@ -1264,7 +1264,7 @@ private suspend fun loadLauncherEntries(state: DesktopAppState): List<LauncherEn
                 name = entry.name,
                 fileName = entry.fileName,
                 platformId = 0,
-                platformSlug = entry.platformSlug,
+                platformSlugRaw = entry.platformSlug,
             )
         dtos[entry.romId] = dto
     }

@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RomHeaderIdReader
 import com.davidadrianrg.atril.core.util.RootShell
 import kotlinx.coroutines.Dispatchers
@@ -161,8 +162,8 @@ class Ps2SaveHandler : SaveHandler {
             ZipInputStream(FileInputStream(tempFile)).use { zipIn ->
                 var entry = zipIn.nextEntry
                 while (entry != null) {
-                    val outFile = File(targetCard, entry.name)
-                    if (!outFile.canonicalPath.startsWith(targetCard.canonicalPath)) {
+                    val outFile = SaveNames.resolveArchiveEntry(targetCard, entry.name)
+                    if (outFile == null) {
                         zipIn.closeEntry()
                         entry = zipIn.nextEntry
                         continue
@@ -316,14 +317,50 @@ class Ps2SaveHandler : SaveHandler {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    /** Extrae un tar (creado por findRootSaves) en la memory card con root. */
+    /**
+     * Restaura un tar (creado por [findRootSaves]) bajo la raíz de memcards.
+     *
+     * La entrada superior del tar es la carpeta de la memory card (p. ej.
+     * `Shared.ps2`), no la carpeta del serial: por eso el paso final copia el
+     * contenido del staging (la card) bajo `savesBasePath` en modo merge, para
+     * no borrar los saves de otros juegos de la misma card.
+     *
+     * Se valida y extrae primero como el usuario de la app; root solo interviene
+     * sobre el árbol ya validado.
+     */
     private fun extractRootTar(tempFile: File, savesBasePath: String): Boolean {
-        // Asegurar que exista la estructura de carpetas del card dir
-        RootShell.runToFile("mkdir -p ${RootShell.sq(savesBasePath)}")
-        // Extraer el contenido del tar directamente en la raíz de memcards
-        return RootShell.runToFile(
-            "tar -xf ${RootShell.sq(tempFile.absolutePath)} -C ${RootShell.sq(savesBasePath)}",
-        )
+        val base = File(savesBasePath)
+        val staging = createStagingDir("ps2_save_stage_") ?: return false
+        try {
+            if (!TarExtractor.extract(tempFile, staging)) return false
+            val stagedTop = staging.listFiles()?.singleOrNull() ?: return false
+            if (!stagedTop.isDirectory || !SaveNames.isSafeSaveFileName(stagedTop.name)) return false
+            if (!RootShell.available) return false
+
+            val targetDir = File(base, stagedTop.name)
+            val owner = RootShell.ownerOf(targetDir.absolutePath)
+                ?: RootShell.ownerOf(base.absolutePath)
+                ?: return false
+            // Copiar el contenido del staging (la card entera) dentro de la raíz
+            // de memcards: `cp -a <staging>/. <base>/` recrea/mergea
+            // base/<card>/ conservando los saves de otros juegos.
+            val cmd = "mkdir -p ${RootShell.sq(base.absolutePath)}" +
+                " && chown -R $owner ${RootShell.sq(stagedTop.absolutePath)}" +
+                " && cp -a ${RootShell.sq(staging.absolutePath)}/. ${RootShell.sq(base.absolutePath)}/"
+            return RootShell.runToFile(cmd)
+        } catch (_: Exception) {
+            return false
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
+    /** Crea una carpeta temporal accesible que después usa [TarExtractor]. */
+    private fun createStagingDir(prefix: String): File? = try {
+        val staging = File.createTempFile(prefix, ".dir")
+        if (staging.delete() && staging.mkdirs()) staging else null
+    } catch (_: Exception) {
+        null
     }
 
     /**
@@ -344,8 +381,8 @@ class Ps2SaveHandler : SaveHandler {
             ZipInputStream(FileInputStream(tempFile)).use { zipIn ->
                 var entry = zipIn.nextEntry
                 while (entry != null) {
-                    val outFile = File(staging, entry.name)
-                    if (!outFile.canonicalPath.startsWith(staging.canonicalPath)) {
+                    val outFile = SaveNames.resolveArchiveEntry(staging, entry.name)
+                    if (outFile == null) {
                         zipIn.closeEntry(); entry = zipIn.nextEntry; continue
                     }
                     if (entry.isDirectory) {

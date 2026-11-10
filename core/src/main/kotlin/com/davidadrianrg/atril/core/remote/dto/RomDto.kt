@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.remote.dto
 
+import com.davidadrianrg.atril.core.remote.PlatformSlug
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
@@ -37,7 +38,7 @@ data class RomDto(
     @Json(name = "file_path") val filePath: String? = null,
     @Json(name = "fs_size_bytes") val fileSizeBytes: Long = 0,
     @Json(name = "platform_id") val platformId: Int,
-    @Json(name = "platform_slug") val platformSlug: String? = null,
+    @Json(name = "platform_slug") private val platformSlugRaw: String? = null,
     @Json(name = "path_cover_small") val pathCoverSmall: String? = null,
     @Json(name = "path_cover_large") val pathCoverLarge: String? = null,
     @Json(name = "url_cover") val urlCover: String? = null,
@@ -60,6 +61,16 @@ data class RomDto(
     @Json(name = "ss_metadata") val ssMetadata: PhysicalMetadataDto? = null,
     @Json(name = "gamelist_metadata") val gamelistMetadata: PhysicalMetadataDto? = null,
 ) {
+    /**
+     * Platform slug as read by the rest of the app.
+     *
+     * The wire value is server-controlled, so the getter only ever exposes a
+     * valid slug (or `null`): see [PlatformSlug]. This gates every Android and
+     * desktop read of `platform_slug` at the DTO boundary.
+     */
+    val platformSlug: String?
+        get() = PlatformSlug.sanitize(platformSlugRaw)
+
     /**
      * Ruta relativa (a los resources de RomM) de la imagen del medio físico.
      * Prioriza ScreenScraper y cae al gamelist. Null si RomM no tiene ninguna.

@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RomHeaderIdReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -153,8 +154,9 @@ class DolphinSaveHandler : SaveHandler {
                 var entry = zipIn.nextEntry
                 while (entry != null) {
                     if (!entry.isDirectory) {
-                        val outFile = File(cardDir, entry.name)
-                        if (outFile.canonicalPath.startsWith(cardDir.canonicalPath)) {
+                        val outFile = SaveNames.resolveArchiveEntry(cardDir, entry.name)
+                        if (outFile != null) {
+                            outFile.parentFile?.mkdirs()
                             FileOutputStream(outFile).use { out -> zipIn.copyTo(out) }
                         }
                     }
@@ -211,8 +213,8 @@ class DolphinSaveHandler : SaveHandler {
             ZipInputStream(FileInputStream(tempFile)).use { zipIn ->
                 var entry = zipIn.nextEntry
                 while (entry != null) {
-                    val outFile = File(wiiTitleDir, entry.name)
-                    if (!outFile.canonicalPath.startsWith(wiiTitleDir.canonicalPath)) {
+                    val outFile = SaveNames.resolveArchiveEntry(wiiTitleDir, entry.name)
+                    if (outFile == null) {
                         zipIn.closeEntry()
                         entry = zipIn.nextEntry
                         continue
