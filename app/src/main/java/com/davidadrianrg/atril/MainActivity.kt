@@ -104,6 +104,16 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission(),
     ) { /* La app seguirá funcionando aunque se deniegue. */ }
 
+    /**
+     * Atril vuelve a primer plano: la partida que se estaba contando termina
+     * (el emulador ya no está delante). Sin sesión abierta, o si duró menos de
+     * 5 s, no se guarda nada.
+     */
+    override fun onResume() {
+        super.onResume()
+        (applicationContext as RomMSyncApplication).container.playStats.endSession()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

@@ -78,7 +78,20 @@ fun main() {
 
         DisposableEffect(window) {
             appWindow = window
-            onDispose { if (appWindow == window) appWindow = null }
+            // Recuperar el foco de la ventana = el emulador ya no está delante:
+            // ahí termina la partida que se estaba contando.
+            val focusListener = object : java.awt.event.WindowFocusListener {
+                override fun windowGainedFocus(e: java.awt.event.WindowEvent?) {
+                    state.playStats.endSession()
+                }
+
+                override fun windowLostFocus(e: java.awt.event.WindowEvent?) = Unit
+            }
+            window.addWindowFocusListener(focusListener)
+            onDispose {
+                window.removeWindowFocusListener(focusListener)
+                if (appWindow == window) appWindow = null
+            }
         }
 
         // Atajos globales vía KeyEventDispatcher de AWT: reciben TODOS los key

@@ -42,6 +42,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.playstats.GamePlayStats
+import com.davidadrianrg.atril.core.playstats.PlayTimeFormat
 import java.io.File
 import javax.swing.JFileChooser
 
@@ -235,4 +237,72 @@ fun Modifier.focusHighlight(shape: Shape = RoundedCornerShape(12.dp)): Modifier 
     this
         .onFocusChanged { focused = it.hasFocus }
         .then(if (focused) Modifier.border(2.5.dp, ring, shape) else Modifier)
+}
+
+/** Insignia de favorito de las tarjetas: la píldora habitual con una estrella delante. */
+@Composable
+fun FavoriteBadge() {
+    Row(
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            AppIcons.Star,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(11.dp),
+        )
+        Spacer(Modifier.width(3.dp))
+        Text(
+            tr("launcher.badge.favorite"),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
+}
+
+/**
+ * Estrella de favorito de los detalles: rellena cuando el grupo es favorito y
+ * en contorno cuando no. El texto accesible dice la acción que hará.
+ */
+@Composable
+fun FavoriteStar(favorite: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            if (favorite) AppIcons.Star else AppIcons.StarBorder,
+            contentDescription = tr(if (favorite) "game.favorite.remove" else "game.favorite.add"),
+            tint = if (favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * Filas «Última partida» y «Tiempo jugado» de los detalles de juego, con el
+ * formato compartido de [PlayTimeFormat].
+ */
+@Composable
+fun GameStatsRows(stats: GamePlayStats) {
+    GameStatRow(
+        tr("game.info.last_played"),
+        PlayTimeFormat.relativeDate(stats.lastPlayedAt, System.currentTimeMillis()),
+    )
+    GameStatRow(
+        tr("game.info.play_time"),
+        if (stats.totalPlayedMs > 0L) PlayTimeFormat.duration(stats.totalPlayedMs) else tr("game.info.no_time"),
+    )
+}
+
+@Composable
+private fun GameStatRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(
+            label,
+            Modifier.width(130.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+    }
 }

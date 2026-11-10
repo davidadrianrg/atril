@@ -96,6 +96,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.davidadrianrg.atril.RomMSyncApplication
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.playstats.GamePlayStats
+import com.davidadrianrg.atril.core.playstats.PlayStats
+import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
 import com.davidadrianrg.atril.data.local.ServerConfig
 import com.davidadrianrg.atril.domain.model.formatBytesForUi
 import com.davidadrianrg.atril.launch.LaunchPlan
@@ -109,6 +112,13 @@ import kotlinx.coroutines.withContext
 
 /** Juego cuyo medio físico se está "insertando" antes de lanzar. */
 private data class Insertion(val item: ShelfItem, val model: Any?)
+
+/**
+ * Agregado de las estadísticas del grupo del juego (todos sus discos más el
+ * representante): lo que pintan la carta, el detalle y la fila de continuar.
+ */
+private fun Map<Int, PlayStats>.statsOf(item: ShelfItem): GamePlayStats =
+    PlayStatsLogic.aggregate(item.groupRomIds + item.rom.id, this)
 
 /**
  * Launcher de juegos descargados, a pantalla completa y sin chrome permanente:
@@ -136,6 +146,7 @@ fun PlayScreen(
                     physicalMediaRepository = container.physicalMediaRepository,
                     emulatorLauncher = container.emulatorLauncher,
                     localGames = container.localGamesRepository,
+                    playStatsRepository = container.playStats,
                 )
             }
         }
@@ -143,6 +154,7 @@ fun PlayScreen(
 
     val items by viewModel.items.collectAsState()
     val loading by viewModel.loading.collectAsState()
+    val playStats by viewModel.playStats.collectAsState()
     val settings by container.settingsRepository.settings.collectAsState(
         initial = ServerConfig("", "", "", 2)
     )
@@ -233,7 +245,12 @@ fun PlayScreen(
                         insertProgress.snapTo(0f)
                         insertProgress.animateTo(1f, tween(com.davidadrianrg.atril.core.launch.InsertionMotion.DURATION_MS, easing = LinearEasing))
                         val error = viewModel.startLaunch(context, plan)
-                        if (error != null) notify(error)
+                        if (error != null) {
+                            notify(error)
+                        } else {
+                            // Lanzamiento aceptado: la partida empieza a contar.
+                            viewModel.onGameLaunched(item)
+                        }
                     }
                 }
             } finally {
@@ -389,6 +406,7 @@ fun PlayScreen(
                                 val hidden = insertion?.item?.rom?.id == item.rom.id
                                 LauncherGameObject(
                                     item = item,
+                                    favorite = playStats.statsOf(item).favorite,
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .padding(vertical = 8.dp)
@@ -515,6 +533,8 @@ fun PlayScreen(
         LocalGameSheet(
             item = item,
             scraping = scrapingId == item.localGame?.id,
+            stats = playStats.statsOf(item),
+            onToggleFavorite = { viewModel.toggleFavorite(item) },
             onPlay = { selectedRomId = null; play(item) },
             onRename = { viewModel.renameLocal(item.localGame!!.id, it) },
             onRetryScrape = {
@@ -546,6 +566,8 @@ fun PlayScreen(
                 isDownloaded = true,
                 isDownloading = false,
                 discCount = item.discCount,
+                stats = playStats.statsOf(item),
+                onToggleFavorite = { viewModel.toggleFavorite(item) },
                 syncEnabled = saveSyncEnabled,
                 savesPathOverride = item.savesPathOverride,
                 excludedFromSync = item.excludedFromSync,
