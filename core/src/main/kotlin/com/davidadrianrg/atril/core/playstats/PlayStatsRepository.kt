@@ -59,7 +59,7 @@ class PlayStatsRepository(
         if (!tracker.isRunning()) return null
         val session = tracker.end()
         if (session == null) {
-            log("WARN playstats: sesión descartada (menos de ${PlaySessionTracker.MIN_SESSION_MS / 1000} s)")
+            log("WARN playstats: session discarded (shorter than ${PlaySessionTracker.MIN_SESSION_MS / 1000} s)")
             return null
         }
         store.recordSession(session.romId, session.endedAt, session.durationMs)
