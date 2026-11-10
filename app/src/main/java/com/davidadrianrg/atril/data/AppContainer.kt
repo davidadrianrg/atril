@@ -111,6 +111,39 @@ class AppContainer(private val appContext: Context) {
 
     val apkInstallHelper = ApkInstallHelper(appContext)
 
+    /** Importación SAF -> `<romsRoot>/<plataforma>` para los juegos manuales. */
+    val romFileImporter = com.davidadrianrg.atril.data.storage.RomFileImporter(appContext)
+
+    val romFileImportService = com.davidadrianrg.atril.data.repository.RomFileImportService(
+        importer = romFileImporter,
+        romRepository = romRepository,
+        settingsRepository = settingsRepository,
+    )
+
+    /** Abre un APK instalado o el instalador del sistema; nunca un emulador. */
+    val apkGameLauncher = com.davidadrianrg.atril.launch.ApkGameLauncher(appContext, apkInstallHelper)
+
+    val gameLauncher = com.davidadrianrg.atril.launch.GameLauncher(
+        emulatorLauncher = emulatorLauncher,
+        apkGameLauncher = apkGameLauncher,
+    )
+
+    /**
+     * Resolución perezosa + lanzamiento compartido por la Biblioteca y Jugar.
+     * `romsRoots` usa la raíz principal y, con el modo dos rutas, la secundaria.
+     */
+    val romLaunchService = com.davidadrianrg.atril.launch.RomLaunchService(
+        linker = romRepository,
+        launcher = gameLauncher,
+        romsRoots = {
+            val config = settingsRepository.settings.first()
+            buildList {
+                add(config.romsRootPath)
+                if (config.dualRomsPathsEnabled) add(config.secondaryRomsPath)
+            }.filter { it.isNotBlank() }
+        },
+    )
+
     /**
      * Called when server settings change to refresh the API client.
      */

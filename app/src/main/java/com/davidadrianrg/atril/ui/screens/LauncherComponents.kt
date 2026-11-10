@@ -455,7 +455,10 @@ internal fun LauncherCaption(
             overflow = TextOverflow.Ellipsis,
             textAlign = if (alignStart) TextAlign.Start else TextAlign.Center,
         )
-        if (!item.launchable) {
+        // Un juego manual sin ruta sigue siendo lanzable: la app buscará el
+        // fichero al pulsar Jugar (resolución perezosa).
+        val canAttemptLaunch = item.launchable || item.isManualDownloaded
+        if (!canAttemptLaunch) {
             Spacer(Modifier.height(4.dp))
             Text(
                 tr(if (item.isLocalSource) "local.file_missing" else "launcher.not_launchable"),
@@ -465,7 +468,7 @@ internal fun LauncherCaption(
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            PlayPill(enabledLook = item.launchable && !playBusy, onClick = onPlay)
+            PlayPill(enabledLook = canAttemptLaunch && !playBusy, onClick = onPlay)
             Row(
                 Modifier
                     .heightIn(min = 48.dp)

@@ -13,14 +13,19 @@ import com.davidadrianrg.atril.data.local.dao.PlatformDao
 import com.davidadrianrg.atril.data.local.dao.RomDao
 import com.davidadrianrg.atril.data.local.entity.DownloadedRomEntity
 import com.davidadrianrg.atril.data.repository.LauncherDisplayMode
+import com.davidadrianrg.atril.data.repository.LocateOutcome
 import com.davidadrianrg.atril.data.repository.PhysicalMediaRepository
+import com.davidadrianrg.atril.data.repository.RomFileImportService
 import com.davidadrianrg.atril.data.repository.RomRepository
 import com.davidadrianrg.atril.data.repository.SettingsRepository
 import com.davidadrianrg.atril.domain.model.Rom
 import com.davidadrianrg.atril.domain.model.RomFile
 import com.davidadrianrg.atril.launch.EmulatorLauncher
+import com.davidadrianrg.atril.launch.GameLaunchPlan
+import com.davidadrianrg.atril.launch.GameLaunchRequest
 import com.davidadrianrg.atril.launch.LaunchPlan
 import com.davidadrianrg.atril.launch.LaunchRequest
+import com.davidadrianrg.atril.launch.RomLaunchService
 import com.davidadrianrg.atril.core.i18n.tr
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -100,6 +105,8 @@ class ShelfViewModel(
     private val localGames: com.davidadrianrg.atril.core.localgames.LocalGamesRepository,
     private val playStatsRepository: com.davidadrianrg.atril.core.playstats.PlayStatsRepository,
     private val preLaunchSaveSync: com.davidadrianrg.atril.launch.PreLaunchSaveSync? = null,
+    private val romLaunchService: RomLaunchService? = null,
+    private val romFileImportService: RomFileImportService? = null,
 ) : ViewModel() {
 
     private val dtoCache = mutableMapOf<Int, RomDto>()
@@ -469,7 +476,7 @@ class ShelfViewModel(
     }
     fun setLocalCover(id: String, input: java.io.InputStream) { viewModelScope.launch { localGames.setManualCover(id, input) } }
 
-    suspend fun prepareLaunch(item: ShelfItem): LaunchPlan {
+    suspend fun prepareLaunch(item: ShelfItem): GameLaunchPlan {
         // Pull de saves con tope de 8 s: nunca impide ni retrasa más el lanzamiento.
         val sync = preLaunchSaveSync
         if (sync != null && item.rom.id > 0) {
@@ -482,20 +489,60 @@ class ShelfViewModel(
                 _messages.tryEmit(tr("sync.before_launch.failed"))
             }
         }
-        return emulatorLauncher.prepare(
-            LaunchRequest(
-                platformSlug = item.rom.platformSlug,
-                platformLabel = item.platformLabel,
-                localPath = item.localLaunchPath,
-                knownFileNames = item.knownFileNames,
-                overrideFamilyId = item.launchOverride,
-                saveEmulatorId = item.platformEmulatorId,
-            ),
-        )
+        val service = romLaunchService
+        if (service != null) {
+            return service.prepare(
+                GameLaunchRequest(
+                    romId = item.rom.id,
+                    platformSlug = item.rom.platformSlug,
+                    platformLabel = item.platformLabel,
+                    localPath = item.localLaunchPath,
+                    fileName = item.rom.fileName,
+                    knownFileNames = item.knownFileNames,
+                    overrideFamilyId = item.launchOverride,
+                    saveEmulatorId = item.platformEmulatorId,
+                ),
+            )
+        }
+        // Sin servicio (tests o cableado incompleto): comportamiento anterior.
+        return when (
+            val plan = emulatorLauncher.prepare(
+                LaunchRequest(
+                    platformSlug = item.rom.platformSlug,
+                    platformLabel = item.platformLabel,
+                    localPath = item.localLaunchPath,
+                    knownFileNames = item.knownFileNames,
+                    overrideFamilyId = item.launchOverride,
+                    saveEmulatorId = item.platformEmulatorId,
+                ),
+            )
+        ) {
+            is LaunchPlan.Ready -> GameLaunchPlan.Ready(plan)
+            is LaunchPlan.Failed -> GameLaunchPlan.Failed(plan.message)
+        }
     }
 
-    fun startLaunch(activityContext: android.content.Context, plan: LaunchPlan.Ready): String? =
-        emulatorLauncher.start(activityContext, plan)
+    /** Arranca el plan (emulador o APK); null = aceptado. */
+    fun startLaunch(activityContext: android.content.Context, plan: GameLaunchPlan): String? =
+        romLaunchService?.start(activityContext, plan)
+            ?: when (plan) {
+                is GameLaunchPlan.Ready -> emulatorLauncher.start(activityContext, plan.plan)
+                is GameLaunchPlan.Apk -> tr("launch.error.failed", plan.apkFile.name, "")
+                is GameLaunchPlan.Failed -> plan.message
+            }
+
+    /** Asocia el documento elegido al juego del launcher (Localizar archivo). */
+    suspend fun locateFile(item: ShelfItem, uri: android.net.Uri, overwrite: Boolean): LocateOutcome {
+        val service = romFileImportService ?: return LocateOutcome.CopyFailed
+        return service.locate(
+            romId = item.rom.id,
+            groupRomIds = item.groupRomIds,
+            platformSlug = item.rom.platformSlug,
+            fileName = item.rom.fileName,
+            uri = uri,
+            overwrite = overwrite,
+        )
+    }
 
     /**
      * Convierte el DTO del servidor en el modelo de dominio. Si no hay DTO
