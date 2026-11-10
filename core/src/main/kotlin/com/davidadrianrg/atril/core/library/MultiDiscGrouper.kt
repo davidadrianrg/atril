@@ -47,16 +47,6 @@ data class DiscGroup(
  */
 object MultiDiscGrouper {
 
-    private val DISC_REGEX = Regex(
-        """\((?:disc|disk|cd)\s*([0-9]{1,2})[^)]*\)""",
-        RegexOption.IGNORE_CASE,
-    )
-    private val DISC_IN_NAME = Regex(
-        """[\s\-–—]*[\[(]\s*(?:disc|disk|cd)\s*[0-9]{1,2}[^\])]*[\])]""",
-        RegexOption.IGNORE_CASE,
-    )
-    private val WHITESPACE = Regex("\\s+")
-    private val TRAILING_SEPARATORS = Regex("""[\s\-–—:]+$""")
     private val REGION_TOKEN = Regex(
         """\((usa|europe|japan|world|germany|france|spain|italy|australia|korea|china|brazil|canada|netherlands|sweden)""",
         RegexOption.IGNORE_CASE,
@@ -66,17 +56,10 @@ object MultiDiscGrouper {
         fileNames.mapNotNull { REGION_TOKEN.find(it)?.groupValues?.get(1)?.lowercase() }.toSet()
 
     /** Nº de disco extraído del nombre de fichero, o null si no lleva marca. */
-    fun discNumber(fileName: String): Int? =
-        DISC_REGEX.find(fileName)?.groupValues?.get(1)?.toIntOrNull()
+    fun discNumber(fileName: String): Int? = DiscMarks.discNumber(fileName)
 
     /** Nombre normalizado para comparar: sin marcas de disco, minúsculas, espacios simples. */
-    fun normalizeName(name: String): String =
-        DISC_IN_NAME.replace(name, "")
-            .trim()
-            .lowercase()
-            .replace(WHITESPACE, " ")
-            .replace(TRAILING_SEPARATORS, "")
-            .trim()
+    fun normalizeName(name: String): String = DiscMarks.normalizeName(name)
 
     /** Agrupa la lista completa; devuelve un grupo por cada juego a mostrar. */
     fun group(entries: List<DiscEntry>): List<DiscGroup> {

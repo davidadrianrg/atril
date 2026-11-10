@@ -40,7 +40,7 @@ object LaunchFileResolver {
     fun resolve(localPath: String, knownFileNames: List<String> = emptyList()): LaunchFile {
         if (localPath.isBlank()) return LaunchFile.Manual
         val file = File(localPath)
-        if (file.isFile) return LaunchFile.Found(playlistFor(file) ?: file)
+        if (file.isFile) return LaunchFile.Found(PlaylistFiles.siblingPlaylist(file) ?: file)
         if (file.isDirectory) return pick(listFiles(file))?.let { LaunchFile.Found(it) } ?: LaunchFile.Missing(localPath)
 
         val parent = file.parentFile ?: return LaunchFile.Missing(localPath)
@@ -65,17 +65,5 @@ object LaunchFileResolver {
                 ?.let { return it }
         }
         return usable.maxByOrNull { it.length() }
-    }
-
-    /** `.m3u` en la misma carpeta que lista [file], si existe. */
-    private fun playlistFor(file: File): File? {
-        if (file.extension.equals("m3u", ignoreCase = true)) return null
-        val siblings = file.parentFile?.listFiles { f -> f.isFile && f.extension.equals("m3u", ignoreCase = true) }
-            ?: return null
-        return siblings.sortedBy { it.name }.firstOrNull { m3u ->
-            runCatching {
-                m3u.readLines().any { line -> line.trim().substringAfterLast('/').substringAfterLast('\\') == file.name }
-            }.getOrDefault(false)
-        }
     }
 }
