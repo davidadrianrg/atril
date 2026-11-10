@@ -79,16 +79,33 @@ RomM admite login OAuth/OIDC tras proxys (Authentik, Authelia...), que suele rom
 ## ✨ Qué hace la app
 
 - **📚 Biblioteca** — Navega por tu servidor RomM con carátulas, búsqueda y filtros (todos / faltantes / descargados / favoritos). Detecta juegos ya presentes en disco con *Escanear biblioteca*.
+- **Vistas de la Biblioteca** — Alterna entre la cuadrícula clásica y un *Carrusel 3D* opcional: carátulas inclinadas en 3D con un reflejo sutil abajo, que se recorren con el mando o el teclado. La elección se recuerda entre sesiones y la carga con esqueleto y el scroll infinito funcionan en las dos vistas.
+- **Opciones de vista** — El botón de ajustes de la barra de la Biblioteca (R1 con mando, R en el escritorio) abre un panel contextual — hoja inferior en Android, panel flotante en el escritorio — con *Orden* (nombre, jugado recientemente o año, cuando la lista tiene fechas de lanzamiento), *Origen* (todos, local o RomM), *Vista* (cuadrícula o carrusel 3D) y *Tamaño* (pequeño, mediano o grande). Los cambios se aplican al instante, el panel sigue abierto y los valores se guardan para la próxima sesión. El menú de orden de la barra mantiene la lista completa de criterios, incluido jugado recientemente. Como la Biblioteca lista juegos de RomM, al elegir *Origen: Local* se muestra una explicación de que los juegos locales están en la pantalla Jugar.
+- **Índice A-Z** — Con más de 40 juegos, la Biblioteca muestra una barra de letras en el borde derecho (A-Z y # para números y símbolos). Indexa el resultado filtrado, así que respeta la búsqueda y los filtros, y salta a juegos ya cargados; reserva su propio espacio y se atenúa cuando está inactiva en vez de tapar las cartas.
 - **Favoritos** — Marca un juego con la estrella desde su ficha (Android y Linux) para tenerlo a mano: su carta muestra una insignia de estrella y las dos bibliotecas ganan un filtro *Favoritos* junto a todos / faltantes / descargados.
 - **Tiempo jugado y última partida** — Atril cronometra cada partida y muestra *Última partida* y *Tiempo jugado* en la ficha del juego («hace 5 min», «ayer», «1 h 23 min»), con «Nunca» mientras no lo hayas jugado. Las sesiones de menos de 5 segundos no cuentan. Los favoritos y el tiempo jugado se guardan en el dispositivo, por juego: no se sincronizan con tu servidor RomM.
 - **Seguir jugando** — La pantalla Jugar muestra arriba, bajo los filtros de plataforma, una fila compacta con los cinco juegos jugados más recientemente (carátula, nombre y tiempo jugado); toca uno para saltar a él en el carrusel. La fila se oculta mientras no hay datos de partida.
 - **Leyenda del mando (solo Android)** — En la pantalla Jugar, una barra discreta y translúcida indica qué hacen ahora A, B, X e Y: Jugar, Atrás, Favorito y Detalles. No captura toques y Jugar sigue siendo inmersiva.
+- **Juegos locales multidisco** — Los archivos locales con marca de disco como `(Disc 1)`, `(Disk 2)`, `(CD 3)` o `(Disc 1 of 4)` se agrupan en una sola entrada de Jugar con una insignia de *N discos* en Android y Linux. La ficha permite elegir el disco (el 1 por defecto, o el `.m3u` hermano si existe) y Atril recuerda la elección por juego; al lanzar se usa el disco elegido y se sigue prefiriendo el `.m3u`. Los juegos de RomM y los nombres parecidos sin marca de disco no se tocan.
 - **⬇️ Descargas** — Cola con descargas paralelas configurables (1–5), reanudación automática si se corta la red, verificación de integridad por hash y aviso de espacio insuficiente. Opción *solo WiFi* para no gastar datos.
 - **🔔 Notificaciones de actualización** — comprueba GitHub al abrir la app y una vez al día; envía una notificación cuando hay una versión nueva de Atril.
-- **💾 Sincronización de saves** — Tus partidas guardadas siempre al día en todos los dispositivos, con el [Device Sync Protocol](https://docs.romm.app/latest/developers/device-sync-protocol/) de RomM (v4.9+): sube lo que cambió en el portátil, bájate lo que jugaste en el PC. Resuelve conflictos explícitamente en vez de sobrescribir.
+- **💾 Sincronización de saves** — Tus partidas guardadas siempre al día en todos los dispositivos, con el [Device Sync Protocol](https://docs.romm.app/latest/developers/device-sync-protocol/) de RomM (v4.9+): sube lo que cambió en el portátil, bájate lo que jugaste en el PC. Resuelve conflictos explícitamente en vez de sobrescribir. Antes de lanzar un juego de RomM con la sincronización de saves activada, Atril descarga primero las partidas nuevas o más recientes del servidor con un tope duro de 8 segundos: si el servidor va lento o no responde, el lanzamiento sigue adelante igualmente.
 - **🗂️ Exportación de metadatos** — Opción genérica «Descargar media con los juegos» (covers, capturas, vídeo y manual en `<ROMs>/downloaded_media/<plataforma>/…` + un JSON de metadatos por juego, utilizable desde cualquier frontend) y exportación de `gamelist.xml` para ES-DE sobre esa misma media.
 - **🔄 Auto-actualización** — Comprueba, descarga e instala nuevas versiones desde GitHub Releases sin desinstalar nada (ver Instalación).
 - **🖥️ Linux a la par de Android** — La app de escritorio comparte tema ("Midnight Arcade"), biblioteca con carátulas y detalle de juego completo (screenshots, metadatos IGDB), cola de descargas con cancelar/reintentar/reanudar, sync de saves con resolución de conflictos y exportación ES-DE con merge no destructivo.
+
+### Controles de la Biblioteca
+
+| Acción | Android (mando) | Linux (teclado) |
+|---|---|---|
+| Abrir las opciones de vista | R1 | R o Av Pág |
+| Elegir orden, origen, vista o tamaño | Cruceta y A en el panel | Flechas y Enter |
+| Carrusel 3D: juego anterior / siguiente | Cruceta izquierda / derecha | Izquierda / derecha |
+| Carrusel 3D: abrir la ficha | A | Enter |
+| Barra de letras: entrar | Abajo, al final de la cuadrícula (o en cualquier momento en el carrusel) | Abajo, igual |
+| Barra de letras: mover, saltar y salir | Izquierda / derecha, A, Arriba | Izquierda / derecha, Enter, Arriba |
+
+R1 abre las opciones de vista solo si el buscador no tiene el foco y no hay una ficha abierta. En la pantalla Jugar, L1 y R1 siguen cambiando el filtro de plataforma.
 
 ### Emuladores soportados para sync de saves
 

@@ -79,17 +79,34 @@ RomM supports OAuth/OIDC login behind proxies (Authentik, Authelia...), which us
 ## ✨ What the app does
 
 - **📚 Library** — Browse your RomM server with cover art, search and filters (all / missing / downloaded / favorites). Detects games already present on disk with *Scan library*.
+- **Library views** — Switch the Library between the classic grid and an optional *Cover flow*: covers tilted in 3D with a subtle bottom reflection, navigated with the D-pad or the keyboard. The choice is remembered between sessions, and skeleton loading and infinite scroll work in both views.
+- **View options** — The tune button in the Library bar (R1 on a gamepad, R on the desktop) opens a contextual panel — a bottom sheet on Android, a floating panel on the desktop — with *Sort* (name, last played or year, when the list has release dates), *Source* (all, local or RomM), *View* (grid or cover flow) and *Size* (small, medium or large). Changes apply immediately, the panel stays open and the values are saved for the next session. The toolbar sort menu keeps the full list of criteria, including last played. Because the Library lists RomM games, choosing *Source: Local* shows an explanation that local games live in the Play screen.
+- **A-Z index** — With more than 40 games the Library shows a letter bar on the right edge (A-Z plus # for numbers and symbols). It indexes the filtered result, so search and filters are respected, and jumps to games already loaded; it reserves its own space and fades when idle instead of covering the cards.
 - **Favorites** — Star a game from its detail view (Android and Linux) to keep it at hand: its card shows a star badge and both libraries gain a *Favorites* filter next to all / missing / downloaded.
 - **Play time and last played** — Atril times every launch and shows *Last played* and *Play time* in the game detail ("5 min ago", "yesterday", "1 h 23 min"), with "Never" until you play a game. Sessions shorter than 5 seconds are not counted. Favorites and play time are stored locally per game — they are not synced to your RomM server.
 - **Continue playing** — The Play screen shows a compact row at the top, under the platform filters, with the five most recently played games (cover, name and play time); tap one to jump to it in the carousel. The row is hidden while there is no play data.
 - **Gamepad legend (Android only)** — On the Play screen, a discreet translucent bar shows what A, B, X and Y do right now: Play, Back, Favorite and Details. It captures no touches and Play stays immersive.
+- **Multi-disc local games** — Local files named with a disc mark such as `(Disc 1)`, `(Disk 2)`, `(CD 3)` or `(Disc 1 of 4)` are grouped into one Play entry with an *N discs* badge on Android and Linux. The detail lets you pick the disc (disc 1 by default, or the sibling `.m3u` when present) and Atril remembers the choice per game; launching uses the chosen disc and still prefers the `.m3u`. RomM games and similar names without a disc mark are left untouched.
 - **⬇️ Downloads** — Queue with configurable parallel downloads (1–5), automatic resume if the network drops, hash-based integrity verification and an out-of-space warning. *WiFi-only* option to avoid using data.
 - **🔔 Update notifications** — checks GitHub on launch and once a day; posts a notification when a new Atril version is available.
-- **💾 Save sync** — Your save files always up to date on every device, using RomM's [Device Sync Protocol](https://docs.romm.app/latest/developers/device-sync-protocol/) (v4.9+): upload what changed on the handheld, download what you played on the PC. Resolves conflicts explicitly instead of overwriting.
+- **💾 Save sync** — Your save files always up to date on every device, using RomM's [Device Sync Protocol](https://docs.romm.app/latest/developers/device-sync-protocol/) (v4.9+): upload what changed on the handheld, download what you played on the PC. Resolves conflicts explicitly instead of overwriting. Before launching a RomM game with save sync enabled, Atril first pulls saves that are new or newer from the server with a hard 8-second cap: if the server is slow or unreachable, the launch goes ahead anyway.
 - **🗂️ Metadata export** — Generic "Download media with games" option (covers, screenshots, video and manual under `<ROMs>/downloaded_media/<platform>/…` plus a metadata JSON per game, usable from any frontend) and ES-DE `gamelist.xml` export built on that same media.
 - **🔄 Auto-update** — Checks, downloads and installs new versions from GitHub Releases without uninstalling anything (see Installation).
 - **🖥️ Linux on par with Android** — The desktop app shares the theme ("Midnight Arcade"), library with cover art and full game details (screenshots, IGDB metadata), download queue with cancel/retry/resume, save sync with conflict resolution and ES-DE export with non-destructive merge.
 - **🌐 English & Spanish UI** — The interface is available in both English and Spanish.
+
+### Library controls
+
+| Action | Android (gamepad) | Linux (keyboard) |
+|---|---|---|
+| Open view options | R1 | R or Page Down |
+| Choose sort, source, view or size | D-pad and A in the panel | Arrow keys and Enter |
+| Cover flow: previous / next game | D-pad left / right | Left / Right |
+| Cover flow: open the detail | A | Enter |
+| Letter bar: enter | Down at the end of the grid, or any time in cover flow | Down, same |
+| Letter bar: move, jump and leave | Left / Right, A, Up | Left / Right, Enter, Up |
+
+R1 opens the view options only when the search field is not focused and no game detail is open. On the Play screen, L1 and R1 keep switching the platform filter.
 
 ### Emulators supported for save sync
 
