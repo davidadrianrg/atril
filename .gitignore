@@ -84,3 +84,6 @@ secrets.properties
 
 # Signing keystore properties (contains keystore credentials)
 keystore.properties
+
+# Swarm run artifacts
+.swarm/

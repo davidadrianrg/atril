@@ -78,7 +78,11 @@ RomM supports OAuth/OIDC login behind proxies (Authentik, Authelia...), which us
 
 ## ✨ What the app does
 
-- **📚 Library** — Browse your RomM server with cover art, search and filters (all / missing / downloaded). Detects games already present on disk with *Scan library*.
+- **📚 Library** — Browse your RomM server with cover art, search and filters (all / missing / downloaded / favorites). Detects games already present on disk with *Scan library*.
+- **Favorites** — Star a game from its detail view (Android and Linux) to keep it at hand: its card shows a star badge and both libraries gain a *Favorites* filter next to all / missing / downloaded.
+- **Play time and last played** — Atril times every launch and shows *Last played* and *Play time* in the game detail ("5 min ago", "yesterday", "1 h 23 min"), with "Never" until you play a game. Sessions shorter than 5 seconds are not counted. Favorites and play time are stored locally per game — they are not synced to your RomM server.
+- **Continue playing** — The Play screen shows a compact row at the top, under the platform filters, with the five most recently played games (cover, name and play time); tap one to jump to it in the carousel. The row is hidden while there is no play data.
+- **Gamepad legend (Android only)** — On the Play screen, a discreet translucent bar shows what A, B, X and Y do right now: Play, Back, Favorite and Details. It captures no touches and Play stays immersive.
 - **⬇️ Downloads** — Queue with configurable parallel downloads (1–5), automatic resume if the network drops, hash-based integrity verification and an out-of-space warning. *WiFi-only* option to avoid using data.
 - **🔔 Update notifications** — checks GitHub on launch and once a day; posts a notification when a new Atril version is available.
 - **💾 Save sync** — Your save files always up to date on every device, using RomM's [Device Sync Protocol](https://docs.romm.app/latest/developers/device-sync-protocol/) (v4.9+): upload what changed on the handheld, download what you played on the PC. Resolves conflicts explicitly instead of overwriting.
@@ -124,6 +128,7 @@ core/src/main/kotlin/com/davidadrianrg/atril/core/   # Pure JVM — shared Andro
 ├── remote/              # Retrofit + OkHttp (RomM API, Device Sync Protocol)
 ├── sync/platform/       # Per-emulator save handlers (RetroArch, melonDS, PS2, PS3, 3DS...)
 ├── download/            # PathMapper (per-platform folder structure)
+├── playstats/           # Play time, last played and favorites (local JSON store)
 └── util/                # RootShell, ROM header reading...
 
 app/src/main/java/com/davidadrianrg/atril/           # Android
@@ -147,7 +152,7 @@ desktop/src/main/kotlin/com/davidadrianrg/atril/desktop/  # Linux (Compose Deskt
 - **Desktop**: Compose Desktop · AppImage (jlinked runtime included)
 - **UI languages**: the interface is available in English and Spanish.
 - **Code language**: English in identifiers/logs; UI texts are localized.
-- **Tests**: `./gradlew test` (unit tests in `core/src/test` and `app/src/test`).
+- **Tests**: `./gradlew test` (unit tests in `core/src/test`, `desktop/src/test` and `app/src/test`).
 
 ## 🔁 CI/CD
 
