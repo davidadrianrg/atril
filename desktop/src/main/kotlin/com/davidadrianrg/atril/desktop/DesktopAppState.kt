@@ -10,7 +10,11 @@ import com.davidadrianrg.atril.core.media.GameMediaPaths
 import com.davidadrianrg.atril.core.playstats.GamePlayStats
 import com.davidadrianrg.atril.core.playstats.JsonPlayStatsStore
 import com.davidadrianrg.atril.core.playstats.PlayStatsRepository
+import com.davidadrianrg.atril.core.download.RomFileLocator
 import com.davidadrianrg.atril.core.launch.DesktopLaunchPlanner
+import com.davidadrianrg.atril.core.launch.LaunchHost
+import com.davidadrianrg.atril.core.launch.LaunchTarget
+import com.davidadrianrg.atril.core.launch.LaunchTargetResolver
 import com.davidadrianrg.atril.core.remote.dto.SaveDto
 import com.davidadrianrg.atril.core.remote.dto.SearchRomDto
 import com.davidadrianrg.atril.core.remote.dto.StateDto
@@ -171,6 +175,62 @@ class DesktopAppState(private val scope: CoroutineScope) {
     /** Se incrementa al completar descargas para recomponer la biblioteca. */
     private val _downloadedVersion = MutableStateFlow(0)
     val downloadedVersion: StateFlow<Int> = _downloadedVersion
+
+    /**
+     * Notifica un cambio de estado de descarga y refresca la ficha abierta.
+     *
+     * La ficha guarda una copia del [GameCard]; si no se reconstruye por id,
+     * sigue mostrando "Descargar"/"Marcar como descargado" después de asociar
+     * un fichero (REV-006).
+     */
+    private fun bumpDownloadedVersion() {
+        _downloadedVersion.value = _downloadedVersion.value + 1
+        refreshSelectedGame()
+    }
+
+    /**
+     * Reconstruye por id la ficha abierta tras cambiar el estado de descarga.
+     *
+     * La Biblioteca ([_roms]) solo se carga al visitarla y la Pantalla Jugar es
+     * la sección inicial, así que una ficha abierta desde el lanzador no está
+     * en [buildCards]. En ese caso se reconstruye con el registro local
+     * (`library.properties`) y las marcas manuales, que es la misma fuente que
+     * usa la Pantalla Jugar, conservando el grupo y su `discCount` (REV-015).
+     * Solo lee properties: ni red ni trabajo pesado.
+     */
+    private fun refreshSelectedGame() {
+        val current = _selectedGame.value ?: return
+        _selectedGame.value = buildCards(_roms.value).firstOrNull { it.rep.id == current.rep.id }
+            ?: rebuildFromLocalLibrary(current)
+    }
+
+    /**
+     * Tarjeta de reserva cuando la Biblioteca no está cargada.
+     *
+     * Reutiliza los DTOs del grupo abierto (metadatos ya resueltos, sin red),
+     * refresca nombre/fichero/plataforma desde [DesktopLibrary.rom] y recalcula
+     * `downloaded` con los ids registrados o marcados a mano, con la misma
+     * regla que [buildCards].
+     *
+     * Conserva el invariante de [GameCard] que ya cumplen los dos productores
+     * de tarjetas ([buildCards] usa los ids de descarga y la Pantalla Jugar
+     * todos los del grupo): `groupRoms` incluye siempre al representante y `rep`
+     * es su primera entrada. Excluirlo dejaba al detalle operando sobre un grupo
+     * incompleto: no borraba la descarga del representante, no lo volvía a
+     * marcar como descargado y hacía vacuo a `isManualDownloaded` (REV-019).
+     */
+    private fun rebuildFromLocalLibrary(current: GameCard): GameCard {
+        val group = (listOf(current.rep) + current.groupRoms).distinctBy { it.id }
+        val roms = group.map { rom ->
+            val entry = library.rom(rom.id) ?: return@map rom
+            rom.copy(name = entry.name, fileName = entry.fileName, platformSlug = entry.platformSlug)
+        }
+        return current.copy(
+            rep = roms.first(),
+            groupRoms = roms,
+            downloaded = roms.all { it.id in downloadedIds || it.id in manualIds },
+        )
+    }
 
     private var api: RomMApiService? = null
 
@@ -674,22 +734,176 @@ class DesktopAppState(private val scope: CoroutineScope) {
     fun isManualDownloaded(card: GameCard): Boolean =
         card.groupRoms.isNotEmpty() && card.groupRoms.all { it.id in manualIds }
 
+    /**
+     * Marca el juego como descargado y, si el fichero ya está en la carpeta de
+     * su plataforma, persiste la ruta para que quede lanzable. Lo que no
+     * aparece se queda como marca manual (sin ruta).
+     *
+     * Variante síncrona conservada para llamantes sin corrutina; la UI usa
+     * [markDownloadedManuallySuspending] para no hacer E/S en el hilo de Compose.
+     */
     fun markDownloadedManually(card: GameCard) {
-        card.groupRoms.forEach { manualIds.add(it.id) }
-        persistManualIds()
-        _downloadedVersion.value = _downloadedVersion.value + 1
-        showSnackbar(tr("library.marked_downloaded", card.rep.name))
+        linkManual(card)
     }
 
-    fun unmarkDownloadedManually(card: GameCard) {
-        card.groupRoms.forEach { manualIds.remove(it.id) }
+    /**
+     * Igual que [markDownloadedManually] pero con la búsqueda y la escritura en
+     * `Dispatchers.IO`: el BFS del localizador y `library.properties` no pueden
+     * bloquear el hilo de UI.
+     */
+    suspend fun markDownloadedManuallySuspending(card: GameCard) {
+        withContext(Dispatchers.IO) { linkManual(card) }
+    }
+
+    private fun linkManual(card: GameCard) {
+        var linked = false
+        card.groupRoms.forEach { rom ->
+            val file = findLocalFile(rom)
+            if (file != null) {
+                attachPath(rom, file.absolutePath)
+                manualIds.remove(rom.id)
+                linked = true
+            } else {
+                manualIds.add(rom.id)
+            }
+        }
         persistManualIds()
-        _downloadedVersion.value = _downloadedVersion.value + 1
+        bumpDownloadedVersion()
+        showSnackbar(
+            if (linked) tr("library.file_linked") else tr("library.marked_downloaded", card.rep.name),
+        )
+    }
+
+    /**
+     * Quita la marca manual. Solo elimina de `library.properties` los ids que
+     * estaban marcados a mano: nunca borra entradas de descargas reales.
+     *
+     * Variante síncrona conservada para llamantes sin corrutina; la UI usa
+     * [unmarkDownloadedManuallySuspending] para no escribir en el hilo de Compose.
+     */
+    fun unmarkDownloadedManually(card: GameCard) {
+        unmarkManually(card)
+    }
+
+    /** Igual que [unmarkDownloadedManually] con la escritura en `Dispatchers.IO`. */
+    suspend fun unmarkDownloadedManuallySuspending(card: GameCard) {
+        withContext(Dispatchers.IO) { unmarkManually(card) }
+    }
+
+    private fun unmarkManually(card: GameCard) {
+        val previouslyManual = card.groupRoms.map { it.id }.filter { it in manualIds }.toSet()
+        card.groupRoms.forEach { manualIds.remove(it.id) }
+        previouslyManual.forEach { id ->
+            library.removeRom(id)
+            downloadedIds.remove(id)
+        }
+        persistManualIds()
+        bumpDownloadedVersion()
         showSnackbar(tr("library.unmarked_downloaded", card.rep.name))
     }
 
     /** IDs marcados a mano; el launcher los incluye aunque no tengan fichero. */
     fun manualDownloadedIds(): Set<Int> = manualIds.toSet()
+
+    /** Ruta local asociada a la carta (representante o cualquier disco del grupo). */
+    fun localPathOf(card: GameCard): String? =
+        library.rom(card.rep.id)?.localPath?.takeIf { it.isNotBlank() }
+            ?: card.groupRoms.asSequence()
+                .mapNotNull { library.rom(it.id)?.localPath?.takeIf { path -> path.isNotBlank() } }
+                .firstOrNull()
+
+    /**
+     * Asocia el fichero elegido con el selector nativo a todos los ids del
+     * grupo (D13, como Android). Rechaza `.apk` antes de guardar nada.
+     *
+     * Variante síncrona conservada para llamantes sin corrutina; la UI usa
+     * [locateFileSuspending] para no escribir `library.properties` en Compose.
+     */
+    fun locateFile(card: GameCard, path: String) {
+        linkPickedFile(card, path)
+    }
+
+    /** Igual que [locateFile] con la validación y la escritura en `Dispatchers.IO`. */
+    suspend fun locateFileSuspending(card: GameCard, path: String) {
+        withContext(Dispatchers.IO) { linkPickedFile(card, path) }
+    }
+
+    private fun linkPickedFile(card: GameCard, path: String) {
+        val file = File(path)
+        if (!file.isFile) {
+            showSnackbar(tr("launcher.desktop.file_missing", path))
+            return
+        }
+        val slug = card.rep.platformSlug.orEmpty().ifBlank { "unknown" }
+        if (LaunchTargetResolver.resolve(slug, path, LaunchHost.DESKTOP) is LaunchTarget.ApkUnsupported) {
+            showSnackbar(tr("launch.error.apk_desktop"))
+            return
+        }
+        // D13 (como Android): el fichero elegido se asocia a todos los ids del
+        // grupo, no solo al representante. Así el grupo sigue completo en
+        // `library.roms()` y conserva su discCount al recomponer la Estantería.
+        val group = (card.groupRoms + card.rep).distinctBy { it.id }
+        group.forEach { attachPath(it, file.absolutePath) }
+        group.forEach { manualIds.remove(it.id) }
+        persistManualIds()
+        bumpDownloadedVersion()
+        showSnackbar(tr("library.file_linked"))
+    }
+
+    /** Carpeta de la plataforma: `romsFolderOverride` si existe, si no el slug. */
+    private fun romsFolder(slug: String): String =
+        library.platform(slug).romsFolderOverride?.takeIf { it.isNotBlank() } ?: slug
+
+    /**
+     * Busca el fichero de [rom] bajo la raíz de ROMs configurada.
+     *
+     * SEC-001: el slug y la carpeta vienen de RomM/configuración y no son de
+     * confianza; se validan y se comprueba que la carpeta resuelta (canónica)
+     * queda dentro de `<romsRoot>`. Un slug `../outside` devuelve `null`.
+     */
+    private fun findLocalFile(rom: RomDto): File? {
+        val slug = rom.platformSlug.orEmpty().ifBlank { "unknown" }
+        if (!RomFileLocator.isSafeFileName(slug)) {
+            logRejectedLookup(rom.id, "unsafe platform slug")
+            return null
+        }
+        val rootPath = config.romsRoot.trim()
+        if (rootPath.isBlank()) return null
+        val folder = romsFolder(slug)
+        if (!RomFileLocator.isSafeFileName(folder)) {
+            logRejectedLookup(rom.id, "unsafe platform folder")
+            return null
+        }
+        val root = runCatching { File(rootPath).canonicalFile }.getOrNull() ?: return null
+        val dir = runCatching { File(root, folder).canonicalFile }.getOrNull() ?: return null
+        if (dir != root && !dir.path.startsWith(root.path + File.separator)) {
+            logRejectedLookup(rom.id, "platform folder outside the ROMs root")
+            return null
+        }
+        return RomFileLocator.locateInDirs(listOf(dir), rom.fileName)
+    }
+
+    /** Aviso de diagnóstico sin rutas ni datos personales. */
+    private fun logRejectedLookup(romId: Int, reason: String) {
+        System.err.println("[manual-link] rom $romId: $reason")
+    }
+
+    /** Registra la ruta en `library.properties` conservando el resto de campos. */
+    private fun attachPath(rom: RomDto, path: String) {
+        val slug = rom.platformSlug.orEmpty().ifBlank { "unknown" }
+        val existing = library.rom(rom.id)
+        library.upsertRom(
+            existing?.copy(localPath = path)
+                ?: DesktopLibrary.RomEntry(
+                    romId = rom.id,
+                    name = rom.name,
+                    fileName = rom.fileName,
+                    platformSlug = slug,
+                    localPath = path,
+                ),
+        )
+        downloadedIds.add(rom.id)
+    }
 
     // ── Launcher: medio físico y apertura local ─────────────────────────
 
@@ -721,12 +935,12 @@ class DesktopAppState(private val scope: CoroutineScope) {
         }
         DesktopConfig.physicalMediaIds = physicalIds.joinToString(",")
         DesktopConfig.cardMediaIds = cardIds.joinToString(",")
-        _downloadedVersion.value = _downloadedVersion.value + 1
+        bumpDownloadedVersion()
     }
 
     fun setLauncherDefaultPhysical(on: Boolean) {
         DesktopConfig.launcherDefaultPhysical = on
-        _downloadedVersion.value = _downloadedVersion.value + 1
+        bumpDownloadedVersion()
     }
 
     private val gameLauncher = DesktopGameLauncher()
@@ -741,11 +955,41 @@ class DesktopAppState(private val scope: CoroutineScope) {
      * timeout no impide el lanzamiento.
      */
     suspend fun openLocalGame(card: GameCard): Boolean {
-        val entry = library.rom(card.rep.id)
+        var entry = library.rom(card.rep.id)
             ?: card.groupRoms.asSequence().mapNotNull { library.rom(it.id) }.firstOrNull()
-        val path = entry?.localPath?.takeIf { it.isNotBlank() }
+        var path = entry?.localPath?.takeIf { it.isNotBlank() }
+
+        // Resolución perezosa: un juego manual guarda `""` hasta que el
+        // fichero aparece bajo `<romsRoot>/<plataforma>`. Se persiste al hallarlo.
+        if (path == null || !File(path).isFile) {
+            val located = withContext(Dispatchers.IO) {
+                card.groupRoms.asSequence()
+                    .mapNotNull { rom -> findLocalFile(rom)?.let { rom to it } }
+                    .firstOrNull()
+            }
+            if (located != null) {
+                // D13: la misma ruta se persiste en todo el grupo para que la
+                // Estantería conserve todos los discos y su discCount.
+                val group = (card.groupRoms + card.rep).distinctBy { it.id }
+                group.forEach { attachPath(it, located.second.absolutePath) }
+                group.forEach { manualIds.remove(it.id) }
+                persistManualIds()
+                bumpDownloadedVersion()
+                entry = library.rom(located.first.id)
+                path = located.second.absolutePath
+            }
+        }
+
         if (entry == null || path == null) {
-            showSnackbar(tr("launcher.desktop.no_file"))
+            showSnackbar(
+                if (card.groupRoms.any { it.id > 0 }) tr("launch.error.manual_not_found")
+                else tr("launcher.desktop.no_file"),
+            )
+            return false
+        }
+        // Rechazo del APK antes del pull y del planner (D4).
+        if (LaunchTargetResolver.resolve(entry.platformSlug, path, LaunchHost.DESKTOP) is LaunchTarget.ApkUnsupported) {
+            showSnackbar(tr("launch.error.apk_desktop"))
             return false
         }
         if (entry.romId > 0 && _saveSyncEnabled.value &&
@@ -843,6 +1087,12 @@ class DesktopAppState(private val scope: CoroutineScope) {
             showSnackbar(tr("launcher.desktop.file_missing", file.path))
             return false
         }
+        // Rechazo explícito antes del planner: un APK no se lanza en escritorio
+        // y "no hay emulador configurado" sería un mensaje engañoso.
+        if (LaunchTargetResolver.resolve(slug, file.path, LaunchHost.DESKTOP) is LaunchTarget.ApkUnsupported) {
+            showSnackbar(tr("launch.error.apk_desktop"))
+            return false
+        }
         val platformName = _platforms.value.firstOrNull { it.slug == slug }?.let { it.displayName ?: it.name } ?: slug
         val cfg = library.platform(slug)
         val config = DesktopLaunchPlanner.Config(cfg.launchEmulatorId, cfg.launchExecutable, cfg.launchArgs)
@@ -925,7 +1175,7 @@ class DesktopAppState(private val scope: CoroutineScope) {
     /** Invierte el favorito del juego completo (todos sus discos). */
     fun toggleFavorite(card: GameCard) {
         playStats.toggleFavorite(card.groupRoms.map { it.id } + card.rep.id)
-        _downloadedVersion.value = _downloadedVersion.value + 1
+        bumpDownloadedVersion()
     }
 
     /**
@@ -1057,7 +1307,7 @@ class DesktopAppState(private val scope: CoroutineScope) {
                         }
                     } else {
                         downloadedIds.add(rom.id)
-                        _downloadedVersion.value = _downloadedVersion.value + 1
+                        bumpDownloadedVersion()
                         updateTask(rom.id) { it.copy(status = "done", message = msg) }
                         refreshLocalStats()
                         fetchGameMedia(rom)
@@ -1203,7 +1453,7 @@ class DesktopAppState(private val scope: CoroutineScope) {
                 card.groupRoms.forEach { manualIds.remove(it.id) }
                 persistManualIds()
             }
-            _downloadedVersion.value = _downloadedVersion.value + 1
+            bumpDownloadedVersion()
             refreshLocalStats()
             showSnackbar(
                 when {
@@ -1293,7 +1543,7 @@ class DesktopAppState(private val scope: CoroutineScope) {
                         }
                     }
                 }
-                _downloadedVersion.value = _downloadedVersion.value + 1
+                bumpDownloadedVersion()
                 refreshLocalStats()
                 _scanState.value = ScanState.Done(
                     if (detected > 0) tr("scan.done.detected", detected, checked)
@@ -1575,7 +1825,7 @@ class DesktopAppState(private val scope: CoroutineScope) {
                 rom.platformSlug?.let { slug ->
                     platformMetaCache[slug]?.let { platformMetaCache[slug] = it + (romId to rom) }
                 }
-                _downloadedVersion.value = _downloadedVersion.value + 1
+                bumpDownloadedVersion()
             }
             setScrape(romId, ScrapeUi.Finished(text, found = outcome is com.davidadrianrg.atril.core.scrape.PhysicalMediaScrape.Outcome.Found))
         }

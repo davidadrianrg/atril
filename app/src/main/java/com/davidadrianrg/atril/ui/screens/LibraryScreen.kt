@@ -179,6 +179,9 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                     romRepository = container.romRepository,
                     downloadManager = container.downloadManager,
                     playStats = container.playStats,
+                    settingsRepository = container.settingsRepository,
+                    romLaunchService = container.romLaunchService,
+                    romFileImportService = container.romFileImportService,
                 )
             }
         }
@@ -469,6 +472,25 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
     val fieldShape = RoundedCornerShape(12.dp)
 
     val scope = rememberCoroutineScope()
+
+    // "Localizar archivo": el picker vive aquí y el detalle solo dispara la acción.
+    var locateTarget by remember { mutableStateOf<Pair<Rom, List<Int>>?>(null) }
+    val locateFilePicker = com.davidadrianrg.atril.ui.components.rememberLocateFilePicker(
+        onPicked = { uri, overwrite ->
+            val target = locateTarget
+            if (target == null) {
+                com.davidadrianrg.atril.data.repository.LocateOutcome.InvalidFile
+            } else {
+                viewModel.locateFile(target.first, target.second, uri, overwrite).also { outcome ->
+                    if (outcome == com.davidadrianrg.atril.data.repository.LocateOutcome.Linked) {
+                        locateTarget = null
+                    }
+                }
+            }
+        },
+        onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+    )
+
     val showScrollToTop by remember(viewPrefs.viewMode) {
         derivedStateOf {
             if (viewPrefs.viewMode == LibraryViewMode.COVER_FLOW) {
@@ -1005,6 +1027,8 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                     retroArchBase = retroArchBasePath,
                 )
         }
+        val manualGroupIds = romStatus?.groupRomIds ?: listOf(rom.id)
+        val manualDownloaded = manualGroupIds.all { it in manualIds }
         ModalBottomSheet(
             onDismissRequest = { selectedRom = null },
             sheetState = if (isCompactSheet) {
@@ -1040,14 +1064,22 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 onClose = { selectedRom = null },
                 serverUrl = settings.serverUrl,
                 apiKey = settings.apiKey,
-                isManualDownloaded = romStatus?.groupRomIds?.all { it in manualIds } == true,
+                isManualDownloaded = manualDownloaded,
                 onMarkDownloaded = {
-                    viewModel.markDownloadedManually(rom, romStatus?.groupRomIds ?: listOf(rom.id))
+                    viewModel.markDownloadedManually(rom, manualGroupIds)
                     selectedRom = null
                 },
                 onUnmarkDownloaded = {
-                    viewModel.unmarkDownloadedManually(rom, romStatus?.groupRomIds ?: listOf(rom.id))
+                    viewModel.unmarkDownloadedManually(rom, manualGroupIds)
                     selectedRom = null
+                },
+                onLocateFile = if (manualDownloaded) {
+                    {
+                        locateTarget = rom to manualGroupIds
+                        locateFilePicker()
+                    }
+                } else {
+                    null
                 },
                 showMoveOption = settings.dualRomsPathsEnabled,
                 isOnSd = isOnSd,
@@ -1064,7 +1096,9 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                         rom = rom,
                         platformLabel = platformLabel,
                         platformEmulatorId = platform?.emulatorId,
-                        launchable = localPath.isNotBlank(),
+                        // Un juego manual sin ruta también se puede lanzar: el
+                        // servicio lo busca al pulsar (resolución perezosa).
+                        launchable = localPath.isNotBlank() || manualDownloaded,
                         onPlay = {
                             // Misma secuencia que en Play: preparar → overlay de inserción → lanzar.
                             selectedRom = null // la hoja es otra ventana: cerrarla para ver el overlay
@@ -1089,27 +1123,32 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                                         )
                                     }
                                 }
-                                val plan = container.emulatorLauncher.prepare(
-                                    com.davidadrianrg.atril.launch.LaunchRequest(
-                                        platformSlug = rom.platformSlug,
-                                        platformLabel = platformLabel,
-                                        localPath = localPath,
-                                        knownFileNames = rom.files.map { it.filename },
-                                        overrideFamilyId = container.settingsRepository.launchEmulatorOverrides
-                                            .first()[com.davidadrianrg.atril.core.launch.LaunchPlatforms.canonical(rom.platformSlug)],
-                                        saveEmulatorId = platform?.emulatorId,
-                                    ),
+                                val plan = viewModel.prepareLaunch(
+                                    rom = rom,
+                                    localPath = localPath,
+                                    platformLabel = platformLabel,
+                                    platformEmulatorId = platform?.emulatorId,
+                                    overrideFamilyId = container.settingsRepository.launchEmulatorOverrides
+                                        .first()[com.davidadrianrg.atril.core.launch.LaunchPlatforms.canonical(rom.platformSlug)],
+                                )
+                                val spec = InsertionSpec(
+                                    rom.name,
+                                    rom.coverUrlLarge ?: rom.coverUrlSmall,
+                                    com.davidadrianrg.atril.core.launch.LaunchPlatforms.isOptical(rom.platformSlug),
                                 )
                                 val error = when (plan) {
-                                    is com.davidadrianrg.atril.launch.LaunchPlan.Failed -> plan.message
-                                    is com.davidadrianrg.atril.launch.LaunchPlan.Ready ->
-                                        insertion.run(
-                                            InsertionSpec(
-                                                rom.name,
-                                                rom.coverUrlLarge ?: rom.coverUrlSmall,
-                                                com.davidadrianrg.atril.core.launch.LaunchPlatforms.isOptical(rom.platformSlug),
-                                            ),
-                                        ) { container.emulatorLauncher.start(context, plan) }
+                                    is com.davidadrianrg.atril.launch.GameLaunchPlan.Failed -> plan.message
+                                    is com.davidadrianrg.atril.launch.GameLaunchPlan.Ready ->
+                                        insertion.run(spec) { viewModel.startLaunch(context, plan) }
+                                    is com.davidadrianrg.atril.launch.GameLaunchPlan.Apk ->
+                                        insertion.run(spec) { viewModel.startLaunch(context, plan) }
+                                }
+                                // Si no había fichero, se reabre el detalle para
+                                // que "Localizar archivo" quede a mano.
+                                if (plan is com.davidadrianrg.atril.launch.GameLaunchPlan.Failed &&
+                                    plan.needsLocate
+                                ) {
+                                    selectedRom = rom
                                 }
                                 error?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
                             }
@@ -1507,6 +1546,8 @@ internal fun RomDetailSheet(
     isManualDownloaded: Boolean = false,
     onMarkDownloaded: () -> Unit = {},
     onUnmarkDownloaded: () -> Unit = {},
+    /** Abre el selector para asociar un fichero al juego marcado a mano. */
+    onLocateFile: (() -> Unit)? = null,
     showMoveOption: Boolean = false,
     isOnSd: Boolean = false,
     isMoving: Boolean = false,
@@ -1804,6 +1845,14 @@ internal fun RomDetailSheet(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(tr("library.unmark_downloaded"))
+                        }
+                        onLocateFile?.let { locate ->
+                            OutlinedButton(
+                                onClick = locate,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(tr("library.locate_file"))
+                            }
                         }
                     }
                     // ── Mover entre almacenamientos (modo dos rutas) ─────

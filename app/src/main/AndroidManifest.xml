@@ -51,6 +51,13 @@
         <package android:name="org.ppsspp.ppssppgold" />
         <package android:name="org.azahar_emu.azahar" />
         <package android:name="info.cemu.cemu" />
+
+        <!-- APK de la Biblioteca/Jugar: Android 11+ exige esta visibilidad para
+             que getLaunchIntentForPackage vea la app del juego ya instalada. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application

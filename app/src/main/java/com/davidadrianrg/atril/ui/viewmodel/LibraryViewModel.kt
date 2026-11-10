@@ -1,5 +1,8 @@
 package com.davidadrianrg.atril.ui.viewmodel
 
+import android.content.Context
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.davidadrianrg.atril.core.i18n.tr
@@ -10,13 +13,19 @@ import com.davidadrianrg.atril.core.library.MultiDiscGrouper
 import com.davidadrianrg.atril.core.playstats.PlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
 import com.davidadrianrg.atril.core.playstats.PlayStatsRepository
+import com.davidadrianrg.atril.data.repository.LocateOutcome
+import com.davidadrianrg.atril.data.repository.RomFileImportService
 import com.davidadrianrg.atril.data.repository.RomRepository
+import com.davidadrianrg.atril.data.repository.SettingsRepository
 import com.davidadrianrg.atril.domain.model.ApiResult
 import com.davidadrianrg.atril.domain.model.DownloadStatus
 import com.davidadrianrg.atril.domain.model.ErrorKind
 import com.davidadrianrg.atril.domain.model.Rom
 import com.davidadrianrg.atril.domain.model.RomWithStatus
 import com.davidadrianrg.atril.download.DownloadManager
+import com.davidadrianrg.atril.launch.GameLaunchPlan
+import com.davidadrianrg.atril.launch.GameLaunchRequest
+import com.davidadrianrg.atril.launch.RomLaunchService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import com.davidadrianrg.atril.domain.model.withPhysicalMediaOverride
@@ -28,6 +37,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -37,6 +47,9 @@ class LibraryViewModel(
     private val romRepository: RomRepository,
     private val downloadManager: DownloadManager? = null,
     private val playStats: PlayStatsRepository? = null,
+    private val settingsRepository: SettingsRepository? = null,
+    private val romLaunchService: RomLaunchService? = null,
+    private val romFileImportService: RomFileImportService? = null,
 ) : ViewModel() {
 
     private val _selectedPlatformId = MutableStateFlow<Int?>(null)
@@ -72,6 +85,7 @@ class LibraryViewModel(
 
     companion object {
         private const val PAGE_SIZE = 50
+        private const val TAG = "LibraryViewModel"
     }
 
     /** One-shot events for UI feedback (snackbars). */
@@ -412,9 +426,14 @@ class LibraryViewModel(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** Marca el juego (y su grupo) como descargado sin fichero gestionado. */
+    /**
+     * Marca el juego (y su grupo) como descargado y, si el fichero ya está en
+     * `<romsRoot>/<plataforma>`, guarda su ruta para que quede lanzable. Sin
+     * raíz configurada o sin coincidencia mantiene la marca manual (`""`).
+     */
     fun markDownloadedManually(rom: Rom, groupRomIds: List<Int>) {
         viewModelScope.launch {
+            val path = resolveManualPath(rom)
             groupRomIds.forEach { id ->
                 romRepository.markRomDownloaded(
                     romId = id,
@@ -422,11 +441,38 @@ class LibraryViewModel(
                     fileName = rom.fileName,
                     platformId = rom.platformId,
                     platformSlug = rom.platformSlug,
-                    localPath = "",
+                    localPath = path ?: "",
                     fileSizeBytes = rom.fileSizeBytes,
                 )
             }
-            _events.emit(LibraryEvent.Error(tr("library.marked_downloaded", rom.name)))
+            _events.emit(
+                LibraryEvent.Error(
+                    if (path != null) tr("library.file_linked")
+                    else tr("library.marked_downloaded", rom.name),
+                ),
+            )
+        }
+    }
+
+    /** Busca el fichero del marcado manual bajo la raíz principal y la secundaria. */
+    private suspend fun resolveManualPath(rom: Rom): String? {
+        val settings = settingsRepository ?: return null
+        return try {
+            val config = settings.settings.first()
+            val roots = buildList {
+                add(config.romsRootPath.trim())
+                if (config.dualRomsPathsEnabled) add(config.secondaryRomsPath.trim())
+            }.filter { it.isNotBlank() }
+            if (roots.isEmpty()) null
+            else romRepository.locateLocalFile(roots, rom.platformSlug, rom.fileName)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Sin configuración legible se conserva la marca manual (""), pero
+            // se deja rastro del motivo para diagnosticar el "no lo encuentra".
+            // Aislado: `android.util.Log` no está mockeado en los tests JVM.
+            runCatching { Log.w(TAG, "Couldn't read ROM roots (${rom.id}): ${e.javaClass.simpleName}") }
+            null
         }
     }
 
@@ -437,6 +483,58 @@ class LibraryViewModel(
             _events.emit(LibraryEvent.Error(tr("library.unmarked_downloaded", rom.name)))
         }
     }
+
+    /** Asocia el documento elegido con el selector de ficheros al juego y su grupo. */
+    suspend fun locateFile(
+        rom: Rom,
+        groupRomIds: List<Int>,
+        uri: Uri,
+        overwrite: Boolean,
+    ): LocateOutcome {
+        val service = romFileImportService ?: return LocateOutcome.CopyFailed
+        return service.locate(
+            romId = rom.id,
+            groupRomIds = groupRomIds,
+            platformSlug = rom.platformSlug,
+            fileName = rom.fileName,
+            uri = uri,
+            overwrite = overwrite,
+        )
+    }
+
+    /**
+     * Resuelve de forma perezosa la ruta que falte o haya desaparecido y
+     * prepara el lanzamiento (emulador o APK). Mismo camino que la pantalla Jugar.
+     */
+    suspend fun prepareLaunch(
+        rom: Rom,
+        localPath: String,
+        platformLabel: String,
+        platformEmulatorId: String?,
+        overrideFamilyId: String?,
+    ): GameLaunchPlan {
+        val service = romLaunchService ?: return GameLaunchPlan.Failed(tr("launch.error.manual"))
+        // La hoja puede abrirse antes de que el Flow de sync haya entregado la
+        // ruta: se prioriza la que ya está persistida en Room.
+        val effectivePath = localPath.takeIf { it.isNotBlank() } ?: romRepository.getLocalPath(rom.id)
+        return service.prepare(
+            GameLaunchRequest(
+                romId = rom.id,
+                platformSlug = rom.platformSlug,
+                platformLabel = platformLabel,
+                localPath = effectivePath,
+                fileName = rom.fileName,
+                knownFileNames = rom.files.map { it.filename },
+                overrideFamilyId = overrideFamilyId,
+                saveEmulatorId = platformEmulatorId,
+            ),
+        )
+    }
+
+    /** Arranca un plan ya preparado; null = aceptado o mensaje de error. */
+    suspend fun startLaunch(context: Context, plan: GameLaunchPlan): String? =
+        romLaunchService?.startSuspending(context, plan)
+            ?: (plan as? GameLaunchPlan.Failed)?.message
 
     /**
      * Pull-to-refresh: reloads the first page for the currently selected

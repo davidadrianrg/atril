@@ -14,7 +14,9 @@ import com.davidadrianrg.atril.domain.model.Platform
 import com.davidadrianrg.atril.domain.model.Rom
 import com.davidadrianrg.atril.domain.model.RomFile
 import com.davidadrianrg.atril.core.download.PathMapper
+import com.davidadrianrg.atril.core.download.RomFileLocator
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.launch.RomFileLinker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -30,7 +32,7 @@ import retrofit2.HttpException
 class RomRepository(
     private val platformDao: PlatformDao,
     private val romDao: RomDao,
-) {
+) : RomFileLinker {
 
     private var apiService: RomMApiService? = null
     private var currentServerUrl: String = ""
@@ -239,6 +241,44 @@ class RomRepository(
 
     fun getDownloadedRomsForPlatform(platformId: Int): Flow<List<DownloadedRomEntity>> =
         romDao.getDownloadedRomsForPlatform(platformId)
+
+    // ── Localización de ficheros manuales ──────────────────────────────
+
+    /**
+     * Resuelve la ruta de un fichero bajo las raíces de ROMs **sin escribir**
+     * en Room. Pensado para el auto-vínculo del marcado manual.
+     */
+    suspend fun locateLocalFile(
+        romsRoots: List<String>,
+        platformSlug: String,
+        fileName: String,
+    ): String? = withContext(Dispatchers.IO) {
+        RomFileLocator.locate(romsRoots, platformSlug, fileName)?.absolutePath
+    }
+
+    /** Ver [RomFileLinker.locateAndAttach]. */
+    override suspend fun locateAndAttach(
+        romId: Int,
+        romsRoots: List<String>,
+        platformSlug: String,
+        fileName: String,
+    ): String? = withContext(Dispatchers.IO) {
+        if (romId <= 0) return@withContext null
+        val path = RomFileLocator.locate(romsRoots, platformSlug, fileName)?.absolutePath
+            ?: return@withContext null
+        romDao.updateLocalPath(romId, path)
+        path
+    }
+
+    /** Persiste la ruta local de un juego descargado ya existente. */
+    suspend fun updateLocalPath(romId: Int, path: String) {
+        withContext(Dispatchers.IO) { romDao.updateLocalPath(romId, path) }
+    }
+
+    /** Ruta local guardada en Room (vacía si el juego no consta descargado). */
+    suspend fun getLocalPath(romId: Int): String = withContext(Dispatchers.IO) {
+        romDao.getDownloadedRom(romId)?.localPath.orEmpty()
+    }
 
     suspend fun markRomDownloaded(
         romId: Int,

@@ -60,8 +60,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -100,8 +102,10 @@ import com.davidadrianrg.atril.core.playstats.GamePlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
 import com.davidadrianrg.atril.data.local.ServerConfig
+import com.davidadrianrg.atril.data.repository.LocateOutcome
 import com.davidadrianrg.atril.domain.model.formatBytesForUi
-import com.davidadrianrg.atril.launch.LaunchPlan
+import com.davidadrianrg.atril.launch.GameLaunchPlan
+import com.davidadrianrg.atril.ui.components.rememberLocateFilePicker
 import com.davidadrianrg.atril.ui.navigation.Screen
 import com.davidadrianrg.atril.ui.viewmodel.ShelfItem
 import com.davidadrianrg.atril.ui.viewmodel.ShelfViewModel
@@ -148,6 +152,8 @@ fun PlayScreen(
                     localGames = container.localGamesRepository,
                     playStatsRepository = container.playStats,
                     preLaunchSaveSync = container.preLaunchSaveSync,
+                    romLaunchService = container.romLaunchService,
+                    romFileImportService = container.romFileImportService,
                 )
             }
         }
@@ -193,6 +199,22 @@ fun PlayScreen(
             context.contentResolver.openInputStream(uri)?.let { viewModel.setLocalCover(id, it) }
         }
     }
+
+    // "Localizar archivo" para un juego manual desde el detalle o el snackbar.
+    var locateTarget by remember { mutableStateOf<ShelfItem?>(null) }
+    val locateFilePicker = rememberLocateFilePicker(
+        onPicked = { uri, overwrite ->
+            val item = locateTarget
+            if (item == null) {
+                LocateOutcome.InvalidFile
+            } else {
+                viewModel.locateFile(item, uri, overwrite).also { outcome ->
+                    if (outcome == LocateOutcome.Linked) locateTarget = null
+                }
+            }
+        },
+        onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
+    )
 
     val platformsInShelf = remember(items) {
         items.map { it.rom.platformSlug to it.platformLabel }
@@ -248,31 +270,64 @@ fun PlayScreen(
         scope.launch { snackbar.showSnackbar(message) }
     }
 
+    /** Avisa de que falta el fichero y ofrece abrir el selector sin reiniciar. */
+    fun notifyLocate(item: ShelfItem, message: String) {
+        scope.launch {
+            val result = snackbar.showSnackbar(
+                message = message,
+                actionLabel = tr("library.locate_file"),
+                withDismissAction = true,
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                locateTarget = item
+                locateFilePicker()
+            }
+        }
+    }
+
+    suspend fun launchWithInsertion(item: ShelfItem, plan: GameLaunchPlan) {
+        // Medio físico o carátula: siempre se ve la inserción completa y solo
+        // después se lanza el emulador o el instalador (el overlay sigue hasta
+        // enviar el intent).
+        val media: Any? = item.physicalMediaFile?.takeIf { item.showPhysical }?.let { java.io.File(it) }
+            ?: item.rom.coverUrlLarge ?: item.rom.coverUrlSmall
+        insertion = Insertion(item, media)
+        insertProgress.snapTo(0f)
+        insertProgress.animateTo(
+            1f,
+            tween(com.davidadrianrg.atril.core.launch.InsertionMotion.DURATION_MS, easing = LinearEasing),
+        )
+        val error = viewModel.startLaunch(context, plan)
+        if (error != null) {
+            notify(error)
+        } else {
+            // Lanzamiento aceptado: la partida empieza a contar.
+            viewModel.onGameLaunched(item)
+        }
+    }
+
     fun play(item: ShelfItem) {
         if (launchJob?.isActive == true) return
         launchJob = scope.launch {
             try {
                 when (val plan = viewModel.prepareLaunch(item)) {
-                    is LaunchPlan.Failed -> notify(plan.message)
-                    is LaunchPlan.Ready -> {
-                        plan.fallbackFrom?.let { preferred ->
-                            notify(tr("launcher.fallback", preferred.displayName, plan.family.displayName))
+                    is GameLaunchPlan.Failed -> {
+                        if (plan.needsLocate && !item.isLocalSource) {
+                            notifyLocate(item, plan.message)
+                        } else {
+                            notify(plan.message)
+                        }
+                    }
+                    is GameLaunchPlan.Ready -> {
+                        plan.plan.fallbackFrom?.let { preferred ->
+                            notify(tr("launcher.fallback", preferred.displayName, plan.plan.family.displayName))
                         }
                         // Medio físico o carátula: siempre se ve la inserción completa y solo
                         // después se lanza el emulador (el overlay sigue hasta enviar el intent).
-                        val media: Any? = item.physicalMediaFile?.takeIf { item.showPhysical }?.let { java.io.File(it) }
-                            ?: item.rom.coverUrlLarge ?: item.rom.coverUrlSmall
-                        insertion = Insertion(item, media)
-                        insertProgress.snapTo(0f)
-                        insertProgress.animateTo(1f, tween(com.davidadrianrg.atril.core.launch.InsertionMotion.DURATION_MS, easing = LinearEasing))
-                        val error = viewModel.startLaunch(context, plan)
-                        if (error != null) {
-                            notify(error)
-                        } else {
-                            // Lanzamiento aceptado: la partida empieza a contar.
-                            viewModel.onGameLaunched(item)
-                        }
+                        launchWithInsertion(item, plan)
                     }
+                    is GameLaunchPlan.Apk -> launchWithInsertion(item, plan)
                 }
             } finally {
                 // Nunca dejar un overlay invisible bloqueando la pantalla.
@@ -642,11 +697,20 @@ fun PlayScreen(
                 apiKey = settings.apiKey,
                 isManualDownloaded = item.isManualDownloaded,
                 wide = landscape,
+                onLocateFile = if (item.isManualDownloaded) {
+                    {
+                        locateTarget = item
+                        locateFilePicker()
+                    }
+                } else {
+                    null
+                },
                 launcherControls = rememberLauncherDetailControls(
                     rom = item.rom,
                     platformLabel = item.platformLabel,
                     platformEmulatorId = item.platformEmulatorId,
-                    launchable = item.launchable,
+                    // Manual sin ruta: se resuelve al pulsar Jugar.
+                    launchable = item.launchable || item.isManualDownloaded,
                     onPlay = {
                         selectedRomId = null
                         play(item)
