@@ -72,7 +72,7 @@ class JsonPlayStatsStore(
 
     @Synchronized
     override fun recordSession(romId: Int, endedAt: Long, durationMs: Long): PlayStats {
-        require(durationMs >= 0L) { "durationMs no puede ser negativo: $durationMs" }
+        require(durationMs >= 0L) { "durationMs must not be negative: $durationMs" }
         val current = load()
         val previous = current[romId] ?: PlayStats(romId)
         val updated = previous.copy(
@@ -156,7 +156,8 @@ class JsonPlayStatsStore(
         val backup = File(file.path + ".corrupt")
         runCatching { file.copyTo(backup, overwrite = true) }
         log(
-            "WARN playstats: fichero ilegible ${file.name} (${error.javaClass.simpleName}); copia en ${backup.name}, se arranca vacío",
+            "WARN playstats: unreadable file ${file.name} (${error.javaClass.simpleName}); " +
+                "preserved as ${backup.name}, starting empty",
         )
     }
 
@@ -180,7 +181,7 @@ class JsonPlayStatsStore(
                 tmp.delete()
             }
         } catch (e: Exception) {
-            log("WARN playstats: no se pudo guardar ${file.name} (${e.javaClass.simpleName}); se mantiene en memoria")
+            log("WARN playstats: could not save ${file.name} (${e.javaClass.simpleName}); keeping in-memory state")
         }
     }
 
