@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -36,6 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.localgames.LocalDiscChoice
+import com.davidadrianrg.atril.core.localgames.LocalDiscGroup
 import com.davidadrianrg.atril.core.localgames.LocalGameNames
 import com.davidadrianrg.atril.core.localgames.ScrapeStatus
 import com.davidadrianrg.atril.core.playstats.GamePlayStats
@@ -111,10 +115,13 @@ internal fun LocalGameSheet(
     onPickCover: () -> Unit,
     onRemove: () -> Unit,
     onClose: () -> Unit,
+    onSelectDisc: (String) -> Unit = {},
 ) {
     val game = item.localGame ?: return
     var title by remember(game.id) { mutableStateOf(game.title) }
     var confirmRemove by remember { mutableStateOf(false) }
+    val discGroup = item.localDiscGroup
+    val discChoice = item.localDiscChoice
 
     ModalBottomSheet(
         onDismissRequest = onClose,
@@ -150,6 +157,31 @@ internal fun LocalGameSheet(
             Text(tr("local.source_note"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(tr("local.path", game.path), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             GameStatsRows(stats)
+
+            // Selector de disco: solo para grupos locales multidisco. Cambiar la
+            // elección no lanza nada; el botón Jugar usa el disco elegido.
+            if (discGroup != null && discGroup.discCount > 1) {
+                Text(tr("local.discs.title"), style = MaterialTheme.typography.labelLarge)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                ) {
+                    discGroup.members.forEach { member ->
+                        FilterChip(
+                            selected = (discChoice as? LocalDiscChoice.Disc)?.member?.id == member.id,
+                            onClick = { onSelectDisc(member.id) },
+                            label = { Text(tr("local.disc.number", member.discNumber)) },
+                        )
+                    }
+                    discGroup.playlistPath?.let {
+                        FilterChip(
+                            selected = discChoice is LocalDiscChoice.Playlist,
+                            onClick = { onSelectDisc(LocalDiscGroup.PLAYLIST_CHOICE_ID) },
+                            label = { Text(tr("local.disc.playlist")) },
+                        )
+                    }
+                }
+            }
 
             Button(onClick = onPlay, enabled = item.launchable, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null)

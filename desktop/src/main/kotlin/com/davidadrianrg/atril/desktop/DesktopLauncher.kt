@@ -111,6 +111,10 @@ private data class LauncherEntry(
     val physicalUrl: String?,
     /** Juego añadido a mano (NO está en RomM); null para los de RomM. */
     val local: com.davidadrianrg.atril.core.localgames.LocalGame? = null,
+    /** Grupo multidisco local (solo cuando tiene más de un disco). */
+    val localGroup: com.davidadrianrg.atril.core.localgames.LocalDiscGroup? = null,
+    /** Disco/playlist elegido del grupo local. */
+    val localChoice: com.davidadrianrg.atril.core.localgames.LocalDiscChoice? = null,
 ) {
     /** Plataforma tal cual se muestra en la carta/pie: los locales llevan la marca «Local». */
     val displayPlatform: String get() = if (local != null) "$platformLabel · ${tr("local.badge")}" else platformLabel
@@ -120,22 +124,51 @@ private data class LauncherEntry(
 internal fun com.davidadrianrg.atril.core.localgames.LocalGame.syntheticRomId(): Int =
     -((id.hashCode().toLong() and 0x7FFFFFFF).toInt().coerceAtLeast(1))
 
-private fun com.davidadrianrg.atril.core.localgames.LocalGame.toLauncherEntry(platformName: String): LauncherEntry {
-    val rep = RomDto(
-        id = syntheticRomId(),
-        name = title,
-        fileName = File(path).name,
-        platformId = 0,
-        platformSlug = platformSlug,
-        fileSizeBytes = File(path).takeIf { it.isFile }?.length() ?: 0L,
-        urlCover = coverPath?.let { "file://$it" },
-    )
-    return LauncherEntry(
-        card = GameCard(rep, 1, listOf(rep), downloaded = true),
-        platformLabel = platformName,
-        physicalUrl = null,
-        local = this,
-    )
+private fun com.davidadrianrg.atril.core.localgames.LocalGame.toRomDto(): RomDto = RomDto(
+    id = syntheticRomId(),
+    name = title,
+    fileName = File(path).name,
+    platformId = 0,
+    platformSlug = platformSlug,
+    fileSizeBytes = File(path).takeIf { it.isFile }?.length() ?: 0L,
+    urlCover = coverPath?.let { "file://$it" },
+)
+
+/**
+ * Una entrada de lanzador por juego local, agrupando los discos del mismo
+ * juego con `LocalDiscGrouper`. La carta es el disco 1 y el grupo lleva todos
+ * los ids para que favoritos/tiempo jugado agreguen entre discos.
+ */
+private fun localLauncherEntries(
+    games: List<com.davidadrianrg.atril.core.localgames.LocalGame>,
+    discChoices: Map<String, String>,
+    platformNames: Map<String, String>,
+): List<LauncherEntry> {
+    val byId = games.associateBy { it.id }
+    val entries = games.map {
+        com.davidadrianrg.atril.core.localgames.LocalDiscEntry(
+            id = it.id,
+            title = it.title,
+            path = it.path,
+            platformSlug = it.platformSlug,
+        )
+    }
+    return com.davidadrianrg.atril.core.localgames.LocalDiscGrouper.group(entries).mapNotNull { group ->
+        val representative = byId[group.representativeId] ?: return@mapNotNull null
+        val isGroup = group.discCount > 1
+        val choice = com.davidadrianrg.atril.core.localgames.LocalDiscGrouper
+            .choiceFor(group, discChoices[group.key])
+        val memberDtos = group.members.mapNotNull { byId[it.id]?.toRomDto() }
+        LauncherEntry(
+            card = GameCard(representative.toRomDto(), group.discCount, memberDtos, downloaded = true),
+            platformLabel = platformNames[representative.platformSlug]
+                ?: representative.platformSlug.uppercase(),
+            physicalUrl = null,
+            local = representative,
+            localGroup = group.takeIf { isGroup },
+            localChoice = choice.takeIf { isGroup },
+        )
+    }
 }
 
 /** Objeto que se está insertando en la ranura antes de abrir el juego. */
@@ -165,10 +198,11 @@ fun DesktopPlayScreen(
 
     var remoteEntries by remember { mutableStateOf<List<LauncherEntry>>(emptyList()) }
     val localGames by state.localGames.games.collectAsState()
+    val discChoices by state.localDiscChoices.collectAsState()
     val platformsState by state.platforms.collectAsState()
-    val entries = remember(remoteEntries, localGames, platformsState) {
+    val entries = remember(remoteEntries, localGames, discChoices, platformsState) {
         val names = platformsState.associate { it.slug to (it.displayName ?: it.name) }
-        (remoteEntries + localGames.map { it.toLauncherEntry(names[it.platformSlug] ?: it.platformSlug.uppercase()) })
+        (remoteEntries + localLauncherEntries(localGames, discChoices, names))
             .sortedBy { it.card.rep.name.lowercase() }
     }
     var pendingAddPath by remember { mutableStateOf<String?>(null) }
@@ -194,7 +228,16 @@ fun DesktopPlayScreen(
                     animationSpec = tween(durationMillis = com.davidadrianrg.atril.core.launch.InsertionMotion.DURATION_MS, easing = LinearEasing),
                 )
                 val game = entry.local
-                if (game != null) state.launchLocalGame(game) else state.openLocalGame(entry.card)
+                val group = entry.localGroup
+                when {
+                    group != null -> state.launchLocalGame(
+                        group,
+                        entry.localChoice
+                            ?: com.davidadrianrg.atril.core.localgames.LocalDiscGrouper.defaultChoice(group),
+                    )
+                    game != null -> state.launchLocalGame(game)
+                    else -> state.openLocalGame(entry.card)
+                }
             } finally {
                 insertion = null
                 insertProgress.snapTo(0f)

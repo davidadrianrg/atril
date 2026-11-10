@@ -84,6 +84,8 @@ class SettingsDataStore(private val context: Context) {
         val LIBRARY_SORT = stringPreferencesKey(LibraryPreferenceKeys.SORT)
         val LIBRARY_SOURCE = stringPreferencesKey(LibraryPreferenceKeys.SOURCE)
         val LIBRARY_CARD_SIZE = stringPreferencesKey(LibraryPreferenceKeys.CARD_SIZE)
+        /** Grupo local -> disco elegido, codificado con `ChosenDiscCodec`. */
+        val LIBRARY_LOCAL_DISCS = stringPreferencesKey(LibraryPreferenceKeys.LOCAL_DISCS)
         val SGDB_KEY = stringPreferencesKey("scraper_steamgriddb_key")
         val SS_USER = stringPreferencesKey("scraper_ss_user")
         val SS_PASSWORD = stringPreferencesKey("scraper_ss_password")
@@ -188,6 +190,11 @@ class SettingsDataStore(private val context: Context) {
             cardSize = prefs[LIBRARY_CARD_SIZE],
         )
     }
+    /** Grupo local -> disco elegido; se valida al leer con `ChosenDiscCodec`. */
+    val localDiscChoices: Flow<Map<String, String>> = context.dataStore.data.map { prefs ->
+        com.davidadrianrg.atril.core.localgames.ChosenDiscCodec.decode(prefs[LIBRARY_LOCAL_DISCS])
+    }
+
     /** Credenciales de SteamGridDB / ScreenScraper para los juegos locales. */
     val scraperCredentials: Flow<com.davidadrianrg.atril.core.localgames.ScraperCredentials> =
         context.dataStore.data.map {
@@ -413,6 +420,19 @@ class SettingsDataStore(private val context: Context) {
     /** Persiste el tamaño de tarjeta de la biblioteca. */
     suspend fun setLibraryCardSize(size: LibraryCardSize) {
         context.dataStore.edit { it[LIBRARY_CARD_SIZE] = size.id }
+    }
+
+    /**
+     * Fija (o borra con `null`) el disco elegido de un grupo local. El mapa se
+     * guarda codificado con [com.davidadrianrg.atril.core.localgames.ChosenDiscCodec].
+     */
+    suspend fun setLocalDiscChoice(groupKey: String, choiceId: String?) {
+        context.dataStore.edit { prefs ->
+            val choices = com.davidadrianrg.atril.core.localgames.ChosenDiscCodec
+                .decode(prefs[LIBRARY_LOCAL_DISCS]).toMutableMap()
+            if (choiceId.isNullOrBlank()) choices.remove(groupKey) else choices[groupKey] = choiceId
+            prefs[LIBRARY_LOCAL_DISCS] = com.davidadrianrg.atril.core.localgames.ChosenDiscCodec.encode(choices)
+        }
     }
 
     suspend fun setScraperCredentials(c: com.davidadrianrg.atril.core.localgames.ScraperCredentials) {

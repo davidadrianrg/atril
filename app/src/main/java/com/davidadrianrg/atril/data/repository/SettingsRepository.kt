@@ -50,6 +50,10 @@ class SettingsRepository(private val dataStore: SettingsDataStore) {
     suspend fun setLibrarySort(sort: LibrarySort) = dataStore.setLibrarySort(sort)
     suspend fun setLibrarySource(source: LibrarySource) = dataStore.setLibrarySource(source)
     suspend fun setLibraryCardSize(size: LibraryCardSize) = dataStore.setLibraryCardSize(size)
+    /** Grupo local -> disco elegido (ya decodificado). */
+    val localDiscChoices: Flow<Map<String, String>> = dataStore.localDiscChoices
+    suspend fun setLocalDiscChoice(groupKey: String, choiceId: String?) =
+        dataStore.setLocalDiscChoice(groupKey, choiceId)
     val launcherDefaultDisplay: Flow<String> = dataStore.launcherDefaultDisplay
     val launchEmulatorOverrides: Flow<Map<String, String>> = dataStore.launchEmulatorOverrides
     suspend fun setLauncherDefaultDisplay(mode: String) = dataStore.setLauncherDefaultDisplay(mode)

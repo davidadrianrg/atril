@@ -597,8 +597,11 @@ fun PlayScreen(
                 scope.launch { kotlinx.coroutines.delay(1500); if (scrapingId == id) scrapingId = null }
             },
             onPickCover = { coverTargetId = item.localGame!!.id; pickCover.launch("image/*") },
-            onRemove = { selectedRomId = null; viewModel.removeLocal(item.localGame!!.id) },
+            onRemove = { selectedRomId = null; viewModel.removeLocal(item) },
             onClose = { selectedRomId = null },
+            onSelectDisc = { choiceId ->
+                item.localDiscGroup?.let { viewModel.setLocalDiscChoice(it.key, choiceId) }
+            },
         )
     }
     selected?.takeIf { !it.isLocalSource }?.let { item ->

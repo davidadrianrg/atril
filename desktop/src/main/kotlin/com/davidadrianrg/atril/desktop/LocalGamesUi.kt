@@ -18,6 +18,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -35,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.localgames.LocalDiscChoice
+import com.davidadrianrg.atril.core.localgames.LocalDiscGroup
 import com.davidadrianrg.atril.core.localgames.LocalGame
 import com.davidadrianrg.atril.core.localgames.LocalGameNames
 import com.davidadrianrg.atril.core.localgames.ScrapeStatus
@@ -118,6 +121,10 @@ internal fun LocalGameDetailPanel(game: LocalGame, state: DesktopAppState, onPla
     val playStats by state.playStats.stats.collectAsState()
     val romId = game.syntheticRomId()
     val stats = PlayStatsLogic.aggregate(listOf(romId), playStats)
+    val discChoices by state.localDiscChoices.collectAsState()
+    val discGroup = remember(game.id, discChoices) { state.localDiscGroupFor(game.id) }
+        ?.takeIf { it.discCount > 1 }
+    val discChoice = discGroup?.let { state.localDiscChoice(it) }
 
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         Column(Modifier.width(280.dp)) {
@@ -163,6 +170,27 @@ internal fun LocalGameDetailPanel(game: LocalGame, state: DesktopAppState, onPla
             GameStatsRows(stats)
             if (!exists) {
                 Text(tr("local.file_missing"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            // Selector de disco: solo en grupos multidisco. Cambiar la elección
+            // no lanza nada; el botón Jugar usa el disco elegido.
+            if (discGroup != null) {
+                Text(tr("local.discs.title"), style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    discGroup.members.forEach { member ->
+                        FilterChip(
+                            selected = (discChoice as? LocalDiscChoice.Disc)?.member?.id == member.id,
+                            onClick = { state.setLocalDiscChoice(discGroup.key, member.id) },
+                            label = { Text(tr("local.disc.number", member.discNumber)) },
+                        )
+                    }
+                    discGroup.playlistPath?.let {
+                        FilterChip(
+                            selected = discChoice is LocalDiscChoice.Playlist,
+                            onClick = { state.setLocalDiscChoice(discGroup.key, LocalDiscGroup.PLAYLIST_CHOICE_ID) },
+                            label = { Text(tr("local.disc.playlist")) },
+                        )
+                    }
+                }
             }
             Button(onClick = onPlay, enabled = exists) { Text(tr("local.play")) }
 
