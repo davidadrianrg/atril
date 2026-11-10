@@ -9,12 +9,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -105,6 +105,35 @@ class DesktopManualLinkTest {
         return File(root, "$slug/$fileName")
     }
 
+    /** Coloca varios ficheros bajo la misma `<romsRoot>/<slug>/`. */
+    private fun placeRoms(vararg fileNames: String): Map<String, File> {
+        val root = tmp.newFolder("roms-group")
+        DesktopConfig.romsRoot = root.absolutePath
+        return fileNames.associateWith { fileName ->
+            File(root, "$slug/$fileName").apply {
+                parentFile.mkdirs()
+                writeText("rom")
+            }
+        }
+    }
+
+    /**
+     * Sondea una condición que produce una corrutina del estado
+     * (p. ej. `deleteDownload` lanza en su scope). Falla con el motivo si no
+     * se cumple en el plazo, en vez de devolver un resultado inestable.
+     */
+    private suspend fun awaitUntil(
+        reason: String,
+        timeoutMs: Long = 10_000,
+        condition: () -> Boolean,
+    ) {
+        val deadline = System.nanoTime() + timeoutMs * 1_000_000L
+        while (!condition()) {
+            if (System.nanoTime() > deadline) throw AssertionError("$reason (waited ${timeoutMs}ms)")
+            delay(20)
+        }
+    }
+
     private fun manualPrefContains(id: Int): Boolean =
         DesktopConfig.manualDownloaded.split(',')
             .map { it.trim() }
@@ -193,33 +222,64 @@ class DesktopManualLinkTest {
      * REV-015: la ficha abierta desde la Pantalla Jugar se reconstruye aunque
      * la Biblioteca no se haya visitado (`_roms` vacío). Antes del arreglo el
      * refresco solo buscaba en `buildCards(_roms)`, obtenía null y dejaba la
-     * copia antigua. El escenario reproduce el camino real del lanzador: juego
-     * marcado a mano, `state.openGame` (DesktopLauncher) y
-     * `locateFileSuspending` (botón de la ficha).
+     * copia antigua. El escenario reproduce el camino real del lanzador:
+     * `state.openGame` (DesktopLauncher) y `locateFileSuspending` (botón de la
+     * ficha).
+     *
+     * REV-019: el refresco se comprueba por estado, no por identidad. La ficha
+     * abierta es un `MutableStateFlow` y no re-emite cuando la tarjeta nueva es
+     * estructuralmente igual (ese era el defecto que medía `assertNotSame`).
+     * Se abre a propósito con nombre y fichero obsoletos respecto a
+     * `library.properties` y se afirma el estado reconstruido: el representante
+     * sigue en `groupRoms` (no se pierde el grupo), se conserva `discCount`, el
+     * juego queda descargado y deja de ser una marca manual.
      */
     @Test
-    fun `locating a file from the launcher detail refreshes the open card without loading the library`() = runBlocking {
-        // Marca manual sin fichero todavía: es lo que el lanzador lista.
-        state.markDownloadedManually(card())
-        assertTrue(state.isManualDownloaded(card()))
-
-        // La Pantalla Jugar abre la misma GameDetailPanel con state.openGame.
-        state.openGame(card())
+    fun `locating a file from the launcher detail refreshes the open card state without loading the library`() = runBlocking {
+        val freshName = "Juego actualizado $romId"
+        val freshFile = "Updated.gba"
+        // `library.properties` ya tiene los metadatos buenos, pero sin ruta.
+        state.library.upsertRom(
+            DesktopLibrary.RomEntry(
+                romId = romId,
+                name = freshName,
+                fileName = freshFile,
+                platformSlug = slug,
+            ),
+        )
+        // El lanzador abre la misma GameDetailPanel con state.openGame y una
+        // copia antigua de los metadatos (nombre y fichero obsoletos).
+        val stale = card()
+        assertEquals("Juego $romId", stale.rep.name)
+        assertEquals("Game.gba", stale.rep.fileName)
+        state.openGame(stale)
         val opened = state.selectedGame.value
         assertEquals(romId, opened?.rep?.id)
+        assertEquals("Juego $romId", opened?.rep?.name)
         assertTrue(
             "the fallback only applies while the Library has not been loaded",
             state.roms.value.isEmpty(),
         )
 
-        val file = placeRom("Game.gba")
-        state.locateFileSuspending(card(), file.absolutePath)
+        val file = placeRom(freshFile)
+        state.locateFileSuspending(stale, file.absolutePath)
 
         val open = state.selectedGame.value
         assertEquals("the detail must stay open", romId, open?.rep?.id)
-        assertNotSame("the open card must be rebuilt from local state", opened, open)
-        assertTrue("the open card must keep reading as downloaded", open!!.downloaded)
+        // Refresco real: los metadatos obsoletos se sustituyen por los persistidos.
+        assertEquals(freshName, open?.rep?.name)
+        assertEquals(freshFile, open?.rep?.fileName)
+        // Invariante de GameCard: el representante encabeza y pertenece al grupo.
+        assertEquals(listOf(romId), open?.groupRoms?.map { it.id })
+        assertEquals("the representative must stay in the group", open?.rep?.id, open?.groupRoms?.first()?.id)
+        assertEquals("the group keeps its disc count", 1, open?.discCount)
+        assertFalse(
+            "groupRoms must not be empty, or the manual check below would be vacuous",
+            open!!.groupRoms.isEmpty(),
+        )
+        assertTrue("the open card must read as downloaded", open.downloaded)
         assertFalse("the open card must no longer be manual", state.isManualDownloaded(open))
+        assertTrue(state.manualDownloadedIds().isEmpty())
         assertEquals(file.absolutePath, state.library.rom(romId)?.localPath)
     }
 
@@ -300,6 +360,111 @@ class DesktopManualLinkTest {
         assertTrue("the linked group must still be downloaded", downloaded.single().downloaded)
         assertEquals(setOf(disc1Id, disc2Id), downloaded.single().groupRoms.map { it.id }.toSet())
         assertTrue("the linked group must not be offered as missing", state.missingGames().isEmpty())
+    }
+
+    /**
+     * REV-019: la reserva de un grupo de dos discos conserva el grupo completo.
+     * Con `groupRoms = roms.drop(1)` la ficha abierta desde el lanzador perdía
+     * al representante nada más refrescarse, de modo que las acciones de grupo
+     * del detalle operaban sobre un grupo incompleto.
+     */
+    @Test
+    fun `a two-disc launcher detail keeps the representative in its rebuilt group`() = runBlocking {
+        val disc1 = disc(disc1Id, 1)
+        val disc2 = disc(disc2Id, 2)
+        val card = GameCard(rep = disc1, discCount = 2, groupRoms = listOf(disc1, disc2), downloaded = true)
+        state.openGame(card)
+        assertTrue(
+            "the fallback only applies while the Library has not been loaded",
+            state.roms.value.isEmpty(),
+        )
+
+        val file = placeRom("Game (Disc 1).gba")
+        state.locateFileSuspending(card, file.absolutePath)
+
+        val open = state.selectedGame.value
+        assertEquals(disc1Id, open?.rep?.id)
+        assertEquals("the rebuilt group must keep every disc and its order", listOf(disc1Id, disc2Id), open?.groupRoms?.map { it.id })
+        assertEquals("the representative must stay in the group", disc1Id, open?.groupRoms?.first()?.id)
+        assertEquals("the group keeps its disc count", 2, open?.discCount)
+        assertTrue("the rebuilt group must read as downloaded", open!!.downloaded)
+        assertFalse(state.isManualDownloaded(open))
+        assertEquals(file.absolutePath, state.library.rom(disc1Id)?.localPath)
+        assertEquals(file.absolutePath, state.library.rom(disc2Id)?.localPath)
+    }
+
+    /**
+     * REV-019: borrar la descarga desde la ficha de reserva de dos discos debe
+     * borrar los ficheros y las entradas de todo el grupo. Con
+     * `groupRoms = roms.drop(1)` el representante quedaba fuera y
+     * `deleteDownload` no borraba su fichero ni su entrada.
+     */
+    @Test
+    fun `deleting the download from a launcher detail removes every disc of the group`() = runBlocking {
+        val disc1 = disc(disc1Id, 1)
+        val disc2 = disc(disc2Id, 2)
+        val card = GameCard(rep = disc1, discCount = 2, groupRoms = listOf(disc1, disc2), downloaded = true)
+        val files = placeRoms("Game (Disc 1).gba", "Game (Disc 2).gba")
+        val first = files.getValue("Game (Disc 1).gba")
+        val second = files.getValue("Game (Disc 2).gba")
+
+        state.openGame(card)
+        state.locateFileSuspending(card, first.absolutePath)
+        // Cada disco acaba en su propio fichero.
+        state.library.upsertRom(state.library.rom(disc2Id)!!.copy(localPath = second.absolutePath))
+        assertEquals(second.absolutePath, state.library.rom(disc2Id)?.localPath)
+
+        val open = state.selectedGame.value!!
+        assertEquals(
+            "the reserve detail must keep the whole group before deleting",
+            listOf(disc1Id, disc2Id),
+            open.groupRoms.map { it.id },
+        )
+        state.deleteDownload(open)
+
+        // `deleteDownload` lanza en el scope del estado: se espera al snackbar,
+        // que se emite después de borrar, persistir y refrescar la ficha.
+        awaitUntil("deleteDownload did not finish") {
+            state.snackbar.value == "Deleted Juego multidisco"
+        }
+
+        assertFalse("the representative's file must be deleted", first.exists())
+        assertFalse("the second disc's file must be deleted", second.exists())
+        assertNull(state.library.rom(disc1Id))
+        assertNull(state.library.rom(disc2Id))
+        val refreshed = state.selectedGame.value
+        assertEquals(disc1Id, refreshed?.rep?.id)
+        assertEquals(listOf(disc1Id, disc2Id), refreshed?.groupRoms?.map { it.id })
+        assertFalse("downloadedIds must be cleared for the whole group", refreshed!!.downloaded)
+    }
+
+    /**
+     * REV-019: volver a marcar desde la ficha de reserva debe alcanzar al
+     * representante. `linkManual` itera `groupRoms`; si el refresco lo excluye,
+     * el snackbar dice que se marcó y no se marca nada.
+     */
+    @Test
+    fun `marking again from the rebuilt launcher detail reaches the representative`() = runBlocking {
+        val card = card()
+        state.openGame(card)
+        assertTrue(
+            "the fallback only applies while the Library has not been loaded",
+            state.roms.value.isEmpty(),
+        )
+
+        state.unmarkDownloadedManuallySuspending(card)
+        val rebuilt = state.selectedGame.value!!
+        assertEquals("the detail must stay open", romId, rebuilt.rep.id)
+        assertEquals("the rebuilt group must keep the representative", listOf(romId), rebuilt.groupRoms.map { it.id })
+
+        // No hay fichero bajo la raíz configurada: la acción deja marca manual.
+        state.markDownloadedManually(rebuilt)
+
+        assertTrue("the representative must be marked again", romId in state.manualDownloadedIds())
+        val marked = state.selectedGame.value!!
+        assertEquals(romId, marked.rep.id)
+        assertTrue("the marked representative must read as manual", state.isManualDownloaded(marked))
+        assertEquals("Juego $romId marked as downloaded", state.snackbar.value)
     }
 
     /**
