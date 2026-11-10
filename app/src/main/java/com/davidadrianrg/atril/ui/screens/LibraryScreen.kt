@@ -135,6 +135,7 @@ import androidx.compose.ui.geometry.isSpecified
 import com.davidadrianrg.atril.core.library.CoverRatio
 import com.davidadrianrg.atril.core.library.LibrarySource
 import com.davidadrianrg.atril.core.library.LibraryViewPreferences
+import com.davidadrianrg.atril.core.library.LibraryViewMode
 import com.davidadrianrg.atril.core.library.PlatformAbbreviation
 import com.davidadrianrg.atril.core.playstats.GamePlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
@@ -407,6 +408,12 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
     val hasMore by viewModel.hasMore.collectAsState()
 
+    // ── Cover flow: comparte la lista filtrada con la rejilla ──────────
+    // El pager vive aquí (y no dentro del composable) para que el botón de
+    // volver arriba y el salto del índice alfabético puedan moverlo.
+    val coverFlowState = rememberPagerState(pageCount = { filteredRoms.size })
+    val coverFlowFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+
     // Detect when user scrolls near the bottom -> trigger loadMore
     val reachedBottom by remember {
         derivedStateOf {
@@ -427,8 +434,14 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
     val fieldShape = RoundedCornerShape(12.dp)
 
     val scope = rememberCoroutineScope()
-    val showScrollToTop by remember {
-        derivedStateOf { gridState.firstVisibleItemIndex > 6 }
+    val showScrollToTop by remember(viewPrefs.viewMode) {
+        derivedStateOf {
+            if (viewPrefs.viewMode == LibraryViewMode.COVER_FLOW) {
+                coverFlowState.currentPage > 6
+            } else {
+                gridState.firstVisibleItemIndex > 6
+            }
+        }
     }
 
     // Estado del header colapsable. La conexión nestedScroll se instala en la
@@ -450,7 +463,11 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
             ) {
                 SmallFloatingActionButton(
                     onClick = {
-                        scope.launch { gridState.animateScrollToItem(0) }
+                        if (viewPrefs.viewMode == LibraryViewMode.COVER_FLOW) {
+                            scope.launch { coverFlowState.animateScrollToPage(0) }
+                        } else {
+                            scope.launch { gridState.animateScrollToItem(0) }
+                        }
                     },
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -772,6 +789,11 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 },
                 modifier = Modifier.fillMaxSize(),
             ) {
+                // La vista persistida decide rejilla o carrusel: ambas reciben la
+                // misma lista filtrada, las mismas acciones y la misma carga
+                // incremental, así que cambiar de vista no pierde estado.
+                when (viewPrefs.viewMode) {
+                    LibraryViewMode.GRID ->
                 // Rejilla por filas, no escalonada: el ancho de las columnas difiere en 1 px por
                 // redondeo y una escalonada colocaría cada tarjeta en la columna más corta,
                 // desordenando la fila siguiente.
@@ -804,6 +826,24 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                             }
                         }
                     }
+                }
+                    LibraryViewMode.COVER_FLOW -> LibraryCoverFlow(
+                        items = filteredRoms,
+                        pagerState = coverFlowState,
+                        cardScale = viewPrefs.cardSize.scale,
+                        focusRequester = coverFlowFocus,
+                        isFavorite = {
+                            PlayStatsLogic.aggregate(it.groupRomIds + it.rom.id, playStats).favorite
+                        },
+                        onOpenDetail = { selectedRom = it.rom },
+                        onDownload = { startDownload(it.rom) },
+                        onLoadMore = {
+                            if (hasMore && !isLoadingMore && selectedPlatformId != null) {
+                                viewModel.loadMore(settings.serverUrl, settings.apiKey)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }
