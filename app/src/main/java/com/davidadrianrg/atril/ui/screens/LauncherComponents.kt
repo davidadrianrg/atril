@@ -510,6 +510,59 @@ private fun PlayPill(enabledLook: Boolean, onClick: () -> Unit) {
     }
 }
 
+/**
+ * Leyenda contextual de botones del mando (solo Android, pantalla Play).
+ *
+ * Translúcida y NO interactiva: no lleva clickable ni pointerInput, así que no
+ * intercepta toques ni compite con el carrusel. Se pinta por debajo del snackbar
+ * y de los overlays (van después en el orden de hijos del Box raíz).
+ */
+@Composable
+internal fun PadLegendBar(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color(0xCC0B0907))
+            .border(1.dp, LauncherCream.copy(alpha = 0.10f), RoundedCornerShape(50))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PadLegendChip("A", tr("pad.legend.play"))
+        PadLegendChip("B", tr("pad.legend.back"))
+        PadLegendChip("X", tr("pad.legend.favorite"))
+        PadLegendChip("Y", tr("pad.legend.details"))
+    }
+}
+
+/** Glifo del botón (A/B/X/Y) seguido de la acción que hace en esta pantalla. */
+@Composable
+private fun PadLegendChip(glyph: String, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(LauncherCream.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                glyph,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = LauncherCream,
+            )
+        }
+        Spacer(Modifier.width(5.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = LauncherCream.copy(alpha = 0.78f),
+            maxLines = 1,
+        )
+    }
+}
+
 /** Píldora de filtro de plataforma (sustituye al FilterChip de Material). */
 @Composable
 internal fun LauncherPill(label: String, selected: Boolean, onClick: () -> Unit) {

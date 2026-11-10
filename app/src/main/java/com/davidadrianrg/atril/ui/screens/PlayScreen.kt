@@ -296,6 +296,12 @@ fun PlayScreen(
             if (insertion == null && !menuOpen) currentNow?.let { selectedRomId = it.rom.id }
         }
     }
+    // X del mando: favorito del juego actual (nunca con la inserción en curso ni el menú abierto).
+    LaunchedEffect(Unit) {
+        com.davidadrianrg.atril.ui.input.PadEvents.favorite.collect {
+            if (insertion == null && !menuOpen) currentNow?.let { viewModel.toggleFavorite(it) }
+        }
+    }
     LaunchedEffect(Unit) {
         com.davidadrianrg.atril.ui.input.PadEvents.page.collect { dir ->
             if (insertion == null && !menuOpen && selectedRomId == null) {
@@ -329,7 +335,13 @@ fun PlayScreen(
                 ),
         )
 
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                // Hueco inferior para la leyenda del mando (anclada abajo en el Box).
+                .padding(bottom = if (visibleItems.isNotEmpty()) 40.dp else 0.dp),
+        ) {
             LauncherHeader(
                 count = visibleItems.size,
                 onAddLocal = { pickGame.launch(arrayOf("*/*")) },
@@ -516,6 +528,17 @@ fun PlayScreen(
                     .align(if (landscape) Alignment.CenterStart else Alignment.BottomStart)
                     .windowInsetsPadding(WindowInsets.systemGestures.only(WindowInsetsSides.Start))
                     .fillMaxHeight(if (landscape) 0.7f else 0.3f),
+            )
+        }
+
+        // Leyenda del mando: por debajo del snackbar y de los overlays (se
+        // declaran después, así que se dibujan encima) y sin capturar toques.
+        if (visibleItems.isNotEmpty()) {
+            PadLegendBar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(bottom = 6.dp),
             )
         }
 
