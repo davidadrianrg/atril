@@ -1,8 +1,10 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.RootCommandNames
 import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RomHeaderIdReader
 import com.davidadrianrg.atril.core.util.RootShell
+import com.davidadrianrg.atril.core.util.SafeDelete
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -152,10 +154,11 @@ class Ps2SaveHandler : SaveHandler {
             cardDirs[0]
         }
 
-        // Borrar carpeta existente del serial
+        // Borrar carpeta existente del serial (solo su contenido): la card se
+        // conserva para no perder los saves de otros juegos.
         targetCard.listFiles()?.filter { dir ->
             dir.isDirectory && matchesFolderName(dir.name, serial)
-        }?.forEach { it.deleteRecursively() }
+        }?.forEach { SafeDelete.clearDirectoryContents(targetCard, it) }
 
         // Extraer zip dentro de la memory card
         try {
@@ -271,30 +274,28 @@ class Ps2SaveHandler : SaveHandler {
         if (serial == null) return emptyList()
         val baSerial = toBaFolderName(serial)
 
+        val base = File(savesBasePath)
         for (cardDirPath in rootListCardDirs(savesBasePath)) {
             val saveFolderPath = rootFindSaveFolder(cardDirPath, serial) ?: continue
+
+            // Card y carpeta del serial se resuelven con la regla estricta y la
+            // contención canónica antes de interpolarse en el comando tar.
+            val card = RootCommandNames.resolveUnder(base, File(cardDirPath).name) ?: continue
+            val saveFolder = RootCommandNames.resolveUnder(card, File(saveFolderPath).name) ?: continue
+            val parent = card.parentFile ?: continue
 
             // mtime más reciente dentro de la carpeta (est -c %Y)
             val newestMtime = RootShell.run(
                 "find ${RootShell.sq(saveFolderPath)} -type f -exec stat -c %Y {} + | sort -n | tail -1",
             )?.trim()?.toLongOrNull() ?: System.currentTimeMillis()
 
-            // tar de la carpeta del serial dentro de su card dir
-            val cardDir = File(cardDirPath)
-            val parent = cardDir.parentFile ?: continue
-            val saveFolder = File(cardDir, File(saveFolderPath).name)
+            // tar de la carpeta del serial dentro de su card dir. La ruta se
+            // cita siempre con RootShell.sq y tarCreateCommand exige que los
+            // dos componentes (card/serial) sean nombres seguros.
             val tarFile = File.createTempFile("ps2_root_${baSerial}_", ".tar")
             if (!tarFile.delete()) continue
-            // El miembro se pasa relativo a -C parent: así los nombres dentro
-            // del tar conservan la estructura "cardDir/serial" (una ruta
-            // absoluta haría que tar archivase todos sus componentes). La ruta
-            // se cita siempre con RootShell.sq, igual que el resto de
-            // comandos de root.
-            val ok = RootShell.runToFile(
-                "tar -cf ${RootShell.sq(tarFile.absolutePath)} " +
-                    "-C ${RootShell.sq(parent.absolutePath)} " +
-                    RootShell.sq(saveFolder.relativeTo(parent).path),
-            )
+            val command = RootCommandNames.tarCreateCommand(tarFile, parent, saveFolder) ?: continue
+            val ok = RootShell.runToFile(command)
             if (!ok || !tarFile.isFile || tarFile.length() == 0L) {
                 tarFile.delete()
                 continue
@@ -407,10 +408,17 @@ class Ps2SaveHandler : SaveHandler {
         }
 
         // 2. Copiar la carpeta del serial dentro del primer card dir existente
-        //    (o crear Shared.ps2) bajo savesBasePath, todo con su.
+        //    (o crear Shared.ps2) bajo savesBasePath, todo con su. El nombre de
+        //    la card viene de la salida de find: se valida antes de mkdir/cp.
+        val base = File(savesBasePath)
         val existingCards = rootListCardDirs(savesBasePath)
         val cardName = existingCards.firstOrNull()?.let { File(it).name } ?: "Shared.ps2"
-        val targetCardPath = "${savesBasePath.trimEnd('/')}/$cardName"
+        val targetCard = RootCommandNames.resolveUnder(base, cardName)
+        if (targetCard == null) {
+            staging.deleteRecursively()
+            return false
+        }
+        val targetCardPath = targetCard.path
         val ok = RootShell.runToFile(
             "mkdir -p ${RootShell.sq(targetCardPath)} && " +
                 "cp -a ${RootShell.sq(staging.absolutePath)}/. ${RootShell.sq(targetCardPath)}/",

@@ -1,7 +1,9 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.RootCommandNames
 import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RootShell
+import com.davidadrianrg.atril.core.util.SafeDelete
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -75,11 +77,17 @@ class AndroidSaveHandler : SaveHandler {
      * Empaqueta una carpeta inaccesible para la app usando `su tar`.
      * El tar plano (sin gzip) es determinista: solo depende de contenidos,
      * mtimes y dueños de los ficheros, así el SHA-1 es estable entre corridas.
+     *
+     * El nombre de la carpeta se valida con [RootCommandNames] antes de crear
+     * el temporal o de construir el comando; si no es seguro no se ejecuta
+     * ningún `su`.
      */
     private fun findRootSaves(romId: Int, romBaseName: String, savesBasePath: String): List<LocalSave> {
         val dir = File(savesBasePath)
-        val parent = dir.parent ?: return emptyList()
-        val folderName = dir.name
+        val parent = dir.parentFile ?: return emptyList()
+        val resolved = RootCommandNames.resolveUnder(parent, dir.name) ?: return emptyList()
+        val canonicalParent = resolved.parentFile ?: return emptyList()
+        val folderName = resolved.name
 
         val count = RootShell.run("find ${RootShell.sq(savesBasePath)} -type f | wc -l")
             ?.trim()?.toIntOrNull() ?: return emptyList()
@@ -91,9 +99,9 @@ class AndroidSaveHandler : SaveHandler {
 
         val tarFile = File.createTempFile("android_root_${folderName}_", ".tar")
         if (!tarFile.delete()) return emptyList()
-        val ok = RootShell.runToFile(
-            "tar -cf ${RootShell.sq(tarFile.absolutePath)} -C ${RootShell.sq(parent)} ${RootShell.sq(folderName)}",
-        )
+        val command = RootCommandNames.tarCreateCommand(tarFile, canonicalParent, resolved)
+            ?: return emptyList()
+        val ok = RootShell.runToFile(command)
         if (!ok || !tarFile.isFile || tarFile.length() == 0L) {
             tarFile.delete()
             return emptyList()
@@ -160,9 +168,9 @@ class AndroidSaveHandler : SaveHandler {
      */
     private fun extractRootTar(tempFile: File, savesBasePath: String): Boolean {
         val dir = File(savesBasePath)
-        val parent = dir.parent ?: return false
-        val folderName = dir.name
-        if (!SaveNames.isSafeSaveFileName(folderName)) return false
+        val parent = dir.parentFile ?: return false
+        val resolved = RootCommandNames.resolveUnder(parent, dir.name) ?: return false
+        val folderName = resolved.name
 
         val staging = createStagingDir("android_save_stage_") ?: return false
         try {
@@ -171,7 +179,7 @@ class AndroidSaveHandler : SaveHandler {
             if (stagedTop == null || !stagedTop.isDirectory || stagedTop.name != folderName) return false
             if (!RootShell.available) return false
             val owner = RootShell.ownerOf(dir.absolutePath)
-                ?: RootShell.ownerOf(parent)
+                ?: RootShell.ownerOf(parent.absolutePath)
                 ?: return false
 
             val targetExists = RootShell.run("test -e ${RootShell.sq(dir.absolutePath)}") != null
@@ -198,10 +206,9 @@ class AndroidSaveHandler : SaveHandler {
 
     private fun extractZip(tempFile: File, savesBasePath: String): Boolean {
         val saveDir = File(savesBasePath)
-        // Limpiar contenido existente antes de restaurar
-        if (saveDir.isDirectory) {
-            saveDir.listFiles()?.forEach { it.deleteRecursively() }
-        }
+        // Limpiar contenido existente antes de restaurar. Base y destino son la
+        // misma carpeta de saves configurada: solo se vacía, nunca se borra.
+        SafeDelete.clearDirectoryContents(saveDir, saveDir)
         saveDir.mkdirs()
 
         return try {

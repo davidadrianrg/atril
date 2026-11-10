@@ -1,6 +1,7 @@
 package com.davidadrianrg.atril.core.sync.platform
 
 import com.davidadrianrg.atril.core.sync.SaveNames
+import com.davidadrianrg.atril.core.util.SafeDelete
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -87,10 +88,8 @@ class CemuSaveHandler : SaveHandler {
         val saveDir = findSaveDir(savesBasePath, titleIdLow)
             ?: File(savesBasePath, titleIdLow)
 
-        // Borrar saves existentes antes de restaurar
-        if (saveDir.isDirectory) {
-            saveDir.deleteRecursively()
-        }
+        // Vaciar saves existentes antes de restaurar (solo el contenido).
+        SafeDelete.clearDirectoryContents(File(savesBasePath), saveDir)
         saveDir.mkdirs()
 
         try {

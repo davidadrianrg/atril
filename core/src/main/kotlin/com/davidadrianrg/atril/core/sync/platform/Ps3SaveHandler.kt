@@ -1,6 +1,7 @@
 package com.davidadrianrg.atril.core.sync.platform
 
 import com.davidadrianrg.atril.core.sync.SaveNames
+import com.davidadrianrg.atril.core.util.SafeDelete
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -145,7 +146,7 @@ class Ps3SaveHandler : SaveHandler {
             if (!extracted || failed) return@withContext false
 
             // Sustitución: el staging ya contiene el árbol completo y validado.
-            if (targetDir.isDirectory) clearDirectoryContents(targetDir)
+            if (targetDir.isDirectory) SafeDelete.clearDirectoryContents(root, targetDir)
             targetDir.mkdirs()
             val staged = staging.listFiles() ?: return@withContext false
             staged.all { child ->
@@ -205,33 +206,6 @@ class Ps3SaveHandler : SaveHandler {
         true
     } catch (_: Exception) {
         false
-    }
-
-    /**
-     * Borra solo el contenido de [dir]; nunca el propio directorio.
-     *
-     * Cada hijo se canonicaliza: si sigue dentro de [dir] se borra
-     * recursivamente; si escapa (enlace simbólico) solo se borra el enlace.
-     */
-    private fun clearDirectoryContents(dir: File) {
-        val canonicalDir = try {
-            dir.canonicalFile
-        } catch (_: Exception) {
-            return
-        }
-        val prefix = canonicalDir.path + File.separator
-        canonicalDir.listFiles()?.forEach { child ->
-            val canonicalChild = try {
-                child.canonicalFile
-            } catch (_: Exception) {
-                null
-            }
-            if (canonicalChild != null && canonicalChild.path.startsWith(prefix)) {
-                canonicalChild.deleteRecursively()
-            } else {
-                child.delete()
-            }
-        }
     }
 
     /**
