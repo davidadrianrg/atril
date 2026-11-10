@@ -89,7 +89,7 @@ class DesktopManualLinkTest {
             name = "Juego $romId",
             fileName = "Game.gba",
             platformId = 7,
-            platformSlug = slug,
+            platformSlugRaw = slug,
         )
         return GameCard(rep = rom, discCount = 1, groupRoms = listOf(rom), downloaded = true)
     }
@@ -484,7 +484,7 @@ class DesktopManualLinkTest {
             name = "Traversal",
             fileName = "Secret.gba",
             platformId = 7,
-            platformSlug = "../outside-escape",
+            platformSlugRaw = "../outside-escape",
         )
         val card = GameCard(rep = rom, discCount = 1, groupRoms = listOf(rom), downloaded = false)
 
@@ -509,7 +509,7 @@ class DesktopManualLinkTest {
             name = "No root",
             fileName = "Game.gba",
             platformId = 7,
-            platformSlug = slug,
+            platformSlugRaw = slug,
         )
         val card = GameCard(rep = rom, discCount = 1, groupRoms = listOf(rom), downloaded = false)
 
@@ -539,7 +539,7 @@ class DesktopManualLinkTest {
             name = "Linked folder",
             fileName = "Game.gba",
             platformId = 7,
-            platformSlug = slug,
+            platformSlugRaw = slug,
         )
         val card = GameCard(rep = rom, discCount = 1, groupRoms = listOf(rom), downloaded = false)
 
@@ -555,7 +555,7 @@ class DesktopManualLinkTest {
         name = "Juego multidisco",
         fileName = "Game (Disc $number).gba",
         platformId = 7,
-        platformSlug = slug,
+        platformSlugRaw = slug,
         igdbId = 77,
     )
 

@@ -30,7 +30,7 @@ class DownloadEngineCancelTest {
     @get:Rule
     val tmp = TemporaryFolder()
 
-    private val rom = RomDto(id = 1, name = "Test", fileName = "test.bin", platformId = 1, platformSlug = "testplat")
+    private val rom = RomDto(id = 1, name = "Test", fileName = "test.bin", platformId = 1, platformSlugRaw = "testplat")
 
     /**
      * Cuerpo de [size] bytes servido despacio: el motor notifica progreso como mucho

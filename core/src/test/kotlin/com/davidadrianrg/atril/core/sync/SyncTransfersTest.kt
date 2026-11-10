@@ -191,4 +191,78 @@ class SyncTransfersTest {
         assertFalse(upload(api))
         assertEquals(1, calls)
     }
+
+    // ── SEC-002-R: nombres y mensajes del servidor no forjan líneas de log ──
+
+    /** Un nombre de save con CR, LF y un carácter de control del servidor. */
+    private val hostileName = "Gex\r\nINJECTED\u0007.srm"
+
+    private fun assertSingleLineLogs(lines: List<String>) {
+        assertTrue("debe haber líneas de log", lines.isNotEmpty())
+        lines.forEach { line ->
+            assertFalse("salto de línea forjado en: $line", line.contains('\n') || line.contains('\r'))
+            assertFalse(
+                "carácter de control en: $line",
+                line.any { it.isISOControl() },
+            )
+            assertTrue("línea sin cota (${line.length}): $line", line.length <= 220)
+            assertFalse("mensaje de la excepción filtrado: $line", line.contains("forged"))
+            assertFalse("mensaje de la excepción filtrado: $line", line.contains("boom"))
+        }
+    }
+
+    @Test
+    fun `a hostile save name cannot forge download log lines`() {
+        val rec = Recorder()
+        val cache = cache()
+        val lines = mutableListOf<String>()
+        val api = fake<RomMApiService> { _, _ -> throw IOException("boom\nforged") }
+
+        val ok = runBlocking {
+            SyncTransfers.download(
+                api = api, saveId = 1, deviceId = "d", romId = 7, romFileName = "g.chd",
+                platformSlug = "3do", fileName = "Gex\r\nINJECTED\u0007 [2026-11-03_06-57-36].srm",
+                savesBasePath = "/saves", handler = handler(rec), cacheDir = cache,
+                expectedHash = goodMd5, attempts = 3, baseDelayMs = 1,
+                log = { lines.add(it) },
+            )
+        }
+
+        assertFalse(ok)
+        assertEquals(0, rec.extractCalls)
+        assertSingleLineLogs(lines)
+        assertTrue(lines.contains("download retry 1 for GexINJECTED.srm: IOException"))
+        assertEquals(
+            "download failed for GexINJECTED.srm (rom 7): IOException",
+            lines.last(),
+        )
+    }
+
+    @Test
+    fun `a hostile save name cannot forge upload log lines`() {
+        val lines = mutableListOf<String>()
+        val file = File.createTempFile("save", ".srm").apply {
+            deleteOnExit()
+            writeBytes(good)
+        }
+        val api = fake<RomMApiService> { _, _ -> throw IOException("boom\nforged") }
+
+        val ok = runBlocking {
+            SyncTransfers.upload(
+                api = api,
+                save = LocalSave(7, hostileName, file, 0L, "x"),
+                romId = 7,
+                deviceId = "d",
+                handler = handler(Recorder()),
+                attempts = 3,
+                baseDelayMs = 1,
+                log = { lines.add(it) },
+            )
+        }
+
+        assertFalse(ok)
+        assertSingleLineLogs(lines)
+        assertTrue(lines.contains("upload retry 1 for GexINJECTED.srm: IOException"))
+        assertEquals("upload failed for GexINJECTED.srm: IOException", lines.last())
+    }
 }

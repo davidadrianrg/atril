@@ -47,7 +47,7 @@ class DesktopPlayStatsWiringTest {
         name = "Juego $id",
         fileName = "juego-$id.gba",
         platformId = 1,
-        platformSlug = "gba",
+        platformSlugRaw = "gba",
     )
 
     private fun card(vararg ids: Int): GameCard {
