@@ -146,4 +146,61 @@ class PlayStatsStoreTest {
     fun `a negative session duration is a programmer error`() {
         store(file()).recordSession(1, endedAt = 1_000, durationMs = -1)
     }
+
+    /**
+     * REV-002: un valor con el tipo equivocado invalida solo su entrada (o su
+     * campo), nunca el fichero entero. Un `romId` que no es número descarta la
+     * entrada; una última partida o un tiempo jugado con el tipo equivocado se
+     * corrigen dentro de la entrada, que sigue cargando.
+     */
+    @Test
+    fun `a wrongly typed entry only drops itself and the rest of the file loads`() {
+        val f = file()
+        f.writeText(
+            """
+            [
+              {"romId": "abc", "favorite": true, "totalPlayedMs": 1000},
+              {"romId": 21, "favorite": "yes", "lastPlayedAt": "ayer", "totalPlayedMs": 60000},
+              {"romId": 22, "favorite": false, "lastPlayedAt": 500, "totalPlayedMs": "mucho"},
+              "not an object",
+              {"romId": 7, "favorite": true, "lastPlayedAt": 1000, "totalPlayedMs": 5000}
+            ]
+            """.trimIndent(),
+        )
+        val logs = mutableListOf<String>()
+        val s = store(f, logs)
+
+        assertEquals(
+            listOf(
+                // La entrada válida conserva exactamente sus valores.
+                PlayStats(7, favorite = true, lastPlayedAt = 1_000, totalPlayedMs = 5_000),
+                // Tipo equivocado en un campo de tiempo: se corrige, la entrada se mantiene.
+                PlayStats(21, favorite = false, lastPlayedAt = null, totalPlayedMs = 60_000),
+                PlayStats(22, favorite = false, lastPlayedAt = 500, totalPlayedMs = 0),
+            ),
+            s.all(),
+        )
+        assertEquals(PlayStats(7, favorite = true, lastPlayedAt = 1_000, totalPlayedMs = 5_000), s.get(7))
+        assertNull(s.get(8))
+        // Ni el almacén cae a vacío ni se conserva una copia .corrupt.
+        assertFalse(File(f.path + ".corrupt").exists())
+        // Un único WARN por carga, nombrando las entradas descartadas (romId inválido + elemento no objeto).
+        assertEquals(1, logs.size)
+        assertTrue("expected a WARN line, got ${logs.single()}", logs.single().startsWith("WARN"))
+        assertTrue("the warning must name the dropped entries: ${logs.single()}", logs.single().contains("dropped"))
+        assertTrue("the warning must count 2 dropped entries: ${logs.single()}", logs.single().contains("2"))
+    }
+
+    @Test
+    fun `a document whose root is not an array still degrades to the corrupt path`() {
+        val f = file()
+        f.writeText("{\"a\": 1}")
+        val logs = mutableListOf<String>()
+        val s = store(f, logs)
+
+        assertTrue(s.all().isEmpty())
+        assertEquals("{\"a\": 1}", File(f.path + ".corrupt").readText())
+        assertEquals(1, logs.size)
+        assertTrue("expected a WARN line, got ${logs.single()}", logs.single().startsWith("WARN"))
+    }
 }
