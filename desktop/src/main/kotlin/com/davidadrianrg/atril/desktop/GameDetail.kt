@@ -182,7 +182,7 @@ fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
                                             val file = withContext(Dispatchers.IO) {
                                                 pickFile(tr("library.locate_file"))
                                             } ?: return@launch
-                                            state.locateFile(card, file.absolutePath)
+                                            state.locateFileSuspending(card, file.absolutePath)
                                         }
                                     },
                                 ) {
@@ -202,7 +202,9 @@ fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
                                 Text(tr("common.download"))
                             }
                             Spacer(Modifier.width(10.dp))
-                            OutlinedButton(onClick = { state.markDownloadedManually(card) }) {
+                            OutlinedButton(
+                                onClick = { scope.launch { state.markDownloadedManuallySuspending(card) } },
+                            ) {
                                 Text(tr("library.mark_downloaded"))
                             }
                         }
