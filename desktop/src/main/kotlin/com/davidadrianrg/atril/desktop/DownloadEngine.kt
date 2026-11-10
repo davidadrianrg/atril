@@ -1,6 +1,7 @@
 package com.davidadrianrg.atril.desktop
 
 import com.davidadrianrg.atril.core.download.PathMapper
+import com.davidadrianrg.atril.core.download.ZipStreamExtractor
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.remote.RomMApiService
 import com.davidadrianrg.atril.core.remote.dto.RomDto
@@ -9,7 +10,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.util.zip.ZipInputStream
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -162,41 +162,21 @@ class DownloadEngine(
         )
     }
 
+    /**
+     * Extrae el zip de un stream mod_zip, manteniendo el contador de progreso y
+     * la comprobación del Job entre este motor y el helper de :core.
+     */
     private fun extractZipStream(
         body: okhttp3.ResponseBody,
         targetDir: File,
         job: Job?,
         onProgress: (Progress) -> Unit,
     ): List<File> {
-        val createdFiles = mutableListOf<File>()
         val counting = CountingInputStream(body.byteStream(), 0L) { read, speed ->
             if (job?.isActive == false) throw CancellationException("Descarga cancelada")
             onProgress(Progress(read, -1L, speed))
         }
-        try {
-            ZipInputStream(counting).use { zipIn ->
-                var entry = zipIn.nextEntry
-                while (entry != null) {
-                    val outFile = File(targetDir, entry.name)
-                    if (!outFile.canonicalPath.startsWith(targetDir.canonicalPath)) {
-                        zipIn.closeEntry(); entry = zipIn.nextEntry; continue
-                    }
-                    if (entry.isDirectory) {
-                        outFile.mkdirs()
-                    } else {
-                        outFile.parentFile?.mkdirs()
-                        FileOutputStream(outFile).use { out -> zipIn.copyTo(out) }
-                        createdFiles.add(outFile)
-                    }
-                    zipIn.closeEntry()
-                    entry = zipIn.nextEntry
-                }
-            }
-        } catch (e: Exception) {
-            createdFiles.forEach { if (it.exists()) it.delete() }
-            throw e
-        }
-        return createdFiles
+        return ZipStreamExtractor.extract(counting, targetDir)
     }
 }
 
