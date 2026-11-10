@@ -2,12 +2,15 @@ package com.davidadrianrg.atril.launch
 
 import com.davidadrianrg.atril.core.sync.SavePullClient
 import com.davidadrianrg.atril.core.sync.SavePullResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 
@@ -138,5 +141,56 @@ class PreLaunchSaveSyncTest {
 
         assertEquals(SavePullResult.TimedOut, result)
         assertEquals(8_000L, testScheduler.currentTime)
+    }
+
+    @Test
+    fun `a failing settings read degrades to Skipped and the launch continues`() = runTest {
+        var factoryCalls = 0
+        var notified = false
+        val sync = PreLaunchSaveSync(
+            saveSyncEnabled = flow { throw IOException("datastore unavailable") },
+            clientFactory = {
+                factoryCalls++
+                fixedClient(1)
+            },
+        )
+
+        val result = sync.run(romId = 42) { notified = true }
+
+        assertEquals(SavePullResult.Skipped, result)
+        assertEquals(0, factoryCalls)
+        assertFalse(notified)
+    }
+
+    @Test
+    fun `a failing server check degrades to Skipped and the launch continues`() = runTest {
+        var factoryCalls = 0
+        var notified = false
+        val sync = PreLaunchSaveSync(
+            saveSyncEnabled = flowOf(true),
+            clientFactory = {
+                factoryCalls++
+                fixedClient(1)
+            },
+            serverConfigured = { throw IllegalStateException("settings read failed") },
+        )
+
+        val result = sync.run(romId = 42) { notified = true }
+
+        assertEquals(SavePullResult.Skipped, result)
+        assertEquals(0, factoryCalls)
+        assertFalse(notified)
+    }
+
+    @Test
+    fun `settings cancellation is not swallowed`() = runTest {
+        val sync = PreLaunchSaveSync(
+            saveSyncEnabled = flow { throw CancellationException("caller cancelled") },
+            clientFactory = { fixedClient(1) },
+        )
+
+        val thrown = runCatching { sync.run(romId = 42) {} }.exceptionOrNull()
+
+        assertTrue(thrown is CancellationException)
     }
 }

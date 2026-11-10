@@ -187,8 +187,62 @@ class LocalDiscGrouperTest {
         val group = groups.single()
         assertEquals(2, group.discCount)
         assertEquals(listOf(1, 2), group.members.map { it.discNumber })
-        // Gana el primero por ruta: ".bin" ordena antes que ".cue".
-        assertEquals("bin", group.representativeId)
+        // Mismo disco: gana el descriptor lanzable (.cue > .gdi > .m3u), no el
+        // fichero de datos crudo, para que el disco se pueda arrancar.
+        assertEquals("cue", group.representativeId)
+        assertTrue(group.members.first().path.endsWith("(Disc 1).cue"))
+    }
+
+    @Test
+    fun `a gdi descriptor beats the raw data file of the same disc`() {
+        val group = LocalDiscGrouper.group(
+            listOf(
+                entry("bin", "Game", "/roms/Game (Disc 1).bin"),
+                entry("gdi", "Game", "/roms/Game (Disc 1).gdi"),
+                entry("d2", "Game", "/roms/Game (Disc 2).bin"),
+            ),
+            noPlaylist,
+        ).single()
+
+        assertEquals(2, group.discCount)
+        assertEquals("gdi", group.representativeId)
+        assertEquals(listOf(1, 2), group.members.map { it.discNumber })
+        assertTrue(group.members.first().path.endsWith("(Disc 1).gdi"))
+    }
+
+    @Test
+    fun `descriptor preference is cue then gdi then m3u`() {
+        val group = LocalDiscGrouper.group(
+            listOf(
+                entry("m3u", "Game", "/roms/Game (Disc 1).m3u"),
+                entry("gdi", "Game", "/roms/Game (Disc 1).gdi"),
+                entry("cue", "Game", "/roms/Game (Disc 1).cue"),
+                entry("d2", "Game", "/roms/Game (Disc 2).iso"),
+            ),
+            noPlaylist,
+        ).single()
+
+        assertEquals(2, group.discCount)
+        assertEquals("cue", group.representativeId)
+    }
+
+    @Test
+    fun `the playlist still wins as the group default after a descriptor collapse`() {
+        val locator = PlaylistLocator { path ->
+            if (path.endsWith("(Disc 1).cue")) "/roms/Game.m3u" else null
+        }
+        val group = LocalDiscGrouper.group(
+            listOf(
+                entry("bin", "Game", "/roms/Game (Disc 1).bin"),
+                entry("cue", "Game", "/roms/Game (Disc 1).cue"),
+                entry("d2", "Game", "/roms/Game (Disc 2).iso"),
+            ),
+            locator,
+        ).single()
+
+        assertEquals("cue", group.representativeId)
+        assertEquals("/roms/Game.m3u", group.playlistPath)
+        assertEquals(LocalDiscChoice.Playlist("/roms/Game.m3u"), LocalDiscGrouper.defaultChoice(group))
     }
 
     @Test
