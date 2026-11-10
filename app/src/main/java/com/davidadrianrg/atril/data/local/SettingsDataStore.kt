@@ -12,6 +12,12 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.davidadrianrg.atril.core.library.LibraryCardSize
+import com.davidadrianrg.atril.core.library.LibraryPreferenceKeys
+import com.davidadrianrg.atril.core.library.LibrarySort
+import com.davidadrianrg.atril.core.library.LibrarySource
+import com.davidadrianrg.atril.core.library.LibraryViewMode
+import com.davidadrianrg.atril.core.library.LibraryViewPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -72,6 +78,12 @@ class SettingsDataStore(private val context: Context) {
         val MEDIA_DOWNLOAD_PATH = stringPreferencesKey("media_download_path")
         val LANGUAGE = stringPreferencesKey("language")
         val THEME = stringPreferencesKey("theme")
+        // Vista/orden/origen/tamaño de la biblioteca. Las claves canónicas viven
+        // en :core para que Android y desktop no inventen grafías distintas.
+        val LIBRARY_VIEW_MODE = stringPreferencesKey(LibraryPreferenceKeys.VIEW_MODE)
+        val LIBRARY_SORT = stringPreferencesKey(LibraryPreferenceKeys.SORT)
+        val LIBRARY_SOURCE = stringPreferencesKey(LibraryPreferenceKeys.SOURCE)
+        val LIBRARY_CARD_SIZE = stringPreferencesKey(LibraryPreferenceKeys.CARD_SIZE)
         val SGDB_KEY = stringPreferencesKey("scraper_steamgriddb_key")
         val SS_USER = stringPreferencesKey("scraper_ss_user")
         val SS_PASSWORD = stringPreferencesKey("scraper_ss_password")
@@ -163,6 +175,19 @@ class SettingsDataStore(private val context: Context) {
     /** "" = idioma del sistema; "en"/"es" = forzado. */
     /** Id de tema ([com.davidadrianrg.atril.core.theme.AppTheme.id]); "" = por defecto. */
     val theme: Flow<String> = context.dataStore.data.map { it[THEME] ?: "" }
+
+    /**
+     * Preferencias de vista de la biblioteca, ya validadas: una clave ausente o
+     * con un valor desconocido cae en el valor por defecto de esa dimensión.
+     */
+    val libraryViewPreferences: Flow<LibraryViewPreferences> = context.dataStore.data.map { prefs ->
+        LibraryViewPreferences.fromIds(
+            viewMode = prefs[LIBRARY_VIEW_MODE],
+            sort = prefs[LIBRARY_SORT],
+            source = prefs[LIBRARY_SOURCE],
+            cardSize = prefs[LIBRARY_CARD_SIZE],
+        )
+    }
     /** Credenciales de SteamGridDB / ScreenScraper para los juegos locales. */
     val scraperCredentials: Flow<com.davidadrianrg.atril.core.localgames.ScraperCredentials> =
         context.dataStore.data.map {
@@ -368,6 +393,26 @@ class SettingsDataStore(private val context: Context) {
 
     suspend fun setTheme(id: String) {
         context.dataStore.edit { it[THEME] = id }
+    }
+
+    /** Persiste la vista de la biblioteca (rejilla / cover flow). */
+    suspend fun setLibraryViewMode(mode: LibraryViewMode) {
+        context.dataStore.edit { it[LIBRARY_VIEW_MODE] = mode.id }
+    }
+
+    /** Persiste el criterio de orden de la biblioteca. */
+    suspend fun setLibrarySort(sort: LibrarySort) {
+        context.dataStore.edit { it[LIBRARY_SORT] = sort.id }
+    }
+
+    /** Persiste el origen (todo / local / RomM) de la biblioteca. */
+    suspend fun setLibrarySource(source: LibrarySource) {
+        context.dataStore.edit { it[LIBRARY_SOURCE] = source.id }
+    }
+
+    /** Persiste el tamaño de tarjeta de la biblioteca. */
+    suspend fun setLibraryCardSize(size: LibraryCardSize) {
+        context.dataStore.edit { it[LIBRARY_CARD_SIZE] = size.id }
     }
 
     suspend fun setScraperCredentials(c: com.davidadrianrg.atril.core.localgames.ScraperCredentials) {

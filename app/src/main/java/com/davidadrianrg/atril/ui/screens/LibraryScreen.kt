@@ -163,6 +163,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 LibraryViewModel(
                     romRepository = container.romRepository,
                     downloadManager = container.downloadManager,
+                    playStats = container.playStats,
                 )
             }
         }
