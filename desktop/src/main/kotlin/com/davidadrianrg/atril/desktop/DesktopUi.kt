@@ -72,6 +72,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
@@ -85,6 +91,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.library.LibrarySource
+import com.davidadrianrg.atril.core.library.LibraryViewPreferences
 import com.davidadrianrg.atril.core.settings.SettingsCategory
 import com.davidadrianrg.atril.core.launch.DesktopLaunchPlanner
 import com.davidadrianrg.atril.core.launch.DesktopEmulatorCatalog
@@ -589,15 +597,45 @@ fun LibraryScreen(state: DesktopAppState) {
     val tasks by state.tasks.collectAsState()
     val sort by state.sort.collectAsState()
     val regionFilter by state.regionFilter.collectAsState()
-    val games = remember(roms, search, filter, version, sort, regionFilter) { state.games() }
+    // Preferencias persistentes de la biblioteca: única fuente de verdad.
+    val viewMode by state.viewMode.collectAsState()
+    val source by state.source.collectAsState()
+    val cardSize by state.cardSize.collectAsState()
+    // Las estadísticas de partida alimentan el orden "última partida" y el
+    // favorito de las tarjetas: cualquier cambio debe recomponer la lista.
+    val playStats by state.playStats.stats.collectAsState()
+    val games = remember(roms, search, filter, version, sort, regionFilter, source, playStats) { state.games() }
+    val viewPrefs = LibraryViewPreferences(viewMode = viewMode, sort = sort, source = source, cardSize = cardSize)
+    var showViewOptions by remember { mutableStateOf(false) }
+    // R abre el panel solo si ningún campo de texto tiene el foco.
+    var searchFocused by remember { mutableStateOf(false) }
+    val selectedGame by state.selectedGame.collectAsState()
     // Rejilla uniforme 3:4 con portadas Fit (igual que Android): sin esperar a medir portadas.
     val ratio = UNIFORM_CARD_RATIO
 
     var showBatchDialog by remember { mutableStateOf(false) }
     var showUploadGame by remember { mutableStateOf(false) }
-    val missingCount = remember(roms, version) { state.missingGames().size }
+    val missingCount = remember(roms, version, source) { state.missingGames().size }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .onPreviewKeyEvent { ev ->
+                // "R" y PageDown (R1 del mando) abren las opciones de vista, pero
+                // solo si ningún campo de texto tiene el foco: este atajo vive en
+                // la pantalla, nunca en el KeyEventDispatcher global de AWT.
+                val shortcut = ev.key == Key.R || ev.key == Key.PageDown
+                if (ev.type == KeyEventType.KeyDown && shortcut &&
+                    !searchFocused && selectedGame == null && !showViewOptions
+                ) {
+                    showViewOptions = true
+                    true
+                } else {
+                    false
+                }
+            },
+    ) {
         // Fila 1: título + selector de plataforma + refrescar + lote
         var platMenu by remember { mutableStateOf(false) }
         val selSlug by state.selectedPlatformSlug.collectAsState()
@@ -686,7 +724,9 @@ fun LibraryScreen(state: DesktopAppState) {
                 }
             },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { searchFocused = it.isFocused },
         )
         Spacer(Modifier.height(10.dp))
 
@@ -721,6 +761,34 @@ fun LibraryScreen(state: DesktopAppState) {
             if (games.isNotEmpty()) {
                 IconButton(onClick = { state.openGame(games.random()) }) {
                     Icon(AppIcons.Casino, contentDescription = tr("library.random_game"))
+                }
+            }
+
+            // Opciones de vista: orden, origen, vista y tamaño (persistidas).
+            // El panel es un Popup modal, así que nunca tapa contenido de forma
+            // permanente: se cierra al pulsar fuera, con Escape o con su aspa.
+            Box {
+                IconButton(onClick = { showViewOptions = true }) {
+                    Icon(
+                        AppIcons.Tune,
+                        contentDescription = tr("library.view_options.title"),
+                        tint = if (viewPrefs != LibraryViewPreferences.DEFAULT) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                if (showViewOptions) {
+                    DesktopViewOptions(
+                        preferences = viewPrefs,
+                        showYearSort = games.any { it.rep.igdbMetadata?.firstReleaseDate != null },
+                        onSort = { state.setSort(it) },
+                        onSource = { state.setSource(it) },
+                        onViewMode = { state.setViewMode(it) },
+                        onCardSize = { state.setCardSize(it) },
+                        onDismiss = { showViewOptions = false },
+                    )
                 }
             }
 
@@ -767,10 +835,20 @@ fun LibraryScreen(state: DesktopAppState) {
         }
         Spacer(Modifier.height(12.dp))
 
-        val selectedGame by state.selectedGame.collectAsState()
         val g = selectedGame
         when {
             g != null -> GameDetailPanel(g, state)
+            // D1: la Biblioteca solo lista juegos de RomM. Origen=Local no
+            // filtra una lista vacía: explica dónde viven los juegos locales.
+            source == LibrarySource.LOCAL -> {
+                Box(Modifier.weight(1f)) {
+                    EmptyState(
+                        icon = AppIcons.Gamepad,
+                        title = tr("library.source.local_empty.title"),
+                        description = tr("library.source.local_empty.desc"),
+                    )
+                }
+            }
             ((loading || loadingPlatforms) && roms.isEmpty()) -> {
                 // Estado de carga diseñado: esqueleto con las mismas medidas que la rejilla real.
                 LibrarySkeleton(ratio, Modifier.weight(1f).fillMaxWidth())
@@ -799,7 +877,7 @@ fun LibraryScreen(state: DesktopAppState) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     LazyVerticalGrid(
                         state = gridState,
-                        columns = GridCells.Adaptive(150.dp),
+                        columns = GridCells.Adaptive(150.dp * cardSize.scale),
                         contentPadding = PaddingValues(vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
