@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.remote
 
+import com.davidadrianrg.atril.core.remote.dto.DeviceDto
 import com.davidadrianrg.atril.core.remote.dto.PlatformDto
 import com.davidadrianrg.atril.core.remote.dto.RomDto
 import com.davidadrianrg.atril.core.remote.dto.RomResponse
@@ -84,6 +85,10 @@ interface RomMApiService {
     suspend fun registerDevice(
         @Body request: DeviceRegistrationRequest,
     ): DeviceRegistrationResponse
+
+    /** Devices already registered on the account (GET /api/devices). */
+    @GET("api/devices")
+    suspend fun getDevices(): List<DeviceDto>
 
     /**
      * Negotiate sync operations with the server.
