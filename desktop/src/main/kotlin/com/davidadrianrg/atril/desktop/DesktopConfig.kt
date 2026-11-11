@@ -2,6 +2,7 @@ package com.davidadrianrg.atril.desktop
 
 import java.io.File
 import java.util.prefs.Preferences
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.LibraryCardSize
 import com.davidadrianrg.atril.core.library.LibraryPreferenceKeys
 import com.davidadrianrg.atril.core.library.LibrarySort
@@ -192,6 +193,11 @@ object DesktopConfig {
     var libraryCardSize: String
         get() = prefs.get(LibraryPreferenceKeys.CARD_SIZE, LibraryCardSize.DEFAULT.id)
         set(v) = prefs.put(LibraryPreferenceKeys.CARD_SIZE, v)
+
+    /** Estilo de carátula de la biblioteca (id canónico de :core). */
+    var libraryCoverStyle: String
+        get() = prefs.get(LibraryPreferenceKeys.COVER_STYLE, CoverStyle.DEFAULT.id)
+        set(v) = prefs.put(LibraryPreferenceKeys.COVER_STYLE, v)
 
     /** IDs marcados como descargados a mano (CSV), sin fichero gestionado. */
     var manualDownloaded: String

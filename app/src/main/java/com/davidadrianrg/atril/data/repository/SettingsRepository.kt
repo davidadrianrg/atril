@@ -2,6 +2,7 @@ package com.davidadrianrg.atril.data.repository
 
 import com.davidadrianrg.atril.data.local.SettingsDataStore
 import com.davidadrianrg.atril.data.local.ServerConfig
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.LibraryCardSize
 import com.davidadrianrg.atril.core.library.LibrarySort
 import com.davidadrianrg.atril.core.library.LibrarySource
@@ -44,12 +45,13 @@ class SettingsRepository(private val dataStore: SettingsDataStore) {
     suspend fun setSaveSyncWatchEnabled(enabled: Boolean) = dataStore.setSaveSyncWatchEnabled(enabled)
 
     val retroArchBasePath: Flow<String> = dataStore.retroArchBasePath
-    /** Vista, orden, origen y tamaño de la biblioteca, ya validados. */
+    /** Vista, orden, origen, tamaño y estilo de carátula de la biblioteca, ya validados. */
     val libraryViewPreferences: Flow<LibraryViewPreferences> = dataStore.libraryViewPreferences
     suspend fun setLibraryViewMode(mode: LibraryViewMode) = dataStore.setLibraryViewMode(mode)
     suspend fun setLibrarySort(sort: LibrarySort) = dataStore.setLibrarySort(sort)
     suspend fun setLibrarySource(source: LibrarySource) = dataStore.setLibrarySource(source)
     suspend fun setLibraryCardSize(size: LibraryCardSize) = dataStore.setLibraryCardSize(size)
+    suspend fun setLibraryCoverStyle(style: CoverStyle) = dataStore.setLibraryCoverStyle(style)
     /** Grupo local -> disco elegido (ya decodificado). */
     val localDiscChoices: Flow<Map<String, String>> = dataStore.localDiscChoices
     suspend fun setLocalDiscChoice(groupKey: String, choiceId: String?) =

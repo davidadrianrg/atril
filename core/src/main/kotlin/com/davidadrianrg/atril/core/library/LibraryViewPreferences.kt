@@ -75,21 +75,48 @@ enum class LibraryCardSize(val id: String, val labelKey: String, val scale: Floa
 }
 
 /**
- * The four Library preferences, decoded and validated.
+ * Which artwork the Library shows on a game cover.
+ *
+ * [CASE] keeps the historical behaviour (large cover, then small cover);
+ * [PHYSICAL] and [SCREENSHOT] only win when the game actually has that media
+ * and otherwise fall back to the same cover chain.
+ *
+ * @property id persisted identifier.
+ * @property labelKey translation key of the visible label.
+ */
+enum class CoverStyle(val id: String, val labelKey: String) {
+    CASE("case", "library.cover_style.case"),
+    PHYSICAL("physical", "library.cover_style.physical"),
+    SCREENSHOT("screenshot", "library.cover_style.screenshot"),
+    ;
+
+    companion object {
+        /** Style used when nothing is persisted or the stored id is unknown. */
+        val DEFAULT: CoverStyle = CASE
+
+        /** Maps a persisted [raw] id to its style, falling back to [DEFAULT]. */
+        fun fromId(raw: String?): CoverStyle = entries.firstOrNull { it.id == raw } ?: DEFAULT
+    }
+}
+
+/**
+ * The five Library preferences, decoded and validated.
  *
  * Use [fromIds] to build it from persisted values: each dimension applies its
- * own fallback, so one corrupted key never invalidates the other three.
+ * own fallback, so one corrupted key never invalidates the other four.
  *
  * @property viewMode grid or cover flow.
  * @property sort ordering criterion.
  * @property source which games are listed.
  * @property cardSize card scale in the grid and the cover flow.
+ * @property coverStyle artwork shown on the covers.
  */
 data class LibraryViewPreferences(
     val viewMode: LibraryViewMode = LibraryViewMode.DEFAULT,
     val sort: LibrarySort = LibrarySort.DEFAULT,
     val source: LibrarySource = LibrarySource.DEFAULT,
     val cardSize: LibraryCardSize = LibraryCardSize.DEFAULT,
+    val coverStyle: CoverStyle = CoverStyle.DEFAULT,
 ) {
     companion object {
         /** Absent keys reproduce the layout and ordering the app had before. */
@@ -105,11 +132,13 @@ data class LibraryViewPreferences(
             sort: String?,
             source: String?,
             cardSize: String?,
+            coverStyle: String? = null,
         ): LibraryViewPreferences = LibraryViewPreferences(
             viewMode = LibraryViewMode.fromId(viewMode),
             sort = LibrarySort.fromId(sort),
             source = LibrarySource.fromId(source),
             cardSize = LibraryCardSize.fromId(cardSize),
+            coverStyle = CoverStyle.fromId(coverStyle),
         )
     }
 }
@@ -133,6 +162,9 @@ object LibraryPreferenceKeys {
 
     /** Persisted [LibraryCardSize] id. */
     const val CARD_SIZE = "library_card_size"
+
+    /** Persisted [CoverStyle] id. */
+    const val COVER_STYLE = "library_cover_style"
 
     /** Persisted group key -> chosen disc id map for local multidisc launches. */
     const val LOCAL_DISCS = "library_local_discs"

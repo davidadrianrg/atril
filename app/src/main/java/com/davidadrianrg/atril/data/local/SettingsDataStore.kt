@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.LibraryCardSize
 import com.davidadrianrg.atril.core.library.LibraryPreferenceKeys
 import com.davidadrianrg.atril.core.library.LibrarySort
@@ -78,12 +79,15 @@ class SettingsDataStore(private val context: Context) {
         val MEDIA_DOWNLOAD_PATH = stringPreferencesKey("media_download_path")
         val LANGUAGE = stringPreferencesKey("language")
         val THEME = stringPreferencesKey("theme")
-        // Vista/orden/origen/tamaño de la biblioteca. Las claves canónicas viven
-        // en :core para que Android y desktop no inventen grafías distintas.
+        // Vista/orden/origen/tamaño/estilo de carátula de la biblioteca. Las
+        // claves canónicas viven en :core para que Android y desktop no
+        // inventen grafías distintas.
         val LIBRARY_VIEW_MODE = stringPreferencesKey(LibraryPreferenceKeys.VIEW_MODE)
         val LIBRARY_SORT = stringPreferencesKey(LibraryPreferenceKeys.SORT)
         val LIBRARY_SOURCE = stringPreferencesKey(LibraryPreferenceKeys.SOURCE)
         val LIBRARY_CARD_SIZE = stringPreferencesKey(LibraryPreferenceKeys.CARD_SIZE)
+        /** Estilo de carátula (caja / medio físico / captura). */
+        val LIBRARY_COVER_STYLE = stringPreferencesKey(LibraryPreferenceKeys.COVER_STYLE)
         /** Grupo local -> disco elegido, codificado con `ChosenDiscCodec`. */
         val LIBRARY_LOCAL_DISCS = stringPreferencesKey(LibraryPreferenceKeys.LOCAL_DISCS)
         val SGDB_KEY = stringPreferencesKey("scraper_steamgriddb_key")
@@ -188,6 +192,7 @@ class SettingsDataStore(private val context: Context) {
             sort = prefs[LIBRARY_SORT],
             source = prefs[LIBRARY_SOURCE],
             cardSize = prefs[LIBRARY_CARD_SIZE],
+            coverStyle = prefs[LIBRARY_COVER_STYLE],
         )
     }
     /** Grupo local -> disco elegido; se valida al leer con `ChosenDiscCodec`. */
@@ -420,6 +425,11 @@ class SettingsDataStore(private val context: Context) {
     /** Persiste el tamaño de tarjeta de la biblioteca. */
     suspend fun setLibraryCardSize(size: LibraryCardSize) {
         context.dataStore.edit { it[LIBRARY_CARD_SIZE] = size.id }
+    }
+
+    /** Persiste el estilo de carátula de la biblioteca. */
+    suspend fun setLibraryCoverStyle(style: CoverStyle) {
+        context.dataStore.edit { it[LIBRARY_COVER_STYLE] = style.id }
     }
 
     /**

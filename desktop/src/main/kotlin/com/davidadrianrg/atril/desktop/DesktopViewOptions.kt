@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.LibraryCardSize
 import com.davidadrianrg.atril.core.library.LibrarySort
 import com.davidadrianrg.atril.core.library.LibrarySource
@@ -53,7 +54,7 @@ private val SORT_CHOICES = listOf(
 /**
  * Panel flotante de opciones de la Biblioteca, anclado al botón de ajustes.
  *
- * Contiene las mismas cuatro secciones y las mismas cadenas que la hoja de
+ * Contiene las mismas cinco secciones y las mismas cadenas que la hoja de
  * Android y, igual que ella, no guarda estado: cada chip refleja la preferencia
  * persistida y emite el cambio al llamador. Es modal (se cierra al pulsar
  * fuera) y consume Escape para cerrarse antes que el detalle de juego.
@@ -64,6 +65,7 @@ private val SORT_CHOICES = listOf(
  * @param onSource nuevo origen de la lista.
  * @param onViewMode nueva vista (rejilla / cover flow).
  * @param onCardSize nuevo tamaño de tarjeta.
+ * @param onCoverStyle nuevo estilo de carátula.
  * @param onDismiss cierra el panel.
  */
 @Composable
@@ -74,6 +76,7 @@ fun DesktopViewOptions(
     onSource: (LibrarySource) -> Unit,
     onViewMode: (LibraryViewMode) -> Unit,
     onCardSize: (LibraryCardSize) -> Unit,
+    onCoverStyle: (CoverStyle) -> Unit,
     onDismiss: () -> Unit,
 ) {
     // Desplazamiento en píxeles: el panel cuelga justo debajo del botón que lo abre.
@@ -156,6 +159,16 @@ fun DesktopViewOptions(
                             text = tr(size.labelKey),
                             selected = preferences.cardSize == size,
                             onClick = { onCardSize(size) },
+                        )
+                    }
+                }
+
+                ViewOptionsRow(label = tr("library.view_options.cover_style")) {
+                    CoverStyle.entries.forEach { style ->
+                        OptionChip(
+                            text = tr(style.labelKey),
+                            selected = preferences.coverStyle == style,
+                            onClick = { onCoverStyle(style) },
                         )
                     }
                 }

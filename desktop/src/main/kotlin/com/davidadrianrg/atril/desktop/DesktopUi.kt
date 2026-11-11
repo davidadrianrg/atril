@@ -95,6 +95,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.LetterIndex
 import com.davidadrianrg.atril.core.library.LibrarySource
 import com.davidadrianrg.atril.core.library.LibraryViewMode
@@ -607,11 +608,18 @@ fun LibraryScreen(state: DesktopAppState) {
     val viewMode by state.viewMode.collectAsState()
     val source by state.source.collectAsState()
     val cardSize by state.cardSize.collectAsState()
+    val coverStyle by state.coverStyle.collectAsState()
     // Las estadísticas de partida alimentan el orden "última partida" y el
     // favorito de las tarjetas: cualquier cambio debe recomponer la lista.
     val playStats by state.playStats.stats.collectAsState()
     val games = remember(roms, search, filter, version, sort, regionFilter, source, playStats) { state.games() }
-    val viewPrefs = LibraryViewPreferences(viewMode = viewMode, sort = sort, source = source, cardSize = cardSize)
+    val viewPrefs = LibraryViewPreferences(
+        viewMode = viewMode,
+        sort = sort,
+        source = source,
+        cardSize = cardSize,
+        coverStyle = coverStyle,
+    )
     var showViewOptions by remember { mutableStateOf(false) }
     // R abre el panel solo si ningún campo de texto tiene el foco.
     var searchFocused by remember { mutableStateOf(false) }
@@ -793,6 +801,7 @@ fun LibraryScreen(state: DesktopAppState) {
                         onSource = { state.setSource(it) },
                         onViewMode = { state.setViewMode(it) },
                         onCardSize = { state.setCardSize(it) },
+                        onCoverStyle = { state.setCoverStyle(it) },
                         onDismiss = { showViewOptions = false },
                     )
                 }
@@ -978,7 +987,7 @@ fun LibraryScreen(state: DesktopAppState) {
                                 },
                         ) {
                             gridItems(games.take(visibleCount), key = { it.rep.id }) { card ->
-                                GameCardItem(card, state, ratio, tasks, state.gameStats(card).favorite)
+                                GameCardItem(card, state, ratio, coverStyle, tasks, state.gameStats(card).favorite)
                             }
                             if (visibleCount < games.size) {
                                 item(span = { GridItemSpan(maxLineSpan) }) {
@@ -992,6 +1001,7 @@ fun LibraryScreen(state: DesktopAppState) {
                             cards = games.take(visibleCount),
                             pagerState = coverFlowState,
                             cardScale = cardSize.scale,
+                            coverStyle = coverStyle,
                             serverUrl = state.config.serverUrl,
                             focusRequester = coverFlowFocus,
                             isFavorite = { state.gameStats(it).favorite },
@@ -1150,6 +1160,7 @@ private fun GameCardItem(
     card: GameCard,
     state: DesktopAppState,
     ratio: Float,
+    coverStyle: CoverStyle,
     tasks: List<DesktopTask>,
     favorite: Boolean,
 ) {
@@ -1165,10 +1176,8 @@ private fun GameCardItem(
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Box {
-            CoverImage(
-                coverUrl = card.rep.urlCover,
-                pathCover = card.rep.pathCoverSmall ?: card.rep.pathCoverLarge,
-                serverUrl = state.config.serverUrl,
+            CoverImageFromUrl(
+                url = coverUrlFor(card.rep, state.config.serverUrl, coverStyle),
                 aspectRatio = ratio,
                 contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                 placeholderSlug = card.rep.platformSlug,

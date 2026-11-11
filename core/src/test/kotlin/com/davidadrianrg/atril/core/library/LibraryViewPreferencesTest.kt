@@ -15,6 +15,8 @@ class LibraryViewPreferencesTest {
         assertEquals(LibrarySort.NAME_ASC, LibrarySort.DEFAULT)
         assertEquals(LibrarySource.ALL, LibrarySource.DEFAULT)
         assertEquals(LibraryCardSize.MEDIUM, LibraryCardSize.DEFAULT)
+        assertEquals(CoverStyle.CASE, CoverStyle.DEFAULT)
+        assertEquals(CoverStyle.CASE, LibraryViewPreferences.DEFAULT.coverStyle)
         assertEquals(
             LibraryViewPreferences(
                 viewMode = LibraryViewMode.GRID,
@@ -24,6 +26,7 @@ class LibraryViewPreferencesTest {
             ),
             LibraryViewPreferences.DEFAULT,
         )
+        assertEquals(LibraryViewPreferences(), LibraryViewPreferences.DEFAULT)
     }
 
     @Test
@@ -32,6 +35,15 @@ class LibraryViewPreferencesTest {
         assertEquals(listOf("all", "local", "romm"), LibrarySource.entries.map { it.id })
         assertEquals(listOf("small", "medium", "large"), LibraryCardSize.entries.map { it.id })
         assertEquals(listOf(0.85f, 1f, 1.25f), LibraryCardSize.entries.map { it.scale })
+        assertEquals(listOf("case", "physical", "screenshot"), CoverStyle.entries.map { it.id })
+        assertEquals(
+            listOf(
+                "library.cover_style.case",
+                "library.cover_style.physical",
+                "library.cover_style.screenshot",
+            ),
+            CoverStyle.entries.map { it.labelKey },
+        )
         assertEquals(
             listOf(
                 "name_asc",
@@ -108,11 +120,109 @@ class LibraryViewPreferencesTest {
     }
 
     @Test
+    fun `unknown cover style falls back to case without clobbering the other four`() {
+        val preferences = LibraryViewPreferences.fromIds(
+            viewMode = "cover_flow",
+            sort = "last_played_desc",
+            source = "local",
+            cardSize = "large",
+            coverStyle = "hologram",
+        )
+
+        assertEquals(
+            LibraryViewPreferences(
+                viewMode = LibraryViewMode.COVER_FLOW,
+                sort = LibrarySort.LAST_PLAYED_DESC,
+                source = LibrarySource.LOCAL,
+                cardSize = LibraryCardSize.LARGE,
+                coverStyle = CoverStyle.CASE,
+            ),
+            preferences,
+        )
+    }
+
+    @Test
+    fun `a valid cover style survives while another corrupted dimension falls back`() {
+        val preferences = LibraryViewPreferences.fromIds(
+            viewMode = "grid",
+            sort = "not_a_sort",
+            source = "romm",
+            cardSize = "small",
+            coverStyle = "screenshot",
+        )
+
+        assertEquals(
+            LibraryViewPreferences(
+                viewMode = LibraryViewMode.GRID,
+                sort = LibrarySort.NAME_ASC,
+                source = LibrarySource.ROMM,
+                cardSize = LibraryCardSize.SMALL,
+                coverStyle = CoverStyle.SCREENSHOT,
+            ),
+            preferences,
+        )
+    }
+
+    @Test
+    fun `every preference combination round-trips through its five ids`() {
+        for (viewMode in LibraryViewMode.entries) {
+            for (sort in LibrarySort.entries) {
+                for (source in LibrarySource.entries) {
+                    for (cardSize in LibraryCardSize.entries) {
+                        for (coverStyle in CoverStyle.entries) {
+                            val preferences = LibraryViewPreferences(
+                                viewMode,
+                                sort,
+                                source,
+                                cardSize,
+                                coverStyle,
+                            )
+                            assertEquals(
+                                preferences,
+                                LibraryViewPreferences.fromIds(
+                                    preferences.viewMode.id,
+                                    preferences.sort.id,
+                                    preferences.source.id,
+                                    preferences.cardSize.id,
+                                    preferences.coverStyle.id,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `legacy four-argument fromIds keeps compiling and yields the case default`() {
+        val preferences = LibraryViewPreferences.fromIds(
+            viewMode = "cover_flow",
+            sort = "year_asc",
+            source = "romm",
+            cardSize = "small",
+        )
+
+        assertEquals(CoverStyle.CASE, preferences.coverStyle)
+        assertEquals(
+            LibraryViewPreferences(
+                viewMode = LibraryViewMode.COVER_FLOW,
+                sort = LibrarySort.YEAR_ASC,
+                source = LibrarySource.ROMM,
+                cardSize = LibraryCardSize.SMALL,
+                coverStyle = CoverStyle.CASE,
+            ),
+            preferences,
+        )
+    }
+
+    @Test
     fun `preference keys are the canonical names shared by both platforms`() {
         assertEquals("library_view_mode", LibraryPreferenceKeys.VIEW_MODE)
         assertEquals("library_sort", LibraryPreferenceKeys.SORT)
         assertEquals("library_source", LibraryPreferenceKeys.SOURCE)
         assertEquals("library_card_size", LibraryPreferenceKeys.CARD_SIZE)
+        assertEquals("library_cover_style", LibraryPreferenceKeys.COVER_STYLE)
         assertEquals("library_local_discs", LibraryPreferenceKeys.LOCAL_DISCS)
     }
 

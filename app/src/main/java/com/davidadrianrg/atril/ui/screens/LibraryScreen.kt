@@ -141,6 +141,7 @@ import com.davidadrianrg.atril.RomMSyncApplication
 import com.davidadrianrg.atril.core.i18n.tr
 import androidx.compose.ui.geometry.isSpecified
 import com.davidadrianrg.atril.core.library.CoverRatio
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.LetterIndex
 import com.davidadrianrg.atril.core.library.LibrarySource
 import com.davidadrianrg.atril.core.library.LibraryViewPreferences
@@ -154,6 +155,7 @@ import com.davidadrianrg.atril.domain.model.Platform
 import com.davidadrianrg.atril.domain.model.Rom
 import com.davidadrianrg.atril.domain.model.RomWithStatus
 import com.davidadrianrg.atril.ui.components.FilledTonalIconButton
+import com.davidadrianrg.atril.ui.theme.glassPanel
 import com.davidadrianrg.atril.ui.viewmodel.LibraryEvent
 import com.davidadrianrg.atril.ui.viewmodel.LibraryViewModel
 import com.davidadrianrg.atril.ui.viewmodel.RomSort
@@ -904,6 +906,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                         RomCard(
                             romWithStatus = romStatus,
                             favorite = PlayStatsLogic.aggregate(romStatus.groupRomIds + romStatus.rom.id, playStats).favorite,
+                            coverStyle = viewPrefs.coverStyle,
                             onDownload = { startDownload(romStatus.rom) },
                             onLongPress = { selectedRom = romStatus.rom },
                         )
@@ -926,6 +929,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                         items = filteredRoms,
                         pagerState = coverFlowState,
                         cardScale = viewPrefs.cardSize.scale,
+                        coverStyle = viewPrefs.coverStyle,
                         focusRequester = coverFlowFocus,
                         isFavorite = {
                             PlayStatsLogic.aggregate(it.groupRomIds + it.rom.id, playStats).favorite
@@ -990,6 +994,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
             onSource = { s -> scope.launch { container.settingsRepository.setLibrarySource(s) } },
             onViewMode = { m -> scope.launch { container.settingsRepository.setLibraryViewMode(m) } },
             onCardSize = { c -> scope.launch { container.settingsRepository.setLibraryCardSize(c) } },
+            onCoverStyle = { s -> scope.launch { container.settingsRepository.setLibraryCoverStyle(s) } },
             onDismiss = { showViewOptions = false },
         )
     }
@@ -1036,7 +1041,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
             } else {
                 sheetState
             },
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = Color.Transparent,
         ) {
             RomDetailSheet(
                 rom = rom,
@@ -1157,6 +1162,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 } else {
                     null
                 },
+                coverStyle = viewPrefs.coverStyle,
             )
         }
     }
@@ -1337,11 +1343,12 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
 private fun RomCard(
     romWithStatus: RomWithStatus,
     favorite: Boolean,
+    coverStyle: CoverStyle,
     onDownload: (RomWithStatus) -> Unit,
     onLongPress: (RomWithStatus) -> Unit,
 ) {
     val context = LocalContext.current
-    val coverUrl = romWithStatus.rom.coverUrlLarge ?: romWithStatus.rom.coverUrlSmall
+    val coverUrl = romWithStatus.rom.coverUrlFor(coverStyle)
 
     val painter = rememberAsyncImagePainter(
         model = ImageRequest.Builder(context)
@@ -1556,6 +1563,8 @@ internal fun RomDetailSheet(
     wide: Boolean = false,
     /** Controles del launcher (Jugar, carta / medio físico, emulador). Solo juegos descargados. */
     launcherControls: LauncherDetailControls? = null,
+    /** Estilo de carátula elegido en las opciones de vista. */
+    coverStyle: CoverStyle = CoverStyle.DEFAULT,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var showFolderPicker by remember { mutableStateOf(false) }
@@ -1564,6 +1573,7 @@ internal fun RomDetailSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .glassPanel()
             .padding(horizontal = 24.dp)
             .verticalScroll(rememberScrollState())
             .padding(top = 8.dp, bottom = 48.dp)
@@ -1578,7 +1588,7 @@ internal fun RomDetailSheet(
             // ancho derivado, sin recortar ni deformar.
             var coverRatio by remember(rom.id) { mutableStateOf(CoverRatio.DEFAULT) }
             AsyncImage(
-                model = rom.coverUrlLarge ?: rom.coverUrlSmall,
+                model = rom.coverUrlFor(coverStyle),
                 contentDescription = rom.name,
                 contentScale = ContentScale.Fit,
                 onSuccess = { st ->
@@ -1602,16 +1612,19 @@ internal fun RomDetailSheet(
             ) {
                 Text(
                     text = rom.name,
-                    style = if (wide) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = platformName ?: rom.platformSlug.uppercase(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                val metadata = rom.metadataLine(platformName)
+                if (metadata != null) {
+                    Text(
+                        text = metadata,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 val metaParts = buildList {
                     if (rom.regions.isNotEmpty()) addAll(rom.regions)
                     rom.revision?.takeIf { it.isNotBlank() }?.let { add("Rev $it") }

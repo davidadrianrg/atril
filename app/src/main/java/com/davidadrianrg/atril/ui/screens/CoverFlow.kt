@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.PlatformAbbreviation
 import com.davidadrianrg.atril.domain.model.DownloadStatus
 import com.davidadrianrg.atril.domain.model.RomWithStatus
@@ -93,6 +94,7 @@ private const val REFLECTION_FRACTION = 0.26f
  * @param items tarjetas ya filtradas y ordenadas (misma lista que la rejilla).
  * @param pagerState estado del pager; lo posee la pantalla para poder saltar.
  * @param cardScale multiplicador de tamaño elegido en las opciones de vista.
+ * @param coverStyle estilo de carátula elegido en las opciones de vista.
  * @param focusRequester foco del carrusel, para la entrega de foco explícita.
  * @param isFavorite si la tarjeta (su grupo completo) es favorita.
  * @param onOpenDetail abre el detalle del juego centrado.
@@ -105,6 +107,7 @@ fun LibraryCoverFlow(
     items: List<RomWithStatus>,
     pagerState: PagerState,
     cardScale: Float,
+    coverStyle: CoverStyle,
     focusRequester: FocusRequester,
     isFavorite: (RomWithStatus) -> Boolean,
     onOpenDetail: (RomWithStatus) -> Unit,
@@ -192,6 +195,7 @@ fun LibraryCoverFlow(
                 cardWidth = cardWidth,
                 cardHeight = cardHeight,
                 reflectionHeight = reflectionHeight,
+                coverStyle = coverStyle,
                 favorite = isFavorite(item),
                 onOpenDetail = onOpenDetail,
                 onDownload = onDownload,
@@ -217,6 +221,7 @@ private fun CoverFlowPage(
     cardWidth: Dp,
     cardHeight: Dp,
     reflectionHeight: Dp,
+    coverStyle: CoverStyle,
     favorite: Boolean,
     onOpenDetail: (RomWithStatus) -> Unit,
     onDownload: (RomWithStatus) -> Unit,
@@ -224,7 +229,7 @@ private fun CoverFlowPage(
     selected: Boolean,
 ) {
     val context = LocalContext.current
-    val coverUrl = item.rom.coverUrlLarge ?: item.rom.coverUrlSmall
+    val coverUrl = item.rom.coverUrlFor(coverStyle)
     // Una sola petición por tarjeta: el reflejo reutiliza este painter.
     val painter = rememberAsyncImagePainter(
         model = ImageRequest.Builder(context)

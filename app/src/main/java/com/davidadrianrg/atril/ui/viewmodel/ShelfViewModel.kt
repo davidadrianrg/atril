@@ -7,6 +7,7 @@ import com.davidadrianrg.atril.core.library.DiscEntry
 import com.davidadrianrg.atril.core.library.PhysicalMedia
 import com.davidadrianrg.atril.core.library.MultiDiscGrouper
 import com.davidadrianrg.atril.core.remote.NetworkModule
+import com.davidadrianrg.atril.core.remote.dto.IgdbMetadataDto
 import com.davidadrianrg.atril.core.remote.dto.RomDto
 import com.davidadrianrg.atril.core.sync.platform.SaveHandlerRegistry
 import com.davidadrianrg.atril.data.local.dao.PlatformDao
@@ -18,6 +19,7 @@ import com.davidadrianrg.atril.data.repository.PhysicalMediaRepository
 import com.davidadrianrg.atril.data.repository.RomFileImportService
 import com.davidadrianrg.atril.data.repository.RomRepository
 import com.davidadrianrg.atril.data.repository.SettingsRepository
+import com.davidadrianrg.atril.domain.model.IgdbMetadata
 import com.davidadrianrg.atril.domain.model.Rom
 import com.davidadrianrg.atril.domain.model.RomFile
 import com.davidadrianrg.atril.launch.EmulatorLauncher
@@ -587,6 +589,7 @@ class ShelfViewModel(
             fileNameNoExt = dto.fileNameNoExt,
             fileExtension = dto.fileExtension,
             igdbId = dto.igdbId,
+            igdbMetadata = dto.igdbMetadata?.toDomain(),
             screenshots = dto.mergedScreenshots.map { baseCoverUrl + it.removePrefix("/") },
             videoPath = dto.pathVideo?.let { baseCoverUrl + it.removePrefix("/") },
             manualPath = dto.pathManual?.let { baseCoverUrl + it.removePrefix("/") },
@@ -594,4 +597,14 @@ class ShelfViewModel(
             physicalMediaUrl = PhysicalMedia.resourceUrl(baseCoverUrl, dto.physicalMediaPath),
         )
     }
+
+    /** Mismo mapeo que RomRepository: solo los campos que usa la UI. */
+    private fun IgdbMetadataDto.toDomain() = IgdbMetadata(
+        totalRating = totalRating?.toDoubleOrNull(),
+        firstReleaseDate = firstReleaseDate,
+        genres = genres,
+        companies = companies,
+        gameModes = gameModes,
+        playerCount = playerCount,
+    )
 }

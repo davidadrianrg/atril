@@ -98,9 +98,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.davidadrianrg.atril.RomMSyncApplication
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.library.LibraryViewPreferences
 import com.davidadrianrg.atril.core.playstats.GamePlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
+import com.davidadrianrg.atril.core.playstats.PlayTimeFormat
 import com.davidadrianrg.atril.data.local.ServerConfig
 import com.davidadrianrg.atril.data.repository.LocateOutcome
 import com.davidadrianrg.atril.domain.model.formatBytesForUi
@@ -166,6 +168,8 @@ fun PlayScreen(
         initial = ServerConfig("", "", "", 2)
     )
     val landscape = com.davidadrianrg.atril.ui.components.rememberWindowInfo().isLandscape
+    val viewPrefs by container.settingsRepository.libraryViewPreferences
+        .collectAsState(initial = LibraryViewPreferences.DEFAULT)
     val saveSyncEnabled by container.settingsRepository.saveSyncEnabled
         .collectAsState(initial = true)
 
@@ -379,6 +383,10 @@ fun PlayScreen(
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(LauncherBgTop, LauncherBgBottom))),
     ) {
+        // Fondo cinematográfico: primera captura del juego, si la hay. Es
+        // decorativo y va detrás de todo (sin foco ni toques).
+        CinematicHero(url = current?.rom?.heroBackdropUrl(), modifier = Modifier.fillMaxSize())
+
         // Halo cálido detrás del objeto central.
         Box(
             Modifier
@@ -552,7 +560,8 @@ fun PlayScreen(
                                     Modifier.weight(0.9f).fillMaxHeight().padding(end = 20.dp),
                                     contentAlignment = Alignment.CenterStart,
                                 ) {
-                                    Caption(item, viewModel, saveSyncEnabled, launchJob?.isActive == true, alignStart = true,
+                                    Caption(item, viewModel, saveSyncEnabled, launchJob?.isActive == true,
+                                        stats = playStats.statsOf(item), alignStart = true,
                                         onPlay = { play(item) }, onDetails = { selectedRomId = item.rom.id })
                                 }
                             }
@@ -563,6 +572,7 @@ fun PlayScreen(
                         current?.let { item ->
                             Caption(
                                 item, viewModel, saveSyncEnabled, launchJob?.isActive == true,
+                                stats = playStats.statsOf(item),
                                 alignStart = false,
                                 onPlay = { play(item) },
                                 onDetails = { selectedRomId = item.rom.id },
@@ -664,7 +674,7 @@ fun PlayScreen(
         ModalBottomSheet(
             onDismissRequest = { selectedRomId = null },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = Color.Transparent,
             sheetMaxWidth = 1600.dp,
             // Let the scrolling content run to the screen edge; the sheet
             // body pads its own bottom for the gesture bar (no dead band).
@@ -716,6 +726,7 @@ fun PlayScreen(
                         play(item)
                     },
                 ),
+                coverStyle = viewPrefs.coverStyle,
             )
         }
     }
@@ -769,6 +780,7 @@ private fun Caption(
     viewModel: ShelfViewModel,
     syncEnabled: Boolean,
     busy: Boolean,
+    stats: GamePlayStats,
     alignStart: Boolean,
     onPlay: () -> Unit,
     onDetails: () -> Unit,
@@ -778,20 +790,26 @@ private fun Caption(
     val emulatorName by produceState<String?>(null, item.rom.id, item.launchOverride, item.platformEmulatorId) {
         value = withContext(Dispatchers.IO) { viewModel.currentEmulatorName(item) }
     }
-    val meta = buildList {
-        add(item.platformLabel)
+    // Línea principal del héroe: año, géneros, plataforma y nota (formateador compartido).
+    val meta = listOfNotNull(item.rom.metadataLine(item.platformLabel))
+    // Resto de información (tamaño, discos, emulador, aviso de sync) en una línea menor.
+    val secondaryMeta = buildList {
+        if (meta.isEmpty()) add(item.platformLabel)
         if (item.fileSizeBytes >= 1024) add(formatBytesForUi(item.fileSizeBytes))
         if (item.discCount > 1) add(tr("launcher.badge.discs", item.discCount))
         emulatorName?.let { add(it) }
         // Los juegos locales no se sincronizan con RomM: no tiene sentido decirlo.
         if (syncEnabled && item.excludedFromSync && !item.isLocalSource) add(tr("play.excluded"))
     }
+    val lastPlayed = stats.lastPlayedAt?.let { PlayTimeFormat.relativeDate(it, System.currentTimeMillis()) }
     LauncherCaption(
         item = item,
         meta = meta,
+        lastPlayed = lastPlayed,
         onPlay = onPlay,
         onDetails = onDetails,
         playBusy = busy,
+        secondaryMeta = secondaryMeta,
         alignStart = alignStart,
         modifier = modifier,
     )
