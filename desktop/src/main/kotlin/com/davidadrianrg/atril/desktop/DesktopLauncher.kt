@@ -49,7 +49,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -83,6 +82,7 @@ import androidx.compose.ui.unit.sp
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.launch.LaunchPlatforms
 import com.davidadrianrg.atril.core.library.DiscEntry
+import com.davidadrianrg.atril.core.library.GameMetadataLine
 import com.davidadrianrg.atril.core.library.MultiDiscGrouper
 import com.davidadrianrg.atril.core.library.PhysicalMedia
 import com.davidadrianrg.atril.core.playstats.PlayStats
@@ -289,17 +289,19 @@ fun DesktopPlayScreen(
 
     val selected = selectedGame
     if (selected != null) {
-        Surface(Modifier.fillMaxSize().background(PlayBgBottom)) {
-            val local = localGames.firstOrNull { it.syntheticRomId() == selected.rep.id }
-            if (local != null) {
+        val local = localGames.firstOrNull { it.syntheticRomId() == selected.rep.id }
+        if (local != null) {
+            // El detalle local no pinta héroe propio: conserva el fondo del launcher.
+            Box(Modifier.fillMaxSize().background(PlayBgBottom)) {
                 LocalGameDetailPanel(local, state, onPlay = {
                     // Misma secuencia que en el carrusel: overlay de inserción y luego lanzar.
                     val e = entries.firstOrNull { it.local?.id == local.id }
                     if (e != null) { state.closeGame(); play(e) } else state.launchLocalGame(local)
                 })
-            } else {
-                GameDetailPanel(selected, state)
             }
+        } else {
+            // El panel de RomM pinta su propio héroe cinematográfico y el cristal.
+            GameDetailPanel(selected, state)
         }
         return
     }
@@ -352,6 +354,12 @@ fun DesktopPlayScreen(
                 }
             },
     ) {
+        // Fondo cinematográfico: primera captura del juego actual, detrás de todo.
+        CinematicBackdrop(
+            url = current?.let { heroBackdropUrl(it.card.rep, state.config.serverUrl) },
+            modifier = Modifier.fillMaxSize(),
+        )
+
         Box(
             Modifier
                 .fillMaxWidth()
@@ -974,6 +982,8 @@ private fun LauncherCard(entry: LauncherEntry, state: DesktopAppState, favorite:
                 shape,
             ),
     ) {
+        // Las cartas de Play mantienen la carátula del estuche: el estilo de
+        // carátula solo afecta a la Biblioteca y al detalle del juego.
         PlayCover(entry.card.rep, state.config.serverUrl, Modifier.fillMaxSize())
         Box(
             Modifier.fillMaxSize().background(
@@ -1093,6 +1103,15 @@ private fun PlayCaption(
     val hasLocalPath = state.localPathOf(entry.card) != null
     val physicalAvailable = entry.physicalUrl != null
     val physical = physicalAvailable && state.isPhysicalMedia(entry.card.rep.id)
+    // Línea principal del héroe: año, géneros, plataforma y nota.
+    val metadata = metadataLine(entry.card.rep, entry.displayPlatform, state.config.serverUrl)
+    // Resto de información (tamaño, discos, estado manual) en una línea menor.
+    val secondaryMeta = buildList {
+        if (metadata == null) add(entry.displayPlatform)
+        if (entry.card.rep.fileSizeBytes >= 1024) add(formatBytes(entry.card.rep.fileSizeBytes))
+        if (entry.card.discCount > 1) add(tr("launcher.badge.discs", entry.card.discCount))
+        if (manual) add(tr("launcher.badge.manual"))
+    }
     Column(
         modifier,
         verticalArrangement = Arrangement.Center,
@@ -1100,24 +1119,42 @@ private fun PlayCaption(
     ) {
         Text(
             entry.card.rep.name,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
             color = PlayCream,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(5.dp))
-        Text(
-            buildList {
-                add(entry.displayPlatform)
-                if (entry.card.rep.fileSizeBytes >= 1024) add(formatBytes(entry.card.rep.fileSizeBytes))
-                if (entry.card.discCount > 1) add(tr("launcher.badge.discs", entry.card.discCount))
-                if (manual) add(tr("launcher.badge.manual"))
-            }.joinToString("  ·  "),
-            style = MaterialTheme.typography.labelMedium,
-            color = PlayCream.copy(alpha = 0.62f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Spacer(Modifier.height(12.dp))
+        if (metadata != null) {
+            Text(
+                metadata,
+                style = MaterialTheme.typography.labelMedium,
+                color = PlayCream.copy(alpha = 0.62f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (secondaryMeta.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                secondaryMeta.joinToString(GameMetadataLine.SEPARATOR),
+                style = MaterialTheme.typography.labelSmall,
+                color = PlayCream.copy(alpha = 0.5f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        state.gameStats(entry.card).lastPlayedAt?.let { lastPlayedAt ->
+            Spacer(Modifier.height(4.dp))
+            Text(
+                tr("game.info.last_played") + GameMetadataLine.SEPARATOR +
+                    PlayTimeFormat.relativeDate(lastPlayedAt, System.currentTimeMillis()),
+                style = MaterialTheme.typography.labelMedium,
+                color = PlayCream.copy(alpha = 0.62f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (manual && !hasLocalPath) {
             Spacer(Modifier.height(4.dp))
             Text(

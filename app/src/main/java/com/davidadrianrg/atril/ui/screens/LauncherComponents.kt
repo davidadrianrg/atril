@@ -81,6 +81,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.library.GameMetadataLine
 import com.davidadrianrg.atril.core.playstats.GamePlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
@@ -423,14 +424,22 @@ internal fun PhysicalMediaArt(path: String, name: String, modifier: Modifier = M
     }
 }
 
-/** Pie del launcher: título, metadatos y acciones Jugar / Detalles. */
+/**
+ * Pie del launcher: título, metadatos, última partida y acciones Jugar / Detalles.
+ *
+ * [meta] es la línea principal (año, géneros, plataforma y nota) y se pinta en
+ * labelMedium; [secondaryMeta] es la línea secundaria opcional (tamaño, discos,
+ * emulador, avisos) y se pinta más pequeña para no competir con la principal.
+ */
 @Composable
 internal fun LauncherCaption(
     item: ShelfItem,
     meta: List<String>,
+    lastPlayed: String?,
     onPlay: () -> Unit,
     onDetails: () -> Unit,
     playBusy: Boolean,
+    secondaryMeta: List<String> = emptyList(),
     modifier: Modifier = Modifier,
     alignStart: Boolean = false,
 ) {
@@ -440,21 +449,45 @@ internal fun LauncherCaption(
     ) {
         Text(
             item.rom.name,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
             color = LauncherCream,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = if (alignStart) TextAlign.Start else TextAlign.Center,
         )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            meta.joinToString("  ·  "),
-            style = MaterialTheme.typography.labelMedium,
-            color = LauncherCream.copy(alpha = 0.62f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = if (alignStart) TextAlign.Start else TextAlign.Center,
-        )
+        Spacer(Modifier.height(12.dp))
+        if (meta.isNotEmpty()) {
+            Text(
+                meta.joinToString(GameMetadataLine.SEPARATOR),
+                style = MaterialTheme.typography.labelMedium,
+                color = LauncherCream.copy(alpha = 0.62f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = if (alignStart) TextAlign.Start else TextAlign.Center,
+            )
+        }
+        if (secondaryMeta.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                secondaryMeta.joinToString(GameMetadataLine.SEPARATOR),
+                style = MaterialTheme.typography.labelSmall,
+                color = LauncherCream.copy(alpha = 0.5f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = if (alignStart) TextAlign.Start else TextAlign.Center,
+            )
+        }
+        if (lastPlayed != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                tr("game.info.last_played") + GameMetadataLine.SEPARATOR + lastPlayed,
+                style = MaterialTheme.typography.labelMedium,
+                color = LauncherCream.copy(alpha = 0.62f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = if (alignStart) TextAlign.Start else TextAlign.Center,
+            )
+        }
         // Un juego manual sin ruta sigue siendo lanzable: la app buscará el
         // fichero al pulsar Jugar (resolución perezosa).
         val canAttemptLaunch = item.launchable || item.isManualDownloaded
@@ -466,7 +499,7 @@ internal fun LauncherCaption(
                 color = LauncherAmber.copy(alpha = 0.8f),
             )
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             PlayPill(enabledLook = canAttemptLaunch && !playBusy, onClick = onPlay)
             Row(

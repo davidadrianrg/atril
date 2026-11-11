@@ -12,7 +12,8 @@ documentation is in `README.md`; the branch workflow is also summarised in
   no Android or Compose imports. Owns the RomM client (`remote/`), the Device
   Sync Protocol (`sync/`), downloads and path mapping (`download/`), play stats
   (`playstats/`), Library logic (`library/`: sorting, A-Z index, view
-  preferences, RomM multi-disc grouping), local games and local disc grouping
+  preferences and cover styles, cover artwork selection, the shared metadata
+  line, RomM multi-disc grouping), local games and local disc grouping
   (`localgames/`), launch resolution (`launch/`), the translation bundles
   (`resources/i18n/`) and utilities (`util/`).
 - `:app` (`app/src/main/java/com/davidadrianrg/atril/`) — Android app in Kotlin
@@ -93,9 +94,22 @@ files.
   (`sync/SavePull.DEFAULT_TIMEOUT_MS`) and must never block, cancel or fail a
   launch. It only downloads safe deltas; it never uploads or resolves
   conflicts.
-- Library preferences use the canonical keys in
-  `library/LibraryPreferenceKeys` on both platforms. Do not invent per-platform
-  spellings or rename existing keys.
+- Library preferences (view mode, sort, source, card size and cover style) use
+  the canonical keys in `library/LibraryPreferenceKeys` on both platforms; the
+  cover style key is `library_cover_style`. Do not invent per-platform
+  spellings or rename existing keys, and do not re-implement the cover fallback
+  chain (`library/CoverArtwork`) or the metadata line
+  (`library/GameMetadataLine`) in a UI module: both platforms call the `:core`
+  helpers. Cover style applies to the Library grid, the Library cover flow and
+  the game detail cover only; the Play carousel keeps CASE artwork on both
+  platforms.
+- The Play hero is decorative. `CoverArtwork.heroBackdropUrl` picks the first
+  screenshot, then the large cover, never the small one, and feeds
+  `CinematicHero` (Android) or `CinematicBackdrop` (desktop), which request or
+  decode a downscaled bitmap and paint a scrim. Do not draw the full-size
+  screenshot behind a hero. Its primary caption line is `GameMetadataLine`
+  (year, genres, platform, rating); size, disc count and emulator or manual
+  status belong to the smaller secondary line.
 - Desktop tests run against an isolated `user.home` and `java.util.prefs` root
   configured in `desktop/build.gradle.kts`; restore any global preference your
   test touches.

@@ -9,6 +9,14 @@ proyecto se acoge a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Añadido
 
+**Estilos de carátula y héroe cinemático (2026-11-11)**
+
+- **Estilo de carátula** — una quinta dimensión de *Opciones de vista* en Android y Linux: *Caja* (la carátula grande y, si falta, la pequeña), *Medio físico* (el arte del medio cuando RomM lo tiene) y *Captura* (la primera captura). La elección se recuerda entre sesiones y se aplica solo a la cuadrícula de la Biblioteca, al carrusel 3D y a la carátula de la ficha; las cartas del carrusel de Jugar mantienen el arte de caja en las dos plataformas. Cuando falta el arte elegido se usa la carátula de caja y, después, el marcador de posición existente.
+- **Héroe cinemático** — las pantallas Jugar de Android y de escritorio pintan el juego seleccionado detrás del carrusel: la primera captura o, si el juego no tiene capturas, la carátula grande, solicitada o descodificada a tamaño reducido, oscurecida con un velo y con un fundido cruzado de 350 ms al cambiar de selección (y difuminada en Android 12 y posterior). Un título más grande va seguido de una línea de metadatos (año, hasta tres géneros, plataforma y nota sobre 100), de una línea menor con tamaño, discos y estado de emulador o manual cuando existen, y de la fecha de la última partida. La ficha del juego de escritorio muestra el mismo fondo detrás de su panel.
+- **Línea de metadatos compartida** — las pantallas Jugar y las fichas de Android y de escritorio usan la misma línea con el año de lanzamiento, hasta tres géneros, la plataforma y la nota sobre 100, en lugar del texto separado de plataforma y, en el escritorio, de la fila de nota independiente.
+- **Paneles de cristal** — las superficies de las fichas usan el color de superficie del tema con relleno translúcido, un borde fino y esquinas de 22 dp en las dos plataformas, sobre el fondo de Jugar (escritorio) o el velo de la hoja (Android); sin blanco fijo.
+- Textos en inglés y español para *Estilo de carátula* y sus tres opciones.
+
 **Mejoras del launcher (2026-11-10)**
 
 - **Tiempo jugado y última partida** — cada lanzamiento se cronometra en Android (desde el arranque del emulador hasta que Atril vuelve a primer plano) y en Linux (desde el lanzamiento hasta que la ventana recupera el foco). La ficha del juego muestra *Última partida* y *Tiempo jugado* con fechas relativas («ahora mismo», «hace 5 min», «hace 2 h», «ayer», «hace 3 días») y duraciones («1 h 23 min», «12 min», «<1 min»), o «Nunca» cuando no hay datos. Las sesiones de menos de 5 segundos se ignoran.
@@ -43,6 +51,8 @@ proyecto se acoge a [Versionado Semántico](https://semver.org/lang/es/).
 - Cuando un descriptor `.cue`, `.gdi` o `.m3u` y un fichero de datos comparten número de disco, gana el descriptor (`.cue` > `.gdi` > `.m3u`), así que el grupo multidisco lanza el fichero que un emulador puede arrancar.
 - Vincular un archivo a un juego marcado a mano lo convierte en una descarga normal: la ruta es lo que define el estado, así que desaparecen la insignia *Manual*, *Quitar marca* y *Localizar archivo* y en su lugar aparecen las acciones habituales de descarga (borrar el archivo, moverlo a la tarjeta SD, ajustes de sincronización). Es el comportamiento previsto, no un fallo, y es la razón de no necesitar ninguna columna nueva en la base de datos.
 - 91 pruebas unitarias cubren ahora el trabajo de la fase 2: las 73 de la primera pasada más 18 pruebas de regresión añadidas con las correcciones de revisión y seguridad. Abarcan la persistencia de vista/orden/tamaño, el índice alfabético con filtros, la agrupación local de discos y sus falsos positivos, el códec del disco elegido, el tope de 8 segundos, la validación de nombres de partida y el desempate por descriptor.
+- El pie de la pantalla Jugar y la ficha del juego usan una sola escala tipográfica en las dos plataformas: el título de Jugar es `headlineMedium`, el de la ficha `headlineSmall`, las líneas principales de metadatos y de última partida `labelMedium`, y la línea secundaria de tamaño/discos/emulador `labelSmall`.
+- La elección del arte de carátula y la línea de metadatos son funciones puras de `:core` (`CoverArtwork`, `GameMetadataLine`), así que Android y escritorio aplican la misma cadena de respaldo y el mismo separador en vez de duplicar la lógica en cada interfaz.
 
 ### Corregido
 
@@ -66,6 +76,13 @@ proyecto se acoge a [Versionado Semántico](https://semver.org/lang/es/).
 - Sin dependencias, plugins, columnas de esquema, claves de preferencias ni textos i18n nuevos.
 
 ### Notas
+
+**Estilos de carátula y héroe cinemático**
+
+- El estilo de carátula se guarda con la clave canónica `library_cover_style` en las dos plataformas; un valor ausente, vacío o desconocido cae a *Caja* sin tocar las otras cuatro preferencias de la Biblioteca.
+- El fondo del héroe es decorativo: se resuelve a partir de la media del propio juego (primero la captura, después la carátula grande y nunca la pequeña), se solicita o se descodifica reducido y se cubre con un velo. No se dibuja ninguna captura a tamaño completo. El escritorio mantiene una caché en memoria de los fondos reducidos; no se añadió ninguna dependencia ni una fuente de red nueva.
+- La implementación es original, con un lenguaje visual inspirado en Eclipse: no se copió código, arte ni tipografías de terceros.
+- En este entorno el emulador de Android está apagado, así que las superficies nuevas se validan con compilación y pruebas unitarias de JVM, no con capturas.
 
 **Mejoras del launcher**
 

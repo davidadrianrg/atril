@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -20,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.LibraryCardSize
 import com.davidadrianrg.atril.core.library.LibrarySort
 import com.davidadrianrg.atril.core.library.LibrarySource
@@ -36,10 +38,10 @@ private val SORT_CHOICES = listOf(
 /**
  * Panel contextual de opciones de la Biblioteca.
  *
- * Es una hoja modal con cuatro secciones (orden, origen, vista y tamaño) que
- * emite la elección al llamador: no guarda estado propio, así el valor pintado
- * siempre viene de las preferencias persistidas. Cambiar una opción no cierra
- * la hoja ni la pantalla.
+ * Es una hoja modal con cinco secciones (orden, origen, vista, tamaño y estilo
+ * de carátula) que emite la elección al llamador: no guarda estado propio, así
+ * el valor pintado siempre viene de las preferencias persistidas. Cambiar una
+ * opción no cierra la hoja ni la pantalla.
  *
  * @param preferences preferencias actuales (dirigen la selección de cada chip).
  * @param showYearSort muestra el criterio por año solo si hay algún año cargado.
@@ -47,6 +49,7 @@ private val SORT_CHOICES = listOf(
  * @param onSource nuevo origen de la lista.
  * @param onViewMode nueva vista (rejilla / cover flow).
  * @param onCardSize nuevo tamaño de tarjeta.
+ * @param onCoverStyle nuevo estilo de carátula.
  * @param onDismiss cierra la hoja.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,6 +61,7 @@ fun LibraryViewOptionsSheet(
     onSource: (LibrarySource) -> Unit,
     onViewMode: (LibraryViewMode) -> Unit,
     onCardSize: (LibraryCardSize) -> Unit,
+    onCoverStyle: (CoverStyle) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
@@ -69,6 +73,7 @@ fun LibraryViewOptionsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp),
         ) {
@@ -115,6 +120,16 @@ fun LibraryViewOptionsSheet(
                         text = tr(size.labelKey),
                         selected = preferences.cardSize == size,
                         onClick = { onCardSize(size) },
+                    )
+                }
+            }
+
+            ViewOptionsRow(label = tr("library.view_options.cover_style")) {
+                CoverStyle.entries.forEach { style ->
+                    OptionChip(
+                        text = tr(style.labelKey),
+                        selected = preferences.coverStyle == style,
+                        onClick = { onCoverStyle(style) },
                     )
                 }
             }

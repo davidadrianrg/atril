@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Cover styles and cinematic hero (2026-11-11)**
+
+- **Cover style** — a fifth *View options* dimension on Android and Linux: *Case* (the large cover, then the small one), *Physical* (the media art when RomM has it) and *Screenshot* (the first screenshot). The choice is remembered between sessions and applies to the Library grid, the cover flow and the detail cover only; Play carousel cards keep the case artwork on both platforms. When the chosen artwork is missing it falls back to the case cover and then to the existing placeholder.
+- **Cinematic hero** — the Android and desktop Play screens paint the selected game behind the carousel: the first screenshot, or the large cover when a game has no screenshot, requested or decoded at a small size, darkened with a scrim and crossfaded over 350 ms when the selection changes (and blurred on Android 12 and later). A larger title is followed by one metadata line (year, up to three genres, platform and rating out of 100), a smaller line with size, disc count and emulator or manual status when present, and the last-played date. The desktop game detail shows the same backdrop behind its panel.
+- **Shared metadata line** — the Android and desktop Play heroes and game details use the same line with the release year, up to three genres, the platform and the rating out of 100, replacing the separate platform text and, on the desktop, the separate rating row.
+- **Glass detail panels** — the detail surfaces use the theme surface with a translucent fill, a hairline border and 22 dp corners on both platforms, over the Play backdrop (desktop) or the sheet scrim (Android); no fixed white.
+- English and Spanish strings for *Cover style* and its three options.
+
 **Launcher improvements (2026-11-10)**
 
 - **Play time and last played** — every launch is timed on Android (from the emulator launch until Atril returns to the foreground) and on Linux (from the launch until the window regains focus). The game detail shows *Last played* and *Play time* with relative dates ("just now", "5 min ago", "2 h ago", "yesterday", "3 days ago") and durations ("1 h 23 min", "12 min", "<1 min"), or "Never" when there is no data. Sessions shorter than 5 seconds are ignored.
@@ -43,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When a `.cue`, `.gdi` or `.m3u` descriptor and a raw data file share a disc number, the descriptor wins (`.cue` > `.gdi` > `.m3u`), so a multidisc group launches the file an emulator can start.
 - Linking a file to a manually marked game turns it into a normal download: the path is what defines the state, so the *Manual* badge, *Remove mark* and *Locate file* disappear and the usual download actions (delete the file, move it to the SD card, sync settings) appear instead. This is intended, not a defect, and it is why no new database column was needed.
 - 91 unit tests now cover the phase-2 work: the 73 of the first pass plus 18 regression tests added with the review and security fixes. They span view/sort/size persistence, the letter index with filters, local disc grouping and its false positives, the chosen-disc codec, the 8-second cap, save-name validation and the descriptor tie-break.
+- The Play caption and the game detail use one typography scale on both platforms: the Play title is `headlineMedium`, the detail title `headlineSmall`, the primary metadata and last-played lines `labelMedium`, and the secondary size/disc/emulator line `labelSmall`.
+- Cover artwork selection and the metadata line are pure helpers in `:core` (`CoverArtwork`, `GameMetadataLine`), so Android and desktop apply the same fallback chain and the same separator instead of duplicating the logic in each UI.
 
 ### Fixed
 
@@ -66,6 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - No new dependency, plugin, schema column, preference key or i18n string.
 
 ### Notes
+
+**Cover styles and cinematic hero**
+
+- The cover style is persisted with the canonical `library_cover_style` key on both platforms; an absent, blank or unknown value falls back to *Case* without touching the other four Library preferences.
+- The hero backdrop is decorative: it is resolved from the game's own media (screenshot first, large cover second, never the small cover), requested or decoded downscaled and covered by a scrim. No full-size screenshot is drawn. The desktop keeps a small in-memory cache of the downscaled backdrops; no dependency and no new network source was added.
+- The implementation is original, with an Eclipse-inspired visual language: no third-party code, assets or fonts were copied.
+- The Android emulator is off in this environment, so the new surfaces are validated by compilation and JVM unit tests, not by screenshots.
 
 **Launcher improvements**
 

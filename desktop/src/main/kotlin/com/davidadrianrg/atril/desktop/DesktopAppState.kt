@@ -22,6 +22,7 @@ import com.davidadrianrg.atril.core.upload.RomUploader
 import com.davidadrianrg.atril.core.upload.UploadParts
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.DiscEntry
 import com.davidadrianrg.atril.core.library.LibraryCardSize
 import com.davidadrianrg.atril.core.library.LibrarySorting
@@ -474,6 +475,15 @@ class DesktopAppState(private val scope: CoroutineScope) {
     fun setCardSize(size: LibraryCardSize) {
         _cardSize.value = size
         DesktopLibraryViewPrefs.setCardSize(size)
+    }
+
+    private val _coverStyle = MutableStateFlow(DesktopLibraryViewPrefs.load().coverStyle)
+    val coverStyle: StateFlow<CoverStyle> = _coverStyle
+
+    /** Cambia el estilo de carátula y lo persiste. */
+    fun setCoverStyle(style: CoverStyle) {
+        _coverStyle.value = style
+        DesktopLibraryViewPrefs.setCoverStyle(style)
     }
 
     /** null = todas las regiones. */

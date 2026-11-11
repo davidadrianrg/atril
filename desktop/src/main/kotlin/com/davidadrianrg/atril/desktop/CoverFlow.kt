@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.PlatformAbbreviation
 import kotlin.math.abs
 import kotlinx.coroutines.launch
@@ -80,6 +81,7 @@ private const val REFLECTION_FRACTION = 0.26f
  * @param cards tarjetas visibles (ya recortadas por la pantalla).
  * @param pagerState estado del pager; lo posee la pantalla para poder saltar.
  * @param cardScale multiplicador de tamaño elegido en las opciones de vista.
+ * @param coverStyle estilo de carátula elegido en las opciones de vista.
  * @param serverUrl servidor RomM para resolver las rutas de portada.
  * @param focusRequester foco del carrusel, para la entrega de foco explícita.
  * @param isFavorite si la tarjeta (su grupo completo) es favorita.
@@ -93,6 +95,7 @@ fun DesktopCoverFlow(
     cards: List<GameCard>,
     pagerState: PagerState,
     cardScale: Float,
+    coverStyle: CoverStyle,
     serverUrl: String,
     focusRequester: FocusRequester,
     isFavorite: (GameCard) -> Boolean,
@@ -181,6 +184,7 @@ fun DesktopCoverFlow(
                 cardWidth = cardWidth,
                 cardHeight = cardHeight,
                 reflectionHeight = reflectionHeight,
+                coverStyle = coverStyle,
                 serverUrl = serverUrl,
                 favorite = isFavorite(card),
                 downloading = isDownloading(card),
@@ -208,6 +212,7 @@ private fun DesktopCoverFlowPage(
     cardWidth: Dp,
     cardHeight: Dp,
     reflectionHeight: Dp,
+    coverStyle: CoverStyle,
     serverUrl: String,
     favorite: Boolean,
     downloading: Boolean,
@@ -216,11 +221,7 @@ private fun DesktopCoverFlowPage(
     onSelect: () -> Unit,
     selected: Boolean,
 ) {
-    val url = resolveMediaUrl(
-        card.rep.urlCover,
-        card.rep.pathCoverSmall ?: card.rep.pathCoverLarge,
-        serverUrl,
-    )
+    val url = coverUrlFor(card.rep, serverUrl, coverStyle)
     // Una sola decodificación por tarjeta: el reflejo reutiliza el bitmap.
     val bitmap = if (url != null) produceCover(url) else null
 

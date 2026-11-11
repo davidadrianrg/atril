@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.desktop
 
+import com.davidadrianrg.atril.core.library.CoverStyle
 import com.davidadrianrg.atril.core.library.LibraryCardSize
 import com.davidadrianrg.atril.core.library.LibraryPreferenceKeys
 import com.davidadrianrg.atril.core.library.LibrarySort
@@ -14,11 +15,12 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Persistencia de vista, orden, origen y tamaño en el escritorio.
+ * Persistencia de vista, orden, origen, tamaño y estilo de carátula en el
+ * escritorio.
  *
  * Se ejecuta contra el `user.home` y el `java.util.prefs.userRoot` aislados de
- * `build/test-home` que fija desktop/build.gradle.kts. Los cuatro valores
- * crudos se guardan y se restauran en cada test para no contaminar a otros.
+ * `build/test-home` que fija desktop/build.gradle.kts. Los cinco valores crudos
+ * se guardan y se restauran en cada test para no contaminar a otros.
  */
 class DesktopLibraryViewPrefsTest {
 
@@ -28,6 +30,7 @@ class DesktopLibraryViewPrefsTest {
         LibraryPreferenceKeys.SORT,
         LibraryPreferenceKeys.SOURCE,
         LibraryPreferenceKeys.CARD_SIZE,
+        LibraryPreferenceKeys.COVER_STYLE,
     )
     private val previous = mutableMapOf<String, String?>()
 
@@ -82,6 +85,39 @@ class DesktopLibraryViewPrefsTest {
         assertEquals("year_desc", prefs.get(LibraryPreferenceKeys.SORT, null))
         assertEquals("romm", prefs.get(LibraryPreferenceKeys.SOURCE, null))
         assertEquals("small", prefs.get(LibraryPreferenceKeys.CARD_SIZE, null))
+    }
+
+    @Test
+    fun `absent cover style loads case`() {
+        assertEquals(CoverStyle.CASE, DesktopLibraryViewPrefs.load().coverStyle)
+    }
+
+    @Test
+    fun `the cover style round-trips through the isolated store`() {
+        DesktopLibraryViewPrefs.setCoverStyle(CoverStyle.SCREENSHOT)
+
+        assertEquals(CoverStyle.SCREENSHOT, DesktopLibraryViewPrefs.load().coverStyle)
+        assertEquals("screenshot", prefs.get(LibraryPreferenceKeys.COVER_STYLE, null))
+    }
+
+    @Test
+    fun `a corrupted cover style falls back to case without changing the other four`() {
+        DesktopLibraryViewPrefs.setViewMode(LibraryViewMode.COVER_FLOW)
+        DesktopLibraryViewPrefs.setSort(LibrarySort.YEAR_DESC)
+        DesktopLibraryViewPrefs.setSource(LibrarySource.ROMM)
+        DesktopLibraryViewPrefs.setCardSize(LibraryCardSize.SMALL)
+        prefs.put(LibraryPreferenceKeys.COVER_STYLE, "hologram")
+
+        assertEquals(
+            LibraryViewPreferences(
+                viewMode = LibraryViewMode.COVER_FLOW,
+                sort = LibrarySort.YEAR_DESC,
+                source = LibrarySource.ROMM,
+                cardSize = LibraryCardSize.SMALL,
+                coverStyle = CoverStyle.CASE,
+            ),
+            DesktopLibraryViewPrefs.load(),
+        )
     }
 
     @Test

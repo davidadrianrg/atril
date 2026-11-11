@@ -43,7 +43,30 @@ fun CoverImage(
     /** Plataforma que se muestra abreviada en lugar del icono si no hay portada. */
     placeholderSlug: String? = null,
 ) {
-    val url = resolveMediaUrl(coverUrl, pathCover, serverUrl)
+    CoverImageFromUrl(
+        url = resolveMediaUrl(coverUrl, pathCover, serverUrl),
+        aspectRatio = aspectRatio,
+        contentScale = contentScale,
+        naturalRatio = naturalRatio,
+        placeholderSlug = placeholderSlug,
+    )
+}
+
+/**
+ * Portada a partir de una URL ya resuelta (absoluta o `file://`).
+ *
+ * La usan la rejilla, el cover flow, el detalle y la carta del launcher cuando
+ * el estilo de carátula ya eligió la URL final: nunca se vuelve a resolver
+ * contra `pathCover`, así una URL de medio físico no se pierde.
+ */
+@Composable
+fun CoverImageFromUrl(
+    url: String?,
+    aspectRatio: Float = 2f / 3f,
+    contentScale: ContentScale = ContentScale.Crop,
+    naturalRatio: Boolean = false,
+    placeholderSlug: String? = null,
+) {
     if (url != null) {
         val bitmap = produceCover(url)
         if (bitmap != null) {
@@ -104,13 +127,24 @@ private fun CoverPlaceholder(aspectRatio: Float, slug: String?) {
     }
 }
 
+/**
+ * Fichero local de una URL de imagen: las portadas de juegos locales ya están
+ * en disco (`file://`, sin caché ni red) y el resto pasa por [CoverCache].
+ */
+internal fun coverSourceFile(url: String): File? =
+    if (url.startsWith("file://")) {
+        File(url.removePrefix("file://")).takeIf { it.isFile }
+    } else {
+        CoverCache.fetch(url)
+    }
+
 @Composable
 fun produceCover(url: String): ImageBitmap? {
     // Carga async: caché LRU en disco (CoverCache) + decodificación en IO.
     val bitmap by produceState<ImageBitmap?>(null, url) {
         withContext(Dispatchers.IO) {
             // Carátulas de juegos locales: ya están en disco, sin caché ni red.
-            val cached = if (url.startsWith("file://")) File(url.removePrefix("file://")).takeIf { it.isFile } else CoverCache.fetch(url)
+            val cached = coverSourceFile(url)
             if (cached != null) {
                 runCatching {
                     FileInputStream(cached).use { input -> value = loadImageBitmap(input) }

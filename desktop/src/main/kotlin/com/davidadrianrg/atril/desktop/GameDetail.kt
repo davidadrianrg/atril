@@ -54,6 +54,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
 import com.davidadrianrg.atril.core.remote.dto.RomDto
+import com.davidadrianrg.atril.desktop.theme.glassPanel
 import java.net.URI
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -79,227 +80,241 @@ fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMatchDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val coverStyle by state.coverStyle.collectAsState()
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 24.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = state::closeGame) {
-                Text(tr("game.back"))
+    Box(Modifier.fillMaxSize()) {
+        CinematicBackdrop(
+            url = heroBackdropUrl(rep, state.config.serverUrl),
+            modifier = Modifier.fillMaxSize(),
+        )
+        Column(
+            Modifier
+                .fillMaxSize()
+                .glassPanel()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp, vertical = 24.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = state::closeGame) {
+                    Text(tr("game.back"))
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    rep.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                FavoriteStar(favorite = stats.favorite, onClick = { state.toggleFavorite(card) })
             }
-            Spacer(Modifier.width(12.dp))
-            Text(
-                rep.name,
-                style = MaterialTheme.typography.headlineSmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            FavoriteStar(favorite = stats.favorite, onClick = { state.toggleFavorite(card) })
-        }
-        Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(12.dp))
 
-        Row(Modifier.fillMaxWidth()) {
-            Box(Modifier.width(220.dp)) {
-                CoverImage(
-                    coverUrl = rep.urlCover,
-                    pathCover = rep.pathCoverLarge ?: rep.pathCoverSmall,
-                    serverUrl = state.config.serverUrl,
-                    aspectRatio = 2f / 3f,
-                    naturalRatio = true,
-                    placeholderSlug = rep.platformSlug,
+            Row(Modifier.fillMaxWidth()) {
+                Box(Modifier.width(220.dp)) {
+                    CoverImageFromUrl(
+                        url = coverUrlFor(rep, state.config.serverUrl, coverStyle),
+                        aspectRatio = 2f / 3f,
+                        naturalRatio = true,
+                        placeholderSlug = rep.platformSlug,
+                    )
+                }
+                Spacer(Modifier.width(36.dp))
+                Column(Modifier.weight(1f)) {
+                    val platforms by state.platforms.collectAsState()
+                    val platformName = rep.platformSlug?.let { slug ->
+                        platforms.firstOrNull { it.slug == slug }
+                            ?.let { it.displayName ?: it.name }
+                            ?: slug.uppercase()
+                    }
+                    val metaLine = metadataLine(rep, platformName, state.config.serverUrl)
+                    if (metaLine != null) {
+                        Text(
+                            metaLine,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    val fileMeta = buildList {
+                        if (rep.regions.isNotEmpty()) add(regionsLabel(rep))
+                        rep.revision?.takeIf { it.isNotBlank() }?.let { add(tr("game.revision", it)) }
+                    }.joinToString(" • ")
+                    if (fileMeta.isNotBlank()) {
+                        Text(
+                            fileMeta,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    ChipsFlow(rep)
+                    Spacer(Modifier.height(14.dp))
+                    rep.summary?.let { summary ->
+                        Text(
+                            summary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = if (expandedSummary) Int.MAX_VALUE else 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (summary.length > 120) {
+                            TextButton(onClick = { expandedSummary = !expandedSummary }) {
+                                Text(if (expandedSummary) tr("game.summary.show_less") else tr("game.summary.show_more"))
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+                    GameStatsRows(stats)
+                    DetailRow(tr("game.info.file"), rep.fileName)
+                    DetailRow(tr("game.info.size"), formatBytes(rep.fileSizeBytes))
+                    rep.fileNameNoTags?.let { DetailRow(tr("game.info.clean_name"), it) }
+                    rep.fileExtension?.let { DetailRow(tr("game.info.extension"), it) }
+                    if (card.discCount > 1) DetailRow(tr("game.info.multi_file"), tr("game.info.multi_file_value", card.discCount))
+                    rep.igdbId?.let { DetailRow("IGDB ID", it.toString()) }
+
+                    Spacer(Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        when {
+                            card.downloaded -> {
+                                Icon(
+                                    AppIcons.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(tr("common.downloaded"), color = MaterialTheme.colorScheme.secondary)
+                                if (state.isManualDownloaded(card)) {
+                                    Spacer(Modifier.width(16.dp))
+                                    OutlinedButton(onClick = { scope.launch { state.unmarkDownloadedManuallySuspending(card) } }) {
+                                        Text(tr("library.unmark_downloaded"))
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    OutlinedButton(
+                                        onClick = {
+                                            scope.launch {
+                                                val file = withContext(Dispatchers.IO) {
+                                                    pickFile(tr("library.locate_file"))
+                                                } ?: return@launch
+                                                state.locateFileSuspending(card, file.absolutePath)
+                                            }
+                                        },
+                                    ) {
+                                        Text(tr("library.locate_file"))
+                                    }
+                                }
+                            }
+                            downloading -> {
+                                CircularProgressIndicator(Modifier.size(18.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Text(tr("common.downloading"))
+                            }
+                            else -> {
+                                Button(onClick = { state.enqueue(card) }) {
+                                    Icon(AppIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(tr("common.download"))
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                OutlinedButton(
+                                    onClick = { scope.launch { state.markDownloadedManuallySuspending(card) } },
+                                ) {
+                                    Text(tr("library.mark_downloaded"))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Multimedia ──
+            val screenshots = rep.mergedScreenshots
+            if (screenshots.isNotEmpty() || rep.youtubeVideoId != null) {
+                Spacer(Modifier.height(40.dp))
+                Text(tr("game.media.title"), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(14.dp))
+                if (screenshots.isNotEmpty()) {
+                    var viewerIndex by remember { mutableStateOf<Int?>(null) }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        items(screenshots.size) { index ->
+                            val url = resolveMediaUrl(null, screenshots[index], state.config.serverUrl)
+                            ScreenshotThumb(url) { viewerIndex = index }
+                        }
+                    }
+                    viewerIndex?.let { index ->
+                        ScreenshotViewerDialog(
+                            urls = screenshots.map { resolveMediaUrl(null, it, state.config.serverUrl) },
+                            initialIndex = index,
+                            onDismiss = { viewerIndex = null },
+                        )
+                    }
+                }
+                rep.youtubeVideoId?.let { videoId ->
+                    if (screenshots.isNotEmpty()) Spacer(Modifier.height(16.dp))
+                    OutlinedButton(onClick = { openTrailer(videoId) }) {
+                        Icon(AppIcons.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(tr("game.media.watch_trailer"))
+                    }
+                }
+            }
+
+            // ── Config de sync por juego ──
+            if (card.downloaded) RomSyncConfigSection(card, state, romsVersion)
+
+            // ── Archivos de la entrada (multi-disc = varios files en una ROM) ──
+            if (rep.multi || rep.hasMultipleFiles || rep.files.size > 1) {
+                Spacer(Modifier.height(32.dp))
+                val fileRows = rep.files.ifEmpty { listOf(com.davidadrianrg.atril.core.remote.dto.RomFileDto(rep.fileName, rep.fileSizeBytes)) }
+                Text(tr("game.files.title", fileRows.size), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(10.dp))
+                fileRows.forEach { file ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(file.filename, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            formatBytes(file.size),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            // ── Guardados y estados en el servidor (fecha + subida manual) ──
+            Spacer(Modifier.height(32.dp))
+            ServerAssetsPanel(rep.id, state)
+
+            // ── Buscar coincidencia (si el escaneo no reconoció el juego) ──
+            Spacer(Modifier.height(20.dp))
+            OutlinedButton(onClick = { showMatchDialog = true }) {
+                Text(tr("library.match.title"))
+            }
+            if (showMatchDialog) {
+                MatchRomDialogDesktop(
+                    romId = rep.id,
+                    initialName = rep.name,
+                    state = state,
+                    onDismiss = { showMatchDialog = false },
                 )
             }
-            Spacer(Modifier.width(36.dp))
-            Column(Modifier.weight(1f)) {
-                val platforms by state.platforms.collectAsState()
-                rep.platformSlug?.let { slug ->
-                    val p = platforms.firstOrNull { it.slug == slug }
-                    Text(
-                        p?.let { it.displayName ?: it.name } ?: slug.uppercase(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                val metaLine = buildList {
-                    if (rep.regions.isNotEmpty()) add(regionsLabel(rep))
-                    rep.revision?.takeIf { it.isNotBlank() }?.let { add(tr("game.revision", it)) }
-                    releaseYear(rep)?.let { add("$it") }
-                }.joinToString(" • ")
-                if (metaLine.isNotBlank()) {
-                    Text(
-                        metaLine,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                ratingRow(rep)
-                Spacer(Modifier.height(14.dp))
-                ChipsFlow(rep)
-                Spacer(Modifier.height(14.dp))
-                rep.summary?.let { summary ->
-                    Text(
-                        summary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = if (expandedSummary) Int.MAX_VALUE else 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (summary.length > 120) {
-                        TextButton(onClick = { expandedSummary = !expandedSummary }) {
-                            Text(if (expandedSummary) tr("game.summary.show_less") else tr("game.summary.show_more"))
-                        }
-                    }
-                }
 
+            // ── Eliminar descarga: siempre al final; el diálogo pide confirmación ──
+            if (card.downloaded) {
+                Spacer(Modifier.height(32.dp))
+                HorizontalDivider()
                 Spacer(Modifier.height(20.dp))
-                GameStatsRows(stats)
-                DetailRow(tr("game.info.file"), rep.fileName)
-                DetailRow(tr("game.info.size"), formatBytes(rep.fileSizeBytes))
-                rep.fileNameNoTags?.let { DetailRow(tr("game.info.clean_name"), it) }
-                rep.fileExtension?.let { DetailRow(tr("game.info.extension"), it) }
-                if (card.discCount > 1) DetailRow(tr("game.info.multi_file"), tr("game.info.multi_file_value", card.discCount))
-                rep.igdbId?.let { DetailRow("IGDB ID", it.toString()) }
-
-                Spacer(Modifier.height(24.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    when {
-                        card.downloaded -> {
-                            Icon(
-                                AppIcons.CheckCircle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(tr("common.downloaded"), color = MaterialTheme.colorScheme.secondary)
-                            if (state.isManualDownloaded(card)) {
-                                Spacer(Modifier.width(16.dp))
-                                OutlinedButton(onClick = { scope.launch { state.unmarkDownloadedManuallySuspending(card) } }) {
-                                    Text(tr("library.unmark_downloaded"))
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                OutlinedButton(
-                                    onClick = {
-                                        scope.launch {
-                                            val file = withContext(Dispatchers.IO) {
-                                                pickFile(tr("library.locate_file"))
-                                            } ?: return@launch
-                                            state.locateFileSuspending(card, file.absolutePath)
-                                        }
-                                    },
-                                ) {
-                                    Text(tr("library.locate_file"))
-                                }
-                            }
-                        }
-                        downloading -> {
-                            CircularProgressIndicator(Modifier.size(18.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text(tr("common.downloading"))
-                        }
-                        else -> {
-                            Button(onClick = { state.enqueue(card) }) {
-                                Icon(AppIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(tr("common.download"))
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            OutlinedButton(
-                                onClick = { scope.launch { state.markDownloadedManuallySuspending(card) } },
-                            ) {
-                                Text(tr("library.mark_downloaded"))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Multimedia ──
-        val screenshots = rep.mergedScreenshots
-        if (screenshots.isNotEmpty() || rep.youtubeVideoId != null) {
-            Spacer(Modifier.height(40.dp))
-            Text(tr("game.media.title"), style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(14.dp))
-            if (screenshots.isNotEmpty()) {
-                var viewerIndex by remember { mutableStateOf<Int?>(null) }
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    items(screenshots.size) { index ->
-                        val url = resolveMediaUrl(null, screenshots[index], state.config.serverUrl)
-                        ScreenshotThumb(url) { viewerIndex = index }
-                    }
-                }
-                viewerIndex?.let { index ->
-                    ScreenshotViewerDialog(
-                        urls = screenshots.map { resolveMediaUrl(null, it, state.config.serverUrl) },
-                        initialIndex = index,
-                        onDismiss = { viewerIndex = null },
-                    )
-                }
-            }
-            rep.youtubeVideoId?.let { videoId ->
-                if (screenshots.isNotEmpty()) Spacer(Modifier.height(16.dp))
-                OutlinedButton(onClick = { openTrailer(videoId) }) {
-                    Icon(AppIcons.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                OutlinedButton(
+                    onClick = { showDeleteDialog = true },
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Icon(AppIcons.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(tr("game.media.watch_trailer"))
+                    Text(tr("game.delete_download"))
                 }
+                Spacer(Modifier.height(24.dp))
             }
-        }
-
-        // ── Config de sync por juego ──
-        if (card.downloaded) RomSyncConfigSection(card, state, romsVersion)
-
-        // ── Archivos de la entrada (multi-disc = varios files en una ROM) ──
-        if (rep.multi || rep.hasMultipleFiles || rep.files.size > 1) {
-            Spacer(Modifier.height(32.dp))
-            val fileRows = rep.files.ifEmpty { listOf(com.davidadrianrg.atril.core.remote.dto.RomFileDto(rep.fileName, rep.fileSizeBytes)) }
-            Text(tr("game.files.title", fileRows.size), style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(10.dp))
-            fileRows.forEach { file ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(file.filename, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        formatBytes(file.size),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        // ── Guardados y estados en el servidor (fecha + subida manual) ──
-        Spacer(Modifier.height(32.dp))
-        ServerAssetsPanel(rep.id, state)
-
-        // ── Buscar coincidencia (si el escaneo no reconoció el juego) ──
-        Spacer(Modifier.height(20.dp))
-        OutlinedButton(onClick = { showMatchDialog = true }) {
-            Text(tr("library.match.title"))
-        }
-        if (showMatchDialog) {
-            MatchRomDialogDesktop(
-                romId = rep.id,
-                initialName = rep.name,
-                state = state,
-                onDismiss = { showMatchDialog = false },
-            )
-        }
-
-        // ── Eliminar descarga: siempre al final; el diálogo pide confirmación ──
-        if (card.downloaded) {
-            Spacer(Modifier.height(32.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(20.dp))
-            OutlinedButton(
-                onClick = { showDeleteDialog = true },
-                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error,
-                ),
-            ) {
-                Icon(AppIcons.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(tr("game.delete_download"))
-            }
-            Spacer(Modifier.height(24.dp))
         }
     }
 
@@ -468,32 +483,6 @@ private fun AssistChipLike(text: String) {
             color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
     }
-}
-
-@Composable
-private fun ratingRow(rep: RomDto) {
-    val rating = rep.igdbMetadata?.totalRating?.toDoubleOrNull()
-    if (rating != null) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                AppIcons.Star,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.size(16.dp),
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                String.format("%.0f", rating),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.tertiary,
-            )
-        }
-    }
-}
-
-private fun releaseYear(rep: RomDto): Int? {
-    val ts = rep.igdbMetadata?.firstReleaseDate ?: return null
-    return if (ts > 0) java.time.Instant.ofEpochSecond(ts).atZone(java.time.ZoneOffset.UTC).year else null
 }
 
 private fun regionsLabel(rep: RomDto): String = rep.regions.joinToString("/")
