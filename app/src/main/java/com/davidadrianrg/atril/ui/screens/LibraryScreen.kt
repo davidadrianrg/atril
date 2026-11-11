@@ -2,6 +2,8 @@
 
 package com.davidadrianrg.atril.ui.screens
 
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -586,26 +588,40 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                 IconButton(onClick = com.davidadrianrg.atril.ui.components.LocalOpenAppMenu.current) {
                     Icon(Icons.Filled.Menu, contentDescription = tr("launcher.menu.open"))
                 }
-                ExposedDropdownMenuBox(
-                    expanded = platformMenuExpanded,
-                    onExpandedChange = { platformMenuExpanded = it },
-                    modifier = if (isLandscape) Modifier.width(340.dp) else Modifier.weight(1f),
+                Box(
+                    modifier = if (isLandscape) Modifier else Modifier.weight(1f),
                 ) {
-                    OutlinedTextField(
-                        value = platforms.find { it.id == selectedPlatformId }?.name
-                            ?: tr("android.library.select_platform"),
-                        onValueChange = {},
-                        readOnly = true,
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(platformMenuExpanded) },
-                        singleLine = true,
-                        shape = fieldShape,
+                    val currentName = platforms.find { it.id == selectedPlatformId }?.name
+                        ?: tr("android.library.select_platform")
+                    Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .menuAnchor(),
-                    )
-                    ExposedDropdownMenu(
+                            .height(48.dp)
+                            .then(if (isLandscape) Modifier.widthIn(max = 320.dp) else Modifier.fillMaxWidth())
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
+                                RoundedCornerShape(50),
+                            )
+                            .clickable { platformMenuExpanded = true }
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            currentName,
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Icon(
+                            Icons.Filled.ArrowDropDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
                         expanded = platformMenuExpanded,
                         onDismissRequest = { platformMenuExpanded = false },
                     ) {
@@ -2317,16 +2333,22 @@ private fun LibrarySearchField(
     onSearchFocusChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    OutlinedTextField(
+    androidx.compose.material3.TextField(
         value = value,
         onValueChange = onValueChange,
-        placeholder = { Text(tr("android.library.search_all_placeholder")) },
-        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        placeholder = { Text(tr("android.library.search_all_placeholder"), style = MaterialTheme.typography.bodyMedium) },
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(20.dp)) },
         singleLine = true,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(50),
         textStyle = MaterialTheme.typography.bodyMedium,
+        colors = androidx.compose.material3.TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+        ),
         modifier = modifier
-            .height(56.dp)
+            .height(48.dp)
             .onFocusChanged { onSearchFocusChange(it.isFocused) },
     )
 }
