@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SafeExtraction
 import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RomHeaderIdReader
 import com.davidadrianrg.atril.core.util.SafeDelete
@@ -101,18 +102,12 @@ class SwitchSaveHandler : SaveHandler {
             ZipInputStream(FileInputStream(tempFile)).use { zipIn ->
                 var entry = zipIn.nextEntry
                 while (entry != null) {
-                    val outFile = SaveNames.resolveArchiveEntry(saveDir, entry.name.removePrefix("${saveDir.name}/"))
-                    if (outFile == null) {
-                        zipIn.closeEntry()
-                        entry = zipIn.nextEntry
-                        continue
-                    }
-                    if (entry.isDirectory) {
-                        outFile.mkdirs()
-                    } else {
-                        outFile.parentFile?.mkdirs()
-                        FileOutputStream(outFile).use { out -> zipIn.copyTo(out) }
-                    }
+                    SafeExtraction.extractEntry(
+                        base = saveDir,
+                        entryPath = entry.name.removePrefix("${saveDir.name}/"),
+                        isDirectory = entry.isDirectory,
+                        input = if (entry.isDirectory) null else zipIn,
+                    )
                     zipIn.closeEntry()
                     entry = zipIn.nextEntry
                 }

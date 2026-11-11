@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.core.sync.platform
 
+import com.davidadrianrg.atril.core.sync.SafeExtraction
 import com.davidadrianrg.atril.core.sync.RootCommandNames
 import com.davidadrianrg.atril.core.sync.SaveNames
 import com.davidadrianrg.atril.core.util.RomHeaderIdReader
@@ -165,18 +166,12 @@ class Ps2SaveHandler : SaveHandler {
             ZipInputStream(FileInputStream(tempFile)).use { zipIn ->
                 var entry = zipIn.nextEntry
                 while (entry != null) {
-                    val outFile = SaveNames.resolveArchiveEntry(targetCard, entry.name)
-                    if (outFile == null) {
-                        zipIn.closeEntry()
-                        entry = zipIn.nextEntry
-                        continue
-                    }
-                    if (entry.isDirectory) {
-                        outFile.mkdirs()
-                    } else {
-                        outFile.parentFile?.mkdirs()
-                        FileOutputStream(outFile).use { out -> zipIn.copyTo(out) }
-                    }
+                    SafeExtraction.extractEntry(
+                        base = targetCard,
+                        entryPath = entry.name,
+                        isDirectory = entry.isDirectory,
+                        input = if (entry.isDirectory) null else zipIn,
+                    )
                     zipIn.closeEntry()
                     entry = zipIn.nextEntry
                 }
@@ -388,16 +383,12 @@ class Ps2SaveHandler : SaveHandler {
             ZipInputStream(FileInputStream(tempFile)).use { zipIn ->
                 var entry = zipIn.nextEntry
                 while (entry != null) {
-                    val outFile = SaveNames.resolveArchiveEntry(staging, entry.name)
-                    if (outFile == null) {
-                        zipIn.closeEntry(); entry = zipIn.nextEntry; continue
-                    }
-                    if (entry.isDirectory) {
-                        outFile.mkdirs()
-                    } else {
-                        outFile.parentFile?.mkdirs()
-                        FileOutputStream(outFile).use { out -> zipIn.copyTo(out) }
-                    }
+                    SafeExtraction.extractEntry(
+                        base = staging,
+                        entryPath = entry.name,
+                        isDirectory = entry.isDirectory,
+                        input = if (entry.isDirectory) null else zipIn,
+                    )
                     zipIn.closeEntry()
                     entry = zipIn.nextEntry
                 }
