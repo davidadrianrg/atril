@@ -57,6 +57,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -127,7 +128,7 @@ internal fun LauncherGameObject(item: ShelfItem, favorite: Boolean, modifier: Mo
             PhysicalMediaArt(file, item.rom.name, Modifier.fillMaxSize())
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                GameCard(item, favorite, Modifier.fillMaxHeight(0.92f).aspectRatio(CARD_ASPECT))
+                GameCard(item, favorite, Modifier.fillMaxHeight(0.92f))
             }
         }
     }
@@ -136,8 +137,12 @@ internal fun LauncherGameObject(item: ShelfItem, favorite: Boolean, modifier: Mo
 /** Carta coleccionable: portada, plataforma, título e insignias. */
 @Composable
 internal fun GameCard(item: ShelfItem, favorite: Boolean, modifier: Modifier = Modifier) {
+    // El ancho de la carta sigue la proporción real de la carátula: así ninguna
+    // portada atípica (cuadrada, apaisada) se recorta con un marco fijo.
+    var coverRatio by remember(item.rom.id) { mutableStateOf<Float?>(null) }
     Box(
         modifier = modifier
+            .aspectRatio(coverRatio ?: CARD_ASPECT)
             .shadow(22.dp, CardShape, ambientColor = LauncherAmber.copy(alpha = 0.25f), spotColor = Color.Black)
             .clip(CardShape)
             .background(LauncherPlastic)
@@ -147,7 +152,7 @@ internal fun GameCard(item: ShelfItem, favorite: Boolean, modifier: Modifier = M
                 CardShape,
             ),
     ) {
-        LauncherCoverArt(item, Modifier.fillMaxSize())
+        LauncherCoverArt(item, Modifier.fillMaxSize()) { ratio -> coverRatio = ratio }
         // Brillo superior, como el laminado de una carta.
         Box(
             Modifier
@@ -363,13 +368,24 @@ private fun ContinuePlayingCard(item: ShelfItem, played: String, onClick: () -> 
 }
 
 @Composable
-internal fun LauncherCoverArt(item: ShelfItem, modifier: Modifier = Modifier) {
+internal fun LauncherCoverArt(
+    item: ShelfItem,
+    modifier: Modifier = Modifier,
+    onImageRatio: ((Float) -> Unit)? = null,
+) {
     val cover = item.rom.coverUrlLarge ?: item.rom.coverUrlSmall
     if (cover != null) {
         AsyncImage(
             model = cover,
             contentDescription = item.rom.name,
-            contentScale = ContentScale.Crop,
+            contentScale = ContentScale.Fit,
+            onSuccess = { state ->
+                val size = state.painter.intrinsicSize
+                if (size.width > 0f && size.height > 0f) {
+                    // Acotado para que una carátula extrema no rompa el carrusel.
+                    onImageRatio?.invoke((size.width / size.height).coerceIn(0.55f, 1.45f))
+                }
+            },
             modifier = modifier,
         )
     } else {
