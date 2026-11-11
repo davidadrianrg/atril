@@ -1807,9 +1807,6 @@ internal fun RomDetailSheet(
         com.davidadrianrg.atril.ui.components.Panel(modifier = Modifier.fillMaxWidth()) {
             Column {
                 GameStatsRows(stats)
-                DetailRow(tr("game.info.file"), rom.fileName)
-                DetailRow(tr("game.info.size"), formatFileSize(rom.fileSizeBytes))
-                rom.fileNameNoTags?.let { DetailRow(tr("game.info.clean_name"), it) }
                 rom.fileExtension?.let { DetailRow(tr("game.info.extension"), it) }
                 if (rom.isMulti) DetailRow(tr("game.info.multi_file"), tr("game.info.multi_file_value", rom.files.size))
                 rom.igdbId?.let { DetailRow("IGDB ID", it.toString()) }
@@ -1838,6 +1835,27 @@ internal fun RomDetailSheet(
         if (serverUrl.isNotBlank() && apiKey.isNotBlank()) DetailGroup(tr("game.group.romm")) {
             RomMStatusRows(serverUrl)
 
+            // Descargar / marcar como descargado vive aquí: es una acción de RomM,
+            // no de los ficheros locales del juego.
+            if (!wide && !isDownloaded && !isDownloading) {
+                Spacer(modifier = Modifier.size(16.dp))
+                androidx.compose.material3.Button(
+                    onClick = onDownload,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text("  " + tr("common.download"))
+                }
+                Spacer(modifier = Modifier.size(8.dp))
+                OutlinedButton(
+                    onClick = onMarkDownloaded,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Filled.DownloadDone, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text("  " + tr("library.mark_downloaded"))
+                }
+            }
+
             // ── Buscar coincidencia (si el escaneo no reconoció el juego) ──
             Spacer(modifier = Modifier.size(20.dp))
             OutlinedButton(
@@ -1856,6 +1874,7 @@ internal fun RomDetailSheet(
         }
 
         // Action button
+        if (isDownloaded || isDownloading) {
         com.davidadrianrg.atril.ui.components.SectionLabel(
             tr("game.section.files"),
             Modifier.padding(start = 4.dp, bottom = 10.dp),
@@ -1884,6 +1903,9 @@ internal fun RomDetailSheet(
                             color = MaterialTheme.colorScheme.secondary,
                         )
                     }
+                    DetailRow(tr("game.info.file"), rom.fileName)
+                    DetailRow(tr("game.info.size"), formatFileSize(rom.fileSizeBytes))
+                    rom.fileNameNoTags?.let { DetailRow(tr("game.info.clean_name"), it) }
                     if (isManualDownloaded) {
                         OutlinedButton(
                             onClick = onUnmarkDownloaded,
@@ -1991,6 +2013,7 @@ internal fun RomDetailSheet(
                     }
                 }
             }
+        }
         }
         }
 
