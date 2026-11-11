@@ -739,25 +739,51 @@ internal fun LauncherMenuOverlay(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 56.dp)
+                            .heightIn(min = 58.dp)
                             .focusRing()
                             .clip(RoundedCornerShape(16.dp))
-                            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
+                                else Color.Transparent,
+                            )
                             .clickable(role = Role.Button) { onNavigate(screen) }
-                            .padding(horizontal = 14.dp),
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(
-                            if (selected) screen.selectedIcon else screen.icon,
-                            contentDescription = null,
-                            tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else LauncherCream.copy(alpha = 0.8f),
-                        )
-                        Spacer(Modifier.width(16.dp))
+                        Box(
+                            Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.14f)
+                                    else LauncherCream.copy(alpha = 0.06f),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                if (selected) screen.selectedIcon else screen.icon,
+                                contentDescription = null,
+                                tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else LauncherCream.copy(alpha = 0.85f),
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
                         Text(
                             screen.title,
                             style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                             color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else LauncherCream,
                         )
+                        Spacer(Modifier.weight(1f))
+                        if (selected) {
+                            Box(
+                                Modifier
+                                    .width(3.dp)
+                                    .height(18.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(LauncherAmber),
+                            )
+                        }
                     }
                 }
             }

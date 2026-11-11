@@ -1,5 +1,8 @@
 package com.davidadrianrg.atril.ui.screens
 
+import androidx.compose.ui.text.font.FontWeight
+import com.davidadrianrg.atril.ui.components.IconTile
+import com.davidadrianrg.atril.ui.components.Panel
 import com.davidadrianrg.atril.ui.components.pageBackground
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -1264,29 +1267,19 @@ private fun SettingsSection(
     title: String,
     content: @Composable () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    Panel(modifier = Modifier.fillMaxWidth()) {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(modifier = Modifier.size(10.dp))
+                IconTile(icon)
+                Spacer(modifier = Modifier.size(12.dp))
                 Text(
                     title,
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
             }
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             content()
         }
     }
