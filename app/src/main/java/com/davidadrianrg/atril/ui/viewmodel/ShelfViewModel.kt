@@ -149,11 +149,14 @@ class ShelfViewModel(
             val row = presentation[item.rom.id]
             val cached = row?.physicalMediaPath?.takeIf { File(it).isFile }
             val pref = LauncherDisplayMode.fromId(row?.displayMode)
+            // Un medio físico remoto (URL de RomM) también sirve para mostrarlo:
+            // no hace falta tenerlo cacheado para poder elegir la vista física.
+            val hasPhysical = cached != null || item.rom.physicalMediaUrl != null || scraped[item.rom.id] != null
             item.copy(
                 rom = item.rom.withPhysicalMediaOverride(scraped),
                 displayModePreference = pref,
                 physicalMediaFile = cached,
-                showPhysical = cached != null && (pref ?: globalDefault) == LauncherDisplayMode.PHYSICAL,
+                showPhysical = hasPhysical && (pref ?: globalDefault) == LauncherDisplayMode.PHYSICAL,
                 launchOverride = overrides[LaunchPlatforms.canonical(item.rom.platformSlug)],
             )
         }

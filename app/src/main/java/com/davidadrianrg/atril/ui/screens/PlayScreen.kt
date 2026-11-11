@@ -49,7 +49,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.VideogameAsset
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material3.AlertDialog
@@ -76,6 +78,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import com.davidadrianrg.atril.data.repository.LauncherDisplayMode
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -172,6 +175,8 @@ fun PlayScreen(
         .collectAsState(initial = LibraryViewPreferences.DEFAULT)
     val saveSyncEnabled by container.settingsRepository.saveSyncEnabled
         .collectAsState(initial = true)
+    val displayMode by container.settingsRepository.launcherDefaultDisplay
+        .collectAsState(initial = LauncherDisplayMode.CARD.id)
 
     var selectedRomId by remember { mutableStateOf<Int?>(null) }
     var pendingDelete by remember { mutableStateOf<ShelfItem?>(null) }
@@ -294,8 +299,12 @@ fun PlayScreen(
         // Medio físico o carátula: siempre se ve la inserción completa y solo
         // después se lanza el emulador o el instalador (el overlay sigue hasta
         // enviar el intent).
-        val media: Any? = item.physicalMediaFile?.takeIf { item.showPhysical }?.let { java.io.File(it) }
-            ?: item.rom.coverUrlLarge ?: item.rom.coverUrlSmall
+        val physical: Any? = if (item.showPhysical) {
+            item.physicalMediaFile?.let { java.io.File(it) } ?: item.rom.physicalMediaUrl
+        } else {
+            null
+        }
+        val media: Any? = physical ?: item.rom.coverUrlLarge ?: item.rom.coverUrlSmall
         insertion = Insertion(item, media)
         insertProgress.snapTo(0f)
         insertProgress.animateTo(
@@ -412,6 +421,15 @@ fun PlayScreen(
                 onOpenDownloads = onOpenDownloads,
                 onOpenMenu = { menuOpen = true },
                 showMenu = menuItems.isNotEmpty(),
+                displayMode = displayMode,
+                onToggleDisplay = {
+                    val next = if (displayMode == LauncherDisplayMode.PHYSICAL.id) {
+                        LauncherDisplayMode.CARD.id
+                    } else {
+                        LauncherDisplayMode.PHYSICAL.id
+                    }
+                    scope.launch { container.settingsRepository.setLauncherDefaultDisplay(next) }
+                },
             )
 
             if (platformsInShelf.size > 1) {
@@ -459,11 +477,13 @@ fun PlayScreen(
                     Row(Modifier.weight(1f).fillMaxWidth()) {
                         BoxWithConstraints(
                             Modifier
-                                .weight(if (landscape) 1.3f else 1f)
+                                .weight(1f)
                                 .fillMaxHeight(),
                         ) {
+                            // Sin panel lateral: la página ocupa casi todo el ancho
+                            // y solo asoma una franja de los juegos vecinos.
                             val heroWidth = if (landscape) {
-                                (maxHeight * 0.66f).coerceAtMost(maxWidth * 0.56f)
+                                (maxWidth * 0.53f).coerceAtLeast(maxHeight * 0.55f)
                             } else {
                                 (maxWidth * 0.66f).coerceAtMost(maxHeight * 0.62f)
                             }
@@ -515,7 +535,7 @@ fun PlayScreen(
                                     favorite = playStats.statsOf(item).favorite,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .padding(vertical = 8.dp)
+                                        .padding(vertical = 2.dp)
                                         .graphicsLayer {
                                             scaleX = scale * (1f + 0.05f * lift)
                                             scaleY = scale * (1f + 0.05f * lift)
@@ -551,19 +571,6 @@ fun PlayScreen(
                                     modifier = Modifier.align(Alignment.CenterEnd),
                                     onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
                                 )
-                            }
-                        }
-
-                        if (landscape) {
-                            current?.let { item ->
-                                Box(
-                                    Modifier.weight(0.9f).fillMaxHeight().padding(end = 20.dp),
-                                    contentAlignment = Alignment.CenterStart,
-                                ) {
-                                    Caption(item, viewModel, saveSyncEnabled, launchJob?.isActive == true,
-                                        stats = playStats.statsOf(item), alignStart = true,
-                                        onPlay = { play(item) }, onDetails = { selectedRomId = item.rom.id })
-                                }
                             }
                         }
                     }
@@ -822,6 +829,8 @@ private fun LauncherHeader(
     onOpenDownloads: () -> Unit,
     onOpenMenu: () -> Unit,
     showMenu: Boolean,
+    displayMode: String,
+    onToggleDisplay: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
@@ -853,6 +862,16 @@ private fun LauncherHeader(
             )
             Spacer(Modifier.width(8.dp))
         }
+        RoundIconButton(
+            icon = if (displayMode == LauncherDisplayMode.PHYSICAL.id) {
+                Icons.Filled.VideogameAsset
+            } else {
+                Icons.Filled.GridView
+            },
+            description = tr("launcher.display.toggle"),
+            onClick = onToggleDisplay,
+        )
+        Spacer(Modifier.width(8.dp))
         RoundIconButton(Icons.Filled.Add, tr("local.add"), onAddLocal)
         Spacer(Modifier.width(8.dp))
         com.davidadrianrg.atril.ui.components.DownloadQueueButton(
@@ -970,8 +989,8 @@ private fun Modifier.fadeEdges(): Modifier = this
         drawRect(
             brush = Brush.horizontalGradient(
                 0f to Color.Transparent,
-                0.12f to Color.Black,
-                0.80f to Color.Black,
+                0.045f to Color.Black,
+                0.955f to Color.Black,
                 1f to Color.Transparent,
             ),
             blendMode = BlendMode.DstIn,
