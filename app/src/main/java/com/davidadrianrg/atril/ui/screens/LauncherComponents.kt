@@ -99,6 +99,8 @@ internal val LauncherBgBottom: Color @Composable get() = argb(LocalLauncherColor
 internal val LauncherCream: Color @Composable get() = MaterialTheme.colorScheme.onBackground
 internal val LauncherAmber: Color @Composable get() = MaterialTheme.colorScheme.primary
 internal val LauncherInk: Color @Composable get() = MaterialTheme.colorScheme.onPrimary
+/** Texto sobre superficies que siempre son oscuras (arte, HUD, plástico). */
+private val LauncherOnDark = Color(0xFFF2E6D2)
 internal val LauncherPlastic: Color @Composable get() = MaterialTheme.colorScheme.surfaceContainerHigh
 internal val LauncherPanel: Color @Composable get() = MaterialTheme.colorScheme.background.copy(alpha = 0.95f)
 
@@ -318,7 +320,7 @@ private fun CardBadge(text: String, subtle: Boolean = false) {
         text,
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.SemiBold,
-        color = if (subtle) LauncherCream else LauncherInk,
+        color = if (subtle) LauncherOnDark else LauncherInk,
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
             .background(if (subtle) Color(0xCC0B0907) else LauncherAmber)
@@ -420,7 +422,7 @@ internal fun LauncherCoverArt(
             Text(
                 item.rom.name,
                 style = MaterialTheme.typography.titleMedium,
-                color = LauncherCream,
+                color = LauncherOnDark,
                 textAlign = TextAlign.Center,
                 maxLines = 5,
                 overflow = TextOverflow.Ellipsis,
@@ -602,7 +604,7 @@ internal fun PadLegendBar(modifier: Modifier = Modifier) {
         modifier = modifier
             .clip(RoundedCornerShape(50))
             .background(Color(0xCC0B0907))
-            .border(1.dp, LauncherCream.copy(alpha = 0.10f), RoundedCornerShape(50))
+            .border(1.dp, LauncherOnDark.copy(alpha = 0.10f), RoundedCornerShape(50))
             .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -622,21 +624,21 @@ private fun PadLegendChip(glyph: String, label: String) {
             Modifier
                 .size(18.dp)
                 .clip(CircleShape)
-                .background(LauncherCream.copy(alpha = 0.14f)),
+                .background(LauncherOnDark.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 glyph,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = LauncherCream,
+                color = LauncherOnDark,
             )
         }
         Spacer(Modifier.width(5.dp))
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = LauncherCream.copy(alpha = 0.78f),
+            color = LauncherOnDark.copy(alpha = 0.78f),
             maxLines = 1,
         )
     }
