@@ -236,6 +236,7 @@ private fun navigateTo(route: String, navController: NavHostController) {
 private val bottomNavItems = listOf(
     Screen.Play,
     Screen.Library,
+    Screen.Platforms,
     Screen.Sync,
     Screen.Config,
 )
