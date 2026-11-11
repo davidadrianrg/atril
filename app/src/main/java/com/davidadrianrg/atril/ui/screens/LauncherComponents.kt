@@ -112,7 +112,12 @@ internal const val CARD_ASPECT = 0.70f
  * medio físico. El cambio entre ambos se anima (fundido + escala).
  */
 @Composable
-internal fun LauncherGameObject(item: ShelfItem, favorite: Boolean, modifier: Modifier = Modifier) {
+internal fun LauncherGameObject(
+    item: ShelfItem,
+    favorite: Boolean,
+    modifier: Modifier = Modifier,
+    emphasized: Boolean = false,
+) {
     // Medio físico cacheado (File) o, si no lo está, la URL que da RomM.
     val physicalModel: Any? = if (item.showPhysical) {
         item.physicalMediaFile?.let { java.io.File(it) } ?: item.rom.physicalMediaUrl
@@ -133,7 +138,7 @@ internal fun LauncherGameObject(item: ShelfItem, favorite: Boolean, modifier: Mo
             PhysicalMediaArt(media, item.rom.name, Modifier.fillMaxSize())
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                GameCard(item, favorite, Modifier.fillMaxHeight(0.98f))
+                GameCard(item, favorite, Modifier.fillMaxHeight(0.98f), emphasized = emphasized)
             }
         }
     }
@@ -141,19 +146,36 @@ internal fun LauncherGameObject(item: ShelfItem, favorite: Boolean, modifier: Mo
 
 /** Carta coleccionable: portada, plataforma, título e insignias. */
 @Composable
-internal fun GameCard(item: ShelfItem, favorite: Boolean, modifier: Modifier = Modifier) {
+internal fun GameCard(
+    item: ShelfItem,
+    favorite: Boolean,
+    modifier: Modifier = Modifier,
+    emphasized: Boolean = false,
+) {
     // El ancho de la carta sigue la proporción real de la carátula: así ninguna
     // portada atípica (cuadrada, apaisada) se recorta con un marco fijo.
     var coverRatio by remember(item.rom.id) { mutableStateOf<Float?>(null) }
     Box(
         modifier = modifier
             .aspectRatio(coverRatio ?: CARD_ASPECT)
-            .shadow(22.dp, CardShape, ambientColor = LauncherAmber.copy(alpha = 0.25f), spotColor = Color.Black)
+            .shadow(
+                if (emphasized) 30.dp else 22.dp,
+                CardShape,
+                ambientColor = LauncherAmber.copy(alpha = if (emphasized) 0.55f else 0.25f),
+                spotColor = Color.Black,
+            )
             .clip(CardShape)
-            .background(LauncherPlastic)
+            // Plástico y texto de la carta son fijos: la portada siempre es oscura,
+            // también con temas claros.
+            .background(Color(0xFF191611))
             .border(
-                1.dp,
-                Brush.verticalGradient(listOf(LauncherAmber.copy(alpha = 0.55f), LauncherAmber.copy(alpha = 0.08f))),
+                if (emphasized) 3.dp else 1.dp,
+                Brush.verticalGradient(
+                    listOf(
+                        LauncherAmber.copy(alpha = if (emphasized) 1f else 0.55f),
+                        LauncherAmber.copy(alpha = if (emphasized) 0.55f else 0.08f),
+                    ),
+                ),
                 CardShape,
             ),
     ) {
@@ -182,14 +204,14 @@ internal fun GameCard(item: ShelfItem, favorite: Boolean, modifier: Modifier = M
                 item.platformLabel.uppercase(),
                 style = MaterialTheme.typography.labelSmall,
                 letterSpacing = 1.4.sp,
-                color = LauncherAmber,
+                color = Color(0xFFE7B46A),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 item.rom.name,
                 style = MaterialTheme.typography.titleMedium,
-                color = LauncherCream,
+                color = Color(0xFFF2E6D2),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )

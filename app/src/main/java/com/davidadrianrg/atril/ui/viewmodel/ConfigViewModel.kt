@@ -251,6 +251,13 @@ class ConfigViewModel(
 
     val theme = settingsRepository.theme
 
+    /** "blur" o "solid": cómo se pinta el fondo del launcher. */
+    val launcherBackground = settingsRepository.launcherBackground
+
+    fun setLauncherBackground(mode: String) {
+        viewModelScope.launch { settingsRepository.setLauncherBackground(mode) }
+    }
+
     /** Claves de SteamGridDB / ScreenScraper para las carátulas de juegos locales. */
     val scraperCredentials = settingsRepository.scraperCredentials
 

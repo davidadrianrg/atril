@@ -386,6 +386,9 @@ fun PlayScreen(
     val carouselFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(visibleItems.isNotEmpty()) { runCatching { carouselFocus.requestFocus() } }
 
+    // Fondo del launcher: captura difuminada (por defecto) o degradado sólido del tema.
+    val launcherBg by container.settingsRepository.launcherBackground.collectAsState(initial = "blur")
+
     BackHandler(enabled = insertion != null) { launchJob?.cancel() }
     BackHandler(enabled = menuOpen && insertion == null) { menuOpen = false }
 
@@ -396,7 +399,10 @@ fun PlayScreen(
     ) {
         // Fondo cinematográfico: primera captura del juego, si la hay. Es
         // decorativo y va detrás de todo (sin foco ni toques).
-        CinematicHero(url = current?.rom?.heroBackdropUrl(), modifier = Modifier.fillMaxSize())
+        CinematicHero(
+            url = if (launcherBg == "solid") null else current?.rom?.heroBackdropUrl(),
+            modifier = Modifier.fillMaxSize(),
+        )
 
         // Halo cálido detrás del objeto central.
         Box(
@@ -545,6 +551,7 @@ fun PlayScreen(
                                                     offset == 0 -> LauncherGameObject(
                                                         item = item,
                                                         favorite = playStats.statsOf(item).favorite,
+                                                        emphasized = true,
                                                         modifier = Modifier
                                                             .fillMaxSize()
                                                             .padding(vertical = 2.dp)

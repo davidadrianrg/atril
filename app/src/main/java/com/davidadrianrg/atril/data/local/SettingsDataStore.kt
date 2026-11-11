@@ -79,6 +79,7 @@ class SettingsDataStore(private val context: Context) {
         val MEDIA_DOWNLOAD_PATH = stringPreferencesKey("media_download_path")
         val LANGUAGE = stringPreferencesKey("language")
         val THEME = stringPreferencesKey("theme")
+        val LAUNCHER_BG = stringPreferencesKey("launcher_background")
         // Vista/orden/origen/tamaño/estilo de carátula de la biblioteca. Las
         // claves canónicas viven en :core para que Android y desktop no
         // inventen grafías distintas.
@@ -405,6 +406,13 @@ class SettingsDataStore(private val context: Context) {
 
     suspend fun setTheme(id: String) {
         context.dataStore.edit { it[THEME] = id }
+    }
+
+    /** Fondo del launcher: "blur" (captura difuminada) o "solid" (degradado del tema). */
+    val launcherBackground: Flow<String> = context.dataStore.data.map { it[LAUNCHER_BG] ?: "blur" }
+
+    suspend fun setLauncherBackground(mode: String) {
+        context.dataStore.edit { it[LAUNCHER_BG] = mode }
     }
 
     /** Persiste la vista de la biblioteca (rejilla / cover flow). */
