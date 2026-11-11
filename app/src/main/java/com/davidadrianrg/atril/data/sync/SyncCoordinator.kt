@@ -727,16 +727,14 @@ class SyncCoordinator(
         val cached = settingsDataStore.getSyncDeviceIdStringBlocking()
         if (!cached.isNullOrBlank()) return cached
 
-        return try {
-            val response = api.registerDevice(
+        val registered = try {
+            api.registerDevice(
                 DeviceRegistrationRequest(
                     name = "${Build.MANUFACTURER} ${Build.MODEL}",
                     platform = "android",
                     hostname = Build.DEVICE,
                 ),
             )
-            settingsDataStore.setSyncDeviceIdString(response.deviceId)
-            response.deviceId
         } catch (e: retrofit2.HttpException) {
             Log.e(TAG, "Device registration HTTP ${e.code()}: ${e.message()}", e)
             null
@@ -744,6 +742,26 @@ class SyncCoordinator(
             Log.e(TAG, "Device registration failed", e)
             null
         }
+
+        if (registered != null) {
+            settingsDataStore.setSyncDeviceIdString(registered.deviceId)
+            return registered.deviceId
+        }
+
+        // Some RomM deployments forbid POST /api/devices even with devices.write.
+        // Reusing an existing device keeps save sync working instead of failing
+        // before it even starts.
+        val existing = runCatching { api.getDevices() }.getOrNull()
+        val picked = existing?.let {
+            com.davidadrianrg.atril.core.sync.DeviceSelector.pickExisting(it)
+        }
+        if (picked == null) {
+            Log.w(TAG, "No existing device to reuse after registration failure")
+            return null
+        }
+        Log.i(TAG, "Reusing existing RomM device '${picked.name}' (${picked.id})")
+        settingsDataStore.setSyncDeviceIdString(picked.id)
+        return picked.id
     }
 
     private suspend fun executeUpload(

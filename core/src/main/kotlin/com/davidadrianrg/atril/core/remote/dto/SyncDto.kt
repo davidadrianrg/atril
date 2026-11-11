@@ -86,3 +86,12 @@ data class PlaySessionDto(
     @Json(name = "end_time") val endTime: String,
     @Json(name = "duration_ms") val durationMs: Long,
 )
+
+@JsonClass(generateAdapter = true)
+data class DeviceDto(
+    @Json(name = "id") val id: String,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "platform") val platform: String? = null,
+    @Json(name = "client") val client: String? = null,
+    @Json(name = "sync_enabled") val syncEnabled: Boolean? = null,
+)
