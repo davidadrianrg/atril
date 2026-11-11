@@ -139,6 +139,39 @@ internal fun LauncherGameObject(item: ShelfItem, favorite: Boolean, modifier: Mo
     }
 }
 
+/**
+ * Lomo de un juego vecino en el carrusel: solo arte recortado, sin texto, para
+ * que los laterales se lean como una estantería de cajas pegadas.
+ */
+@Composable
+internal fun LauncherSpine(item: ShelfItem, modifier: Modifier = Modifier) {
+    val cover = item.rom.coverUrlLarge ?: item.rom.coverUrlSmall
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(LauncherPlastic),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (cover != null) {
+            AsyncImage(
+                model = cover,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.05f), Color.Black.copy(alpha = 0.35f)),
+                    ),
+                ),
+        )
+    }
+}
+
 /** Carta coleccionable: portada, plataforma, título e insignias. */
 @Composable
 internal fun GameCard(item: ShelfItem, favorite: Boolean, modifier: Modifier = Modifier) {

@@ -361,13 +361,16 @@ class ShelfViewModel(
         memberRomIds: List<Int> = listOf(syntheticRomId()),
         discCount: Int = 1,
     ): ShelfItem {
-        val file = File(path)
-        val exists = file.isFile
+        val isPackage = path.startsWith(
+            com.davidadrianrg.atril.core.launch.LaunchTargetResolver.PACKAGE_PREFIX,
+        )
+        val file = if (isPackage) null else File(path)
+        val exists = isPackage || file?.isFile == true
         val rom = Rom(
             id = syntheticRomId(),
             name = title,
-            fileName = file.name,
-            fileSizeBytes = if (exists) file.length() else 0L,
+            fileName = file?.name ?: title,
+            fileSizeBytes = if (exists && file != null) file.length() else 0L,
             platformId = 0,
             platformSlug = platformSlug,
             coverUrlSmall = coverPath?.let { "file://$it" },
@@ -389,7 +392,7 @@ class ShelfViewModel(
             isManualDownloaded = false,
             fileSizeBytes = rom.fileSizeBytes,
             localPath = if (exists) path else "",
-            knownFileNames = listOf(file.name),
+            knownFileNames = listOfNotNull(file?.name),
             isLocalSource = true,
             localGame = this,
             localDiscGroup = discGroup,
@@ -533,6 +536,7 @@ class ShelfViewModel(
             ?: when (plan) {
                 is GameLaunchPlan.Ready -> emulatorLauncher.start(activityContext, plan.plan)
                 is GameLaunchPlan.Apk -> tr("launch.error.apk_no_opener")
+                is GameLaunchPlan.InstalledApp -> tr("launch.error.app_desktop")
                 is GameLaunchPlan.Failed -> plan.message
             }
 

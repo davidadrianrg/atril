@@ -96,4 +96,28 @@ class LaunchTargetTest {
 
         assertEquals(LaunchTarget.Emulator(path), resolve(path, "snes", LaunchHost.ANDROID))
     }
+
+    @Test
+    fun `a package path resolves to an installed app on android`() {
+        assertEquals(
+            LaunchTarget.InstalledApp("com.example.game"),
+            resolve("package:com.example.game", "android", LaunchHost.ANDROID),
+        )
+    }
+
+    @Test
+    fun `a package path is unsupported on desktop`() {
+        assertEquals(
+            LaunchTarget.InstalledAppUnsupported("com.example.game"),
+            resolve("package:com.example.game", "android", LaunchHost.DESKTOP),
+        )
+    }
+
+    @Test
+    fun `an empty package path is missing`() {
+        assertEquals(
+            LaunchTarget.Missing("package:"),
+            resolve("package:", "android", LaunchHost.ANDROID),
+        )
+    }
 }

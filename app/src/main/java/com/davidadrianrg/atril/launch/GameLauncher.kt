@@ -51,6 +51,10 @@ class GameLauncher(
                     )
                 }
             }
+            is LaunchTarget.InstalledApp ->
+                GameLaunchPlan.InstalledApp(target.packageName)
+            is LaunchTarget.InstalledAppUnsupported ->
+                GameLaunchPlan.Failed(tr("launch.error.app_desktop", target.packageName))
             is LaunchTarget.ApkUnsupported ->
                 GameLaunchPlan.Failed(tr("launch.error.apk_desktop"), needsLocate = request.romId > 0)
             is LaunchTarget.Missing ->
@@ -69,6 +73,7 @@ class GameLauncher(
         is GameLaunchPlan.Ready -> emulatorLauncher.start(activityContext, plan.plan)
         is GameLaunchPlan.Failed -> plan.message
         is GameLaunchPlan.Apk -> apkMessage(apkGameLauncher.launch(plan.apkFile))
+        is GameLaunchPlan.InstalledApp -> apkMessage(apkGameLauncher.launchPackage(plan.packageName))
     }
 
     /**
@@ -80,6 +85,7 @@ class GameLauncher(
         is GameLaunchPlan.Ready -> emulatorLauncher.start(activityContext, plan.plan)
         is GameLaunchPlan.Failed -> plan.message
         is GameLaunchPlan.Apk -> apkMessage(apkGameLauncher.launchSuspending(plan.apkFile))
+        is GameLaunchPlan.InstalledApp -> apkMessage(apkGameLauncher.launchPackage(plan.packageName))
     }
 
     private fun apkMessage(result: ApkLaunchResult): String? = when (result) {
