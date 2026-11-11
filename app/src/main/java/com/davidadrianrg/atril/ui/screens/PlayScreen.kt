@@ -553,6 +553,7 @@ fun PlayScreen(
                                         if (page > 0) {
                                             LauncherSpine(
                                                 item = visibleItems[page - 1],
+                                                edge = Alignment.CenterEnd,
                                                 modifier = Modifier
                                                     .width(44.dp)
                                                     .fillMaxHeight(0.94f),
@@ -568,6 +569,7 @@ fun PlayScreen(
                                         if (page < visibleItems.lastIndex) {
                                             LauncherSpine(
                                                 item = visibleItems[page + 1],
+                                                edge = Alignment.CenterStart,
                                                 modifier = Modifier
                                                     .width(44.dp)
                                                     .fillMaxHeight(0.94f),

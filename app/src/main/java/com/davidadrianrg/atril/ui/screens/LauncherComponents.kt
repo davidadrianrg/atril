@@ -144,7 +144,11 @@ internal fun LauncherGameObject(item: ShelfItem, favorite: Boolean, modifier: Mo
  * que los laterales se lean como una estantería de cajas pegadas.
  */
 @Composable
-internal fun LauncherSpine(item: ShelfItem, modifier: Modifier = Modifier) {
+internal fun LauncherSpine(
+    item: ShelfItem,
+    modifier: Modifier = Modifier,
+    edge: Alignment = Alignment.Center,
+) {
     val cover = item.rom.coverUrlLarge ?: item.rom.coverUrlSmall
     Box(
         modifier = modifier
@@ -157,6 +161,7 @@ internal fun LauncherSpine(item: ShelfItem, modifier: Modifier = Modifier) {
                 model = cover,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                alignment = edge,
                 modifier = Modifier.fillMaxSize(),
             )
         }
