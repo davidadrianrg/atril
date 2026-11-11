@@ -490,16 +490,17 @@ fun PlayScreen(
                                 (maxWidth * 0.66f).coerceAtMost(maxHeight * 0.62f)
                             }
 
+                            // Ancho de una carta: alto por la proporción 0,70. Con dos
+                            // huecos a cada lado siguen cabiendo carátulas completas.
+                            val cardWidth = (maxHeight * 0.98f) * 0.70f
+                            val slots = 2
+
                             HorizontalPager(
                                 state = pagerState,
                                 pageSize = PageSize.Fill,
                                 pageSpacing = 0.dp,
-                                // En horizontal los vecinos asoman junto al texto del
-                                // juego actual: se desvanecen en el borde (igual que en
-                                // escritorio) en lugar de cortarse contra el título.
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .then(Modifier)
                                     .focusRequester(carouselFocus)
                                     .focusable()
                                     .onKeyEvent { ev ->
@@ -515,92 +516,93 @@ fun PlayScreen(
                                                 }
                                                 true
                                             }
-                                            // A del mando (→ DPAD_CENTER) / Enter: JUGAR el juego seleccionado.
-                                            // El detalle se abre con Start (o tocando la carátula).
                                             Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
                                                 current?.let { play(it); true } ?: false
                                             else -> false
                                         }
                                     },
                             ) { page ->
-                                val item = visibleItems[page]
-                                val selected = page == pagerState.currentPage
-                                val scale by animateFloatAsState(1f, label = "objectScale")
-                                val alpha by animateFloatAsState(1f, label = "objectAlpha")
-                                val lift = if (liftingRomId == item.rom.id) cardLift.value else 0f
-                                val hidden = insertion?.item?.rom?.id == item.rom.id
-                                // La carta se ajusta por altura y proporción (0,70): este
-                                // ancho es el real, para que los lomos queden pegados.
-                                val cardWidth = (maxHeight * 0.98f) * 0.70f
-                                val pageModifier = Modifier
-                                    .width(cardWidth)
-                                    .fillMaxHeight()
-                                    .padding(vertical = 2.dp)
-                                    .graphicsLayer {
-                                        scaleX = scale * (1f + 0.05f * lift)
-                                        scaleY = scale * (1f + 0.05f * lift)
-                                        translationY = -10.dp.toPx() * lift
-                                        this.alpha = if (hidden) 0f else alpha
-                                    }
-                                    .focusRing()
-                                // Estantería: lomo del anterior, portada y lomo del siguiente
-                                // pegados, sin huecos. Cada página trae sus propios lomos.
+                                val selectedItem = visibleItems[page]
+                                val lift = if (liftingRomId == selectedItem.rom.id) cardLift.value else 0f
+                                val hidden = insertion?.item?.rom?.id == selectedItem.rom.id
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     Row(
                                         modifier = Modifier.fillMaxHeight(),
                                         verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     ) {
-                                        if (page > 0) {
-                                            LauncherSpine(
-                                                item = visibleItems[page - 1],
-                                                edge = Alignment.CenterEnd,
+                                        for (offset in -slots..slots) {
+                                            val index = page + offset
+                                            val item = visibleItems.getOrNull(index)
+                                            Box(
                                                 modifier = Modifier
-                                                    .width(44.dp)
-                                                    .fillMaxHeight(0.94f),
-                                            )
+                                                    .width(cardWidth)
+                                                    .fillMaxHeight(),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                when {
+                                                    item == null -> Unit
+                                                    offset == 0 -> LauncherGameObject(
+                                                        item = item,
+                                                        favorite = playStats.statsOf(item).favorite,
+                                                        modifier = Modifier
+                                                            .fillMaxSize()
+                                                            .padding(vertical = 2.dp)
+                                                            .graphicsLayer {
+                                                                scaleX = 1f + 0.05f * lift
+                                                                scaleY = 1f + 0.05f * lift
+                                                                translationY = -10.dp.toPx() * lift
+                                                                this.alpha = if (hidden) 0f else 1f
+                                                            }
+                                                            .focusRing()
+                                                            .clickable(
+                                                                onClickLabel = tr("launcher.details"),
+                                                            ) { selectedRomId = item.rom.id },
+                                                    )
+                                                    else -> GameCard(
+                                                        item = item,
+                                                        favorite = playStats.statsOf(item).favorite,
+                                                        modifier = Modifier
+                                                            .fillMaxHeight()
+                                                            .graphicsLayer { alpha = 0.75f }
+                                                            .clickable {
+                                                                scope.launch { pagerState.animateScrollToPage(index) }
+                                                            },
+                                                    )
+                                                }
+                                            }
                                         }
-                                        LauncherGameObject(
-                                            item = item,
-                                            favorite = playStats.statsOf(item).favorite,
-                                            modifier = pageModifier.clickable(
-                                                onClickLabel = tr("launcher.details"),
-                                            ) { selectedRomId = item.rom.id },
-                                        )
-                                        if (page < visibleItems.lastIndex) {
-                                            LauncherSpine(
-                                                item = visibleItems[page + 1],
-                                                edge = Alignment.CenterStart,
-                                                modifier = Modifier
-                                                    .width(44.dp)
-                                                    .fillMaxHeight(0.94f),
-                                            )
-                                        }
-                                    }
-                                    // Zonas de toque en los laterales: tocar un lomo
-                                    // trae ese juego al centro aunque el pager capture el gesto.
-                                    if (page > 0) {
-                                        Box(
-                                            Modifier
-                                                .align(Alignment.CenterStart)
-                                                .fillMaxHeight()
-                                                .fillMaxWidth(0.28f)
-                                                .clickable {
-                                                    scope.launch { pagerState.animateScrollToPage(page - 1) }
-                                                },
-                                        )
-                                    }
-                                    if (page < visibleItems.lastIndex) {
-                                        Box(
-                                            Modifier
-                                                .align(Alignment.CenterEnd)
-                                                .fillMaxHeight()
-                                                .fillMaxWidth(0.28f)
-                                                .clickable {
-                                                    scope.launch { pagerState.animateScrollToPage(page + 1) }
-                                                },
-                                        )
                                     }
                                 }
+                            }
+
+                            // Zonas de toque laterales: cambian de página sin depender
+                            // de que el toque caiga dentro de la carátula vecina.
+                            if (pagerState.currentPage > 0) {
+                                Box(
+                                    Modifier
+                                        .align(Alignment.CenterStart)
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(0.16f)
+                                        .clickable {
+                                            scope.launch {
+                                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                            }
+                                        },
+                                )
+                            }
+                            if (pagerState.currentPage < visibleItems.lastIndex) {
+                                Box(
+                                    Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(0.16f)
+                                        .clickable {
+                                            scope.launch {
+                                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                            }
+                                        },
+                                )
                             }
 
                             if (!landscape) {
