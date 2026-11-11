@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.ui.screens
 
+import com.davidadrianrg.atril.ui.components.Panel
 import com.davidadrianrg.atril.ui.components.pageBackground
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -595,15 +596,9 @@ private fun StatusCard(
         )
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        ),
-    ) {
+    Panel(modifier = Modifier.fillMaxWidth(), padding = 20) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
