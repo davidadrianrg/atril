@@ -113,9 +113,14 @@ internal const val CARD_ASPECT = 0.70f
  */
 @Composable
 internal fun LauncherGameObject(item: ShelfItem, favorite: Boolean, modifier: Modifier = Modifier) {
-    val physicalFile = item.physicalMediaFile?.takeIf { item.showPhysical }
+    // Medio físico cacheado (File) o, si no lo está, la URL que da RomM.
+    val physicalModel: Any? = if (item.showPhysical) {
+        item.physicalMediaFile?.let { java.io.File(it) } ?: item.rom.physicalMediaUrl
+    } else {
+        null
+    }
     AnimatedContent(
-        targetState = physicalFile,
+        targetState = physicalModel,
         transitionSpec = {
             (fadeIn(tween(320)) + scaleIn(tween(320), initialScale = 0.88f)) togetherWith
                 (fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 1.06f))
@@ -123,12 +128,12 @@ internal fun LauncherGameObject(item: ShelfItem, favorite: Boolean, modifier: Mo
         contentAlignment = Alignment.Center,
         label = "cardPhysical",
         modifier = modifier,
-    ) { file ->
-        if (file != null) {
-            PhysicalMediaArt(file, item.rom.name, Modifier.fillMaxSize())
+    ) { media ->
+        if (media != null) {
+            PhysicalMediaArt(media, item.rom.name, Modifier.fillMaxSize())
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                GameCard(item, favorite, Modifier.fillMaxHeight(0.92f))
+                GameCard(item, favorite, Modifier.fillMaxHeight(0.98f))
             }
         }
     }
@@ -405,7 +410,7 @@ internal fun LauncherCoverArt(
 
 /** La imagen real del medio físico, con halo cálido y sombra de suelo. */
 @Composable
-internal fun PhysicalMediaArt(path: String, name: String, modifier: Modifier = Modifier) {
+internal fun PhysicalMediaArt(media: Any, name: String, modifier: Modifier = Modifier) {
     Box(modifier, contentAlignment = Alignment.Center) {
         Box(
             Modifier
@@ -430,7 +435,7 @@ internal fun PhysicalMediaArt(path: String, name: String, modifier: Modifier = M
                 },
         )
         AsyncImage(
-            model = File(path),
+            model = media,
             contentDescription = tr("launcher.display.physical") + ": " + name,
             contentScale = ContentScale.Fit,
             modifier = Modifier
