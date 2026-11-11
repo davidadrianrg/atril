@@ -681,7 +681,7 @@ fun PlayScreen(
         ModalBottomSheet(
             onDismissRequest = { selectedRomId = null },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = Color.Transparent,
+            containerColor = MaterialTheme.colorScheme.surface,
             sheetMaxWidth = 1600.dp,
             // Let the scrolling content run to the screen edge; the sheet
             // body pads its own bottom for the gesture bar (no dead band).

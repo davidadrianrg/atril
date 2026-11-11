@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.ui.screens
 
+import com.davidadrianrg.atril.ui.components.pageBackground
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -115,6 +116,7 @@ fun DownloadQueueScreen(onBack: () -> Unit = {}) {
         if (downloads.isEmpty()) {
             EmptyDownloads(modifier = Modifier
                 .fillMaxSize()
+                .pageBackground()
                 .padding(padding))
             return@Scaffold
         }
@@ -122,6 +124,7 @@ fun DownloadQueueScreen(onBack: () -> Unit = {}) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .pageBackground()
                 .padding(padding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),

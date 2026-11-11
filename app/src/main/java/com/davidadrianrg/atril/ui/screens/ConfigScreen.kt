@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.ui.screens
 
+import com.davidadrianrg.atril.ui.components.pageBackground
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -156,6 +157,7 @@ fun ConfigScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .pageBackground()
                 .padding(padding)
                 // El padding va DESPUÉS del scroll: el contenido se desplaza hasta el borde en
                 // vez de recortarse 16 dp + inset antes (banda vacía sobre la barra de gestos).
@@ -1301,6 +1303,13 @@ private fun SettingsCategoryBar(selected: SettingsCategory, onSelect: (SettingsC
                 selected = c == selected,
                 onClick = { onSelect(c) },
                 label = { Text(tr(c.labelKey)) },
+                shape = RoundedCornerShape(50),
+                colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
             )
         }
     }

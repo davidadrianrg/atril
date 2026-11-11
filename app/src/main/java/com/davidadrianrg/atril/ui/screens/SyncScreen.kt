@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.ui.screens
 
+import com.davidadrianrg.atril.ui.components.pageBackground
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -160,6 +161,7 @@ fun SyncScreen() {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .pageBackground()
                 .padding(padding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
