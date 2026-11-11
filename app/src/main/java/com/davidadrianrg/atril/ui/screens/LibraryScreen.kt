@@ -1163,6 +1163,8 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                                         insertion.run(spec) { viewModel.startLaunch(context, plan) }
                                     is com.davidadrianrg.atril.launch.GameLaunchPlan.Apk ->
                                         insertion.run(spec) { viewModel.startLaunch(context, plan) }
+                                    is com.davidadrianrg.atril.launch.GameLaunchPlan.InstalledApp ->
+                                        insertion.run(spec) { viewModel.startLaunch(context, plan) }
                                 }
                                 // Si no había fichero, se reabre el detalle para
                                 // que "Localizar archivo" quede a mano.

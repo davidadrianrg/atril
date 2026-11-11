@@ -1,12 +1,14 @@
 package com.davidadrianrg.atril.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Settings
@@ -30,6 +32,11 @@ enum class Screen(
         route = "platforms",
         icon = Icons.Outlined.Storage,
         selectedIcon = Icons.Filled.Storage,
+    ),
+    Apps(
+        route = "apps",
+        icon = Icons.Outlined.Apps,
+        selectedIcon = Icons.Filled.Apps,
     ),
     Library(
         route = "library",

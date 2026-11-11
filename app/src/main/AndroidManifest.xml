@@ -79,6 +79,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Atril puede usarse como launcher de inicio: el usuario lo elige
+                 en Ajustes > Aplicación de inicio del sistema. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!-- Quick Settings tile: dispara un sync de saves sin abrir la app -->

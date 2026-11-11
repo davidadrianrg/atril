@@ -76,6 +76,13 @@ class ApkGameLauncher(
      */
     fun launch(apkFile: File): ApkLaunchResult = complete(apkFile, inspect(apkFile))
 
+    /** Abre una app ya instalada por su nombre de paquete (sin fichero APK). */
+    fun launchPackage(packageName: String): ApkLaunchResult {
+        val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+            ?: return ApkLaunchResult.NoLaunchActivity(packageName)
+        return openInstalled(packageName, intent)
+    }
+
     /** Igual que [launch] pero con la inspección del APK en `Dispatchers.IO`. */
     suspend fun launchSuspending(apkFile: File): ApkLaunchResult {
         val inspection = withContext(Dispatchers.IO) { inspect(apkFile) }

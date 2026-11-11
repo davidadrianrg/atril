@@ -96,6 +96,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -341,6 +342,7 @@ fun PlayScreen(
                         launchWithInsertion(item, plan)
                     }
                     is GameLaunchPlan.Apk -> launchWithInsertion(item, plan)
+                    is GameLaunchPlan.InstalledApp -> launchWithInsertion(item, plan)
                 }
             } finally {
                 // Nunca dejar un overlay invisible bloqueando la pantalla.
@@ -490,17 +492,14 @@ fun PlayScreen(
 
                             HorizontalPager(
                                 state = pagerState,
-                                pageSize = PageSize.Fixed(heroWidth),
-                                contentPadding = PaddingValues(
-                                    horizontal = ((maxWidth - heroWidth) / 2).coerceAtLeast(0.dp),
-                                ),
-                                pageSpacing = 16.dp,
+                                pageSize = PageSize.Fill,
+                                pageSpacing = 0.dp,
                                 // En horizontal los vecinos asoman junto al texto del
                                 // juego actual: se desvanecen en el borde (igual que en
                                 // escritorio) en lugar de cortarse contra el título.
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .then(if (landscape) Modifier.fadeEdges() else Modifier)
+                                    .then(Modifier)
                                     .focusRequester(carouselFocus)
                                     .focusable()
                                     .onKeyEvent { ev ->
@@ -526,34 +525,80 @@ fun PlayScreen(
                             ) { page ->
                                 val item = visibleItems[page]
                                 val selected = page == pagerState.currentPage
-                                val scale by animateFloatAsState(if (selected) 1f else 0.8f, label = "objectScale")
-                                val alpha by animateFloatAsState(if (selected) 1f else 0.5f, label = "objectAlpha")
+                                val scale by animateFloatAsState(1f, label = "objectScale")
+                                val alpha by animateFloatAsState(1f, label = "objectAlpha")
                                 val lift = if (liftingRomId == item.rom.id) cardLift.value else 0f
                                 val hidden = insertion?.item?.rom?.id == item.rom.id
-                                LauncherGameObject(
-                                    item = item,
-                                    favorite = playStats.statsOf(item).favorite,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(vertical = 2.dp)
-                                        .graphicsLayer {
-                                            scaleX = scale * (1f + 0.05f * lift)
-                                            scaleY = scale * (1f + 0.05f * lift)
-                                            translationY = -10.dp.toPx() * lift
-                                            this.alpha = if (hidden) 0f else alpha
+                                // La carta se ajusta por altura y proporción (0,70): este
+                                // ancho es el real, para que los lomos queden pegados.
+                                val cardWidth = (maxHeight * 0.98f) * 0.70f
+                                val pageModifier = Modifier
+                                    .width(cardWidth)
+                                    .fillMaxHeight()
+                                    .padding(vertical = 2.dp)
+                                    .graphicsLayer {
+                                        scaleX = scale * (1f + 0.05f * lift)
+                                        scaleY = scale * (1f + 0.05f * lift)
+                                        translationY = -10.dp.toPx() * lift
+                                        this.alpha = if (hidden) 0f else alpha
+                                    }
+                                    .focusRing()
+                                // Estantería: lomo del anterior, portada y lomo del siguiente
+                                // pegados, sin huecos. Cada página trae sus propios lomos.
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Row(
+                                        modifier = Modifier.fillMaxHeight(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        if (page > 0) {
+                                            LauncherSpine(
+                                                item = visibleItems[page - 1],
+                                                modifier = Modifier
+                                                    .width(44.dp)
+                                                    .fillMaxHeight(0.94f),
+                                            )
                                         }
-                                        .focusRing()
-                                        .clickable(
-                                            onClickLabel = if (selected) tr("launcher.details") else null,
-                                        ) {
-                                            if (selected) {
-                                                selectedRomId = item.rom.id
-                                            } else {
-                                                // El toque en un vecino lo trae al centro.
-                                                scope.launch { pagerState.animateScrollToPage(page) }
-                                            }
-                                        },
-                                )
+                                        LauncherGameObject(
+                                            item = item,
+                                            favorite = playStats.statsOf(item).favorite,
+                                            modifier = pageModifier.clickable(
+                                                onClickLabel = tr("launcher.details"),
+                                            ) { selectedRomId = item.rom.id },
+                                        )
+                                        if (page < visibleItems.lastIndex) {
+                                            LauncherSpine(
+                                                item = visibleItems[page + 1],
+                                                modifier = Modifier
+                                                    .width(44.dp)
+                                                    .fillMaxHeight(0.94f),
+                                            )
+                                        }
+                                    }
+                                    // Zonas de toque en los laterales: tocar un lomo
+                                    // trae ese juego al centro aunque el pager capture el gesto.
+                                    if (page > 0) {
+                                        Box(
+                                            Modifier
+                                                .align(Alignment.CenterStart)
+                                                .fillMaxHeight()
+                                                .fillMaxWidth(0.28f)
+                                                .clickable {
+                                                    scope.launch { pagerState.animateScrollToPage(page - 1) }
+                                                },
+                                        )
+                                    }
+                                    if (page < visibleItems.lastIndex) {
+                                        Box(
+                                            Modifier
+                                                .align(Alignment.CenterEnd)
+                                                .fillMaxHeight()
+                                                .fillMaxWidth(0.28f)
+                                                .clickable {
+                                                    scope.launch { pagerState.animateScrollToPage(page + 1) }
+                                                },
+                                        )
+                                    }
+                                }
                             }
 
                             if (!landscape) {

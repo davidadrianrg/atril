@@ -42,6 +42,9 @@ sealed interface GameLaunchPlan {
 
     data class Apk(val apkFile: File) : GameLaunchPlan
 
+    /** App Android ya instalada (ruta `package:<name>`). */
+    data class InstalledApp(val packageName: String) : GameLaunchPlan
+
     data class Failed(val message: String, val needsLocate: Boolean = false) : GameLaunchPlan
 }
 

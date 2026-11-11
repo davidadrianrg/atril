@@ -58,6 +58,7 @@ import com.davidadrianrg.atril.ui.components.rememberWindowInfo
 import com.davidadrianrg.atril.ui.screens.ConfigScreen
 import com.davidadrianrg.atril.ui.screens.DownloadQueueScreen
 import com.davidadrianrg.atril.ui.screens.LibraryScreen
+import com.davidadrianrg.atril.ui.screens.AppsScreen
 import com.davidadrianrg.atril.ui.screens.PlatformsScreen
 import com.davidadrianrg.atril.ui.screens.PlayScreen
 import com.davidadrianrg.atril.ui.screens.SyncScreen
@@ -197,6 +198,7 @@ private fun AppNavHost(
             )
         }
         composable(Screen.Platforms.route) { PlatformsScreen(onBack = { navController.popBackStack() }) }
+        composable(Screen.Apps.route) { AppsScreen() }
         composable(Screen.Downloads.route) { DownloadQueueScreen(onBack = { navController.popBackStack() }) }
         composable(Screen.Sync.route) { SyncScreen() }
         composable(Screen.Config.route) {
@@ -235,6 +237,7 @@ private fun navigateTo(route: String, navController: NavHostController) {
 // Order: Library (home) → Platforms → Downloads → Sync → Config
 private val bottomNavItems = listOf(
     Screen.Play,
+    Screen.Apps,
     Screen.Library,
     Screen.Platforms,
     Screen.Sync,
