@@ -1,6 +1,7 @@
 package com.davidadrianrg.atril.ui.input
 
 import androidx.compose.foundation.border
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
@@ -22,5 +23,13 @@ fun Modifier.focusRing(shape: Shape = RoundedCornerShape(16.dp)): Modifier = com
     val ring = MaterialTheme.colorScheme.primary
     this
         .onFocusChanged { focused = it.hasFocus }
-        .then(if (focused) Modifier.border(2.5.dp, ring, shape) else Modifier)
+        .then(
+            if (focused) {
+                Modifier
+                    .shadow(16.dp, shape, ambientColor = ring, spotColor = ring)
+                    .border(3.dp, ring, shape)
+            } else {
+                Modifier
+            },
+        )
 }

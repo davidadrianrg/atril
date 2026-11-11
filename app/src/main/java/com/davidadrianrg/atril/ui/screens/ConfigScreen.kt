@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Folder
@@ -927,6 +928,32 @@ fun ConfigScreen(
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     tr("config.theme.hint"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // ── Fondo del launcher ────────────────────────────────────
+            SettingsSection(
+                icon = Icons.Outlined.Wallpaper,
+                title = tr("config.launcher_bg.title"),
+            ) {
+                val bg by viewModel.launcherBackground.collectAsState(initial = "blur")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = bg != "solid",
+                        onClick = { viewModel.setLauncherBackground("blur") },
+                        label = { Text(tr("config.launcher_bg.blur"), style = MaterialTheme.typography.labelMedium) },
+                    )
+                    FilterChip(
+                        selected = bg == "solid",
+                        onClick = { viewModel.setLauncherBackground("solid") },
+                        label = { Text(tr("config.launcher_bg.solid"), style = MaterialTheme.typography.labelMedium) },
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    tr("config.launcher_bg.hint"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

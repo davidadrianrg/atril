@@ -76,6 +76,30 @@ internal fun darkSchemeFor(theme: AppTheme) = ThemePalettes.of(theme).let { p ->
     )
 }
 
+/** Esquema claro de [theme] a partir de su paleta compartida. */
+internal fun lightSchemeFor(theme: AppTheme) = ThemePalettes.of(theme).let { p ->
+    lightColorScheme(
+        primary = c(p.primary), onPrimary = c(p.onPrimary),
+        primaryContainer = c(p.primaryContainer), onPrimaryContainer = c(p.onPrimaryContainer),
+        secondary = c(p.secondary), onSecondary = c(p.onSecondary),
+        secondaryContainer = c(p.secondaryContainer), onSecondaryContainer = c(p.onSecondaryContainer),
+        tertiary = c(p.tertiary), onTertiary = c(p.onTertiary),
+        tertiaryContainer = c(p.tertiaryContainer), onTertiaryContainer = c(p.onTertiaryContainer),
+        error = c(p.error), onError = c(p.onError),
+        errorContainer = c(p.errorContainer), onErrorContainer = c(p.onErrorContainer),
+        background = c(p.background), onBackground = c(p.onBackground),
+        surface = c(p.surface), onSurface = c(p.onSurface),
+        surfaceVariant = c(p.surfaceVariant), onSurfaceVariant = c(p.onSurfaceVariant),
+        outline = c(p.outline), outlineVariant = c(p.outlineVariant), scrim = c(p.scrim),
+        inverseSurface = c(p.inverseSurface), inverseOnSurface = c(p.inverseOnSurface),
+        inversePrimary = c(p.inversePrimary),
+        surfaceDim = c(p.surfaceDim), surfaceBright = c(p.surfaceBright),
+        surfaceContainerLowest = c(p.surfaceContainerLowest), surfaceContainerLow = c(p.surfaceContainerLow),
+        surfaceContainer = c(p.surfaceContainer), surfaceContainerHigh = c(p.surfaceContainerHigh),
+        surfaceContainerHighest = c(p.surfaceContainerHighest),
+    )
+}
+
 /** Colores del lanzador que no existen en Material; siguen al tema activo. */
 val LocalLauncherColors = androidx.compose.runtime.staticCompositionLocalOf {
     ThemePalettes.of(AppTheme.DEFAULT)
@@ -89,7 +113,7 @@ fun RomMSyncTheme(
     theme: AppTheme = AppTheme.DEFAULT,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = if (darkTheme) darkSchemeFor(theme) else LightColorScheme
+    val colorScheme = if (theme.isLight) lightSchemeFor(theme) else darkSchemeFor(theme)
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -98,8 +122,8 @@ fun RomMSyncTheme(
             // Edge-to-edge: barras transparentes, solo ajustamos el contraste
             // de los iconos según el tema activo.
             val insetsController = WindowCompat.getInsetsController(window, view)
-            insetsController.isAppearanceLightStatusBars = !darkTheme
-            insetsController.isAppearanceLightNavigationBars = !darkTheme
+            insetsController.isAppearanceLightStatusBars = theme.isLight
+            insetsController.isAppearanceLightNavigationBars = theme.isLight
         }
     }
 

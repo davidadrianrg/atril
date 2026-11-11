@@ -11,7 +11,13 @@ enum class AppTheme(val id: String) {
 
     /** Azul/índigo profundo, oscuro, con acentos fríos. */
     MIDNIGHT("midnight"),
+
+    /** Claro, papel cálido con acentos rojos. */
+    CRIMSON_LIGHT("crimson_light"),
     ;
+
+    /** true si el tema es claro (barras del sistema y esquemas M3). */
+    val isLight: Boolean get() = this == CRIMSON_LIGHT
 
     companion object {
         val DEFAULT = WARM_ARCHIVE
@@ -63,6 +69,7 @@ object ThemePalettes {
     fun of(theme: AppTheme): ThemePalette = when (theme) {
         AppTheme.WARM_ARCHIVE -> warmArchive
         AppTheme.MIDNIGHT -> midnight
+        AppTheme.CRIMSON_LIGHT -> crimsonLight
     }
 
     val warmArchive = ThemePalette(
@@ -93,6 +100,21 @@ object ThemePalettes {
         surfaceContainerLowest = 0xFF040612, surfaceContainerLow = 0xFF0C1024, surfaceContainer = 0xFF11162F,
         surfaceContainerHigh = 0xFF181E3C, surfaceContainerHighest = 0xFF212850,
         launcherBgTop = 0xFF121838, launcherBgBottom = 0xFF03040D, launcherPanel = 0xFF1F2547,
+    )
+
+    val crimsonLight = ThemePalette(
+        primary = 0xFFB3261E, onPrimary = 0xFFFFFFFF, primaryContainer = 0xFFFFDAD6, onPrimaryContainer = 0xFF410002,
+        secondary = 0xFF9A4A44, onSecondary = 0xFFFFFFFF, secondaryContainer = 0xFFFFDAD5, onSecondaryContainer = 0xFF3B0907,
+        tertiary = 0xFF8F4C1F, onTertiary = 0xFFFFFFFF, tertiaryContainer = 0xFFFFDCC6, onTertiaryContainer = 0xFF351000,
+        error = 0xFFBA1A1A, onError = 0xFFFFFFFF, errorContainer = 0xFFFFDAD6, onErrorContainer = 0xFF410002,
+        background = 0xFFFFF8F6, onBackground = 0xFF261816,
+        surface = 0xFFFFF8F6, onSurface = 0xFF261816, surfaceVariant = 0xFFF5DDDA, onSurfaceVariant = 0xFF534341,
+        outline = 0xFF857370, outlineVariant = 0xFFD8C2BF, scrim = 0xFF000000,
+        inverseSurface = 0xFF3B2E2C, inverseOnSurface = 0xFFFFEDE9, inversePrimary = 0xFFFFB4AB,
+        surfaceDim = 0xFFE8D6D3, surfaceBright = 0xFFFFF8F6,
+        surfaceContainerLowest = 0xFFFFFFFF, surfaceContainerLow = 0xFFFFF1EE, surfaceContainer = 0xFFFCEAE7,
+        surfaceContainerHigh = 0xFFF6E4E1, surfaceContainerHighest = 0xFFF0DEDB,
+        launcherBgTop = 0xFFFFF1EE, launcherBgBottom = 0xFFF2DCD8, launcherPanel = 0xFFFFFFFF,
     )
 }
 

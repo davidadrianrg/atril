@@ -4,6 +4,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -14,16 +15,36 @@ import com.davidadrianrg.atril.core.theme.AppTheme
 import com.davidadrianrg.atril.core.theme.ThemePalettes
 
 // ─────────────────────────────────────────────────────────────────────────
-// Temas: las paletas ("Warm Archive" y "Midnight") viven en :core
-// (ThemePalettes) y se comparten con Android; aquí solo se traducen a un
-// ColorScheme de Material 3. Ambos son oscuros (pantallas de handheld y salón).
+// Temas: las paletas viven en :core (ThemePalettes) y se comparten con
+// Android; aquí solo se traducen a un ColorScheme de Material 3.
 // ─────────────────────────────────────────────────────────────────────────
 
 private fun c(argb: Long) = Color(argb.toInt())
 
-fun colorSchemeFor(theme: AppTheme): ColorScheme {
-    val p = ThemePalettes.of(theme)
-    return darkColorScheme(
+private fun scheme(
+    p: com.davidadrianrg.atril.core.theme.ThemePalette,
+    light: Boolean,
+): ColorScheme {
+    return if (light) lightColorScheme(
+        primary = c(p.primary), onPrimary = c(p.onPrimary),
+        primaryContainer = c(p.primaryContainer), onPrimaryContainer = c(p.onPrimaryContainer),
+        secondary = c(p.secondary), onSecondary = c(p.onSecondary),
+        secondaryContainer = c(p.secondaryContainer), onSecondaryContainer = c(p.onSecondaryContainer),
+        tertiary = c(p.tertiary), onTertiary = c(p.onTertiary),
+        tertiaryContainer = c(p.tertiaryContainer), onTertiaryContainer = c(p.onTertiaryContainer),
+        error = c(p.error), onError = c(p.onError),
+        errorContainer = c(p.errorContainer), onErrorContainer = c(p.onErrorContainer),
+        background = c(p.background), onBackground = c(p.onBackground),
+        surface = c(p.surface), onSurface = c(p.onSurface),
+        surfaceVariant = c(p.surfaceVariant), onSurfaceVariant = c(p.onSurfaceVariant),
+        outline = c(p.outline), outlineVariant = c(p.outlineVariant), scrim = c(p.scrim),
+        inverseSurface = c(p.inverseSurface), inverseOnSurface = c(p.inverseOnSurface),
+        inversePrimary = c(p.inversePrimary),
+        surfaceDim = c(p.surfaceDim), surfaceBright = c(p.surfaceBright),
+        surfaceContainerLowest = c(p.surfaceContainerLowest), surfaceContainerLow = c(p.surfaceContainerLow),
+        surfaceContainer = c(p.surfaceContainer), surfaceContainerHigh = c(p.surfaceContainerHigh),
+        surfaceContainerHighest = c(p.surfaceContainerHighest),
+    ) else darkColorScheme(
         primary = c(p.primary), onPrimary = c(p.onPrimary),
         primaryContainer = c(p.primaryContainer), onPrimaryContainer = c(p.onPrimaryContainer),
         secondary = c(p.secondary), onSecondary = c(p.onSecondary),
@@ -44,6 +65,9 @@ fun colorSchemeFor(theme: AppTheme): ColorScheme {
         surfaceContainerHighest = c(p.surfaceContainerHighest),
     )
 }
+
+fun colorSchemeFor(theme: AppTheme): ColorScheme =
+    scheme(ThemePalettes.of(theme), theme.isLight)
 
 /** Colores del lanzador que no existen en Material; siguen al tema activo. */
 val LocalLauncherColors = androidx.compose.runtime.staticCompositionLocalOf {
