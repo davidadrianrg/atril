@@ -1731,18 +1731,22 @@ internal fun RomDetailSheet(
         Spacer(modifier = Modifier.size(24.dp))
 
         launcherControls?.let { controls ->
-            LauncherControlsSection(controls)
-            Spacer(modifier = Modifier.size(32.dp))
+            com.davidadrianrg.atril.ui.components.SectionLabel(
+                tr("game.section.play"),
+                Modifier.padding(start = 4.dp, bottom = 10.dp),
+            )
+            com.davidadrianrg.atril.ui.components.Panel(modifier = Modifier.fillMaxWidth()) {
+                LauncherControlsSection(controls)
+            }
+            Spacer(modifier = Modifier.size(24.dp))
         }
 
         // ── Multimedia: capturas y tráiler ──────────────────────────
         val hasMedia = rom.screenshots.isNotEmpty() || rom.youtubeVideoId != null
         if (hasMedia) {
-            Text(
-                text = tr("game.media.title"),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 12.dp),
+            com.davidadrianrg.atril.ui.components.SectionLabel(
+                tr("game.media.title"),
+                Modifier.padding(start = 4.dp, bottom = 10.dp),
             )
             if (rom.screenshots.isNotEmpty()) {
                 var selectedShot by remember { mutableStateOf<Int?>(null) }
@@ -1796,26 +1800,34 @@ internal fun RomDetailSheet(
         }
 
         // Metadata rows
-        GameStatsRows(stats)
-        DetailRow(tr("game.info.file"), rom.fileName)
-        DetailRow(tr("game.info.size"), formatFileSize(rom.fileSizeBytes))
-        rom.fileNameNoTags?.let { DetailRow(tr("game.info.clean_name"), it) }
-        rom.fileExtension?.let { DetailRow(tr("game.info.extension"), it) }
-        if (rom.isMulti) DetailRow(tr("game.info.multi_file"), tr("game.info.multi_file_value", rom.files.size))
-        rom.igdbId?.let { DetailRow("IGDB ID", it.toString()) }
+        com.davidadrianrg.atril.ui.components.SectionLabel(
+            tr("game.section.info"),
+            Modifier.padding(start = 4.dp, bottom = 10.dp),
+        )
+        com.davidadrianrg.atril.ui.components.Panel(modifier = Modifier.fillMaxWidth()) {
+            Column {
+                GameStatsRows(stats)
+                DetailRow(tr("game.info.file"), rom.fileName)
+                DetailRow(tr("game.info.size"), formatFileSize(rom.fileSizeBytes))
+                rom.fileNameNoTags?.let { DetailRow(tr("game.info.clean_name"), it) }
+                rom.fileExtension?.let { DetailRow(tr("game.info.extension"), it) }
+                if (rom.isMulti) DetailRow(tr("game.info.multi_file"), tr("game.info.multi_file_value", rom.files.size))
+                rom.igdbId?.let { DetailRow("IGDB ID", it.toString()) }
 
-        // Idiomas y géneros como chips visuales
-        if (rom.languages.isNotEmpty() || rom.genres.isNotEmpty()) {
-            Spacer(modifier = Modifier.size(10.dp))
-            androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                rom.languages.forEach { lang ->
-                    AssistChipLike("${rom.platformSlug.uppercase()} · $lang".substringAfter(" · "))
-                }
-                rom.genres.forEach { genre ->
-                    AssistChipLike(genre)
+                // Idiomas y géneros como chips visuales
+                if (rom.languages.isNotEmpty() || rom.genres.isNotEmpty()) {
+                    Spacer(modifier = Modifier.size(10.dp))
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        rom.languages.forEach { lang ->
+                            AssistChipLike("${rom.platformSlug.uppercase()} · $lang".substringAfter(" · "))
+                        }
+                        rom.genres.forEach { genre ->
+                            AssistChipLike(genre)
+                        }
+                    }
                 }
             }
         }
@@ -1844,6 +1856,11 @@ internal fun RomDetailSheet(
         }
 
         // Action button
+        com.davidadrianrg.atril.ui.components.SectionLabel(
+            tr("game.section.files"),
+            Modifier.padding(start = 4.dp, bottom = 10.dp),
+        )
+        com.davidadrianrg.atril.ui.components.Panel(modifier = Modifier.fillMaxWidth()) {
         when {
             isDownloaded -> {
                 Column(
@@ -1974,6 +1991,7 @@ internal fun RomDetailSheet(
                     }
                 }
             }
+        }
         }
 
         // ── Configuración de sincronización de partidas ────────────────
