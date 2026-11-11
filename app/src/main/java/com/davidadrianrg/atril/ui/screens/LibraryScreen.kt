@@ -1041,7 +1041,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
             } else {
                 sheetState
             },
-            containerColor = Color.Transparent,
+            containerColor = MaterialTheme.colorScheme.surface,
         ) {
             RomDetailSheet(
                 rom = rom,
@@ -1573,7 +1573,6 @@ internal fun RomDetailSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .glassPanel()
             .padding(horizontal = 24.dp)
             .verticalScroll(rememberScrollState())
             .padding(top = 8.dp, bottom = 48.dp)
