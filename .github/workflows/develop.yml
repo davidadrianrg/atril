@@ -148,8 +148,14 @@ jobs:
 
       - name: Install AppImage tools
         run: |
-          sudo apt-get update && sudo apt-get install -y libfuse2 desktop-file-utils
-          curl -sL https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -o /tmp/appimagetool
+          # apt puede fallar por DNS del runner; appimagetool se ejecuta con
+          # APPIMAGE_EXTRACT_AND_RUN, que no necesita FUSE.
+          sudo apt-get update || true
+          sudo apt-get install -y libfuse2t64 desktop-file-utils \
+            || sudo apt-get install -y libfuse2 desktop-file-utils || true
+          curl -sL --retry 5 --retry-delay 3 \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -o /tmp/appimagetool
           chmod +x /tmp/appimagetool
 
       - name: Assemble AppDir
@@ -180,7 +186,7 @@ jobs:
           SHORT_SHA="${GITHUB_SHA::7}"
           cp -r /tmp/runtime-${{ matrix.arch }} AppDir/usr/bin/runtime
           export ARCH="${{ matrix.arch }}"
-          /tmp/appimagetool AppDir "Atril-develop-${SHORT_SHA}-linux-${{ matrix.arch }}.AppImage"
+          APPIMAGE_EXTRACT_AND_RUN=1 /tmp/appimagetool AppDir "Atril-develop-${SHORT_SHA}-linux-${{ matrix.arch }}.AppImage"
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v7
