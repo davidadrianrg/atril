@@ -508,12 +508,18 @@ fun PlayScreen(
                             val maxCardWidth = maxWidth * (if (landscape) 0.42f else 0.86f)
                             val cardWidth = minOf(maxHeight * cardAspect, maxCardWidth)
                             val cardHeight = cardWidth / cardAspect
-                            val slots = 2
-
+                            // Un único pager con una carta por página, como el
+                            // carrusel 3D de la Biblioteca: cada carta se gira,
+                            // escala y atenúa según su distancia a la actual.
                             HorizontalPager(
                                 state = pagerState,
-                                pageSize = PageSize.Fill,
-                                pageSpacing = 0.dp,
+                                pageSize = PageSize.Fixed(cardWidth),
+                                contentPadding = PaddingValues(
+                                    horizontal = ((maxWidth - cardWidth) / 2).coerceAtLeast(0.dp),
+                                ),
+                                pageSpacing = 10.dp,
+                                beyondViewportPageCount = 2,
+                                verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .focusRequester(carouselFocus)
@@ -537,63 +543,50 @@ fun PlayScreen(
                                         }
                                     },
                             ) { page ->
-                                val selectedItem = visibleItems[page]
-                                val lift = if (liftingRomId == selectedItem.rom.id) cardLift.value else 0f
-                                val hidden = insertion?.item?.rom?.id == selectedItem.rom.id
-                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    // Ancho exacto de los 2*slots+1 huecos: aunque supere
-                                    // la pantalla, requiredWidth deja que el Box lo centre
-                                    // y la carta del medio queda siempre en el centro.
-                                    val rowWidth = cardWidth * (slots * 2 + 1) + 10.dp * (slots * 2)
-                                    Row(
-                                        modifier = Modifier
-                                            .requiredWidth(rowWidth),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        for (offset in -slots..slots) {
-                                            val index = page + offset
-                                            val item = visibleItems.getOrNull(index)
-                                            Box(
-                                                modifier = Modifier
-                                                    .width(cardWidth)
-                                                    .height(cardHeight),
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                when {
-                                                    item == null -> Unit
-                                                    offset == 0 -> LauncherGameObject(
-                                                        item = item,
-                                                        favorite = playStats.statsOf(item).favorite,
-                                                        emphasized = true,
-                                                        modifier = Modifier
-                                                            .fillMaxSize()
-                                                            .padding(vertical = 2.dp)
-                                                            .graphicsLayer {
-                                                                scaleX = 1f + 0.05f * lift
-                                                                scaleY = 1f + 0.05f * lift
-                                                                translationY = -10.dp.toPx() * lift
-                                                                this.alpha = if (hidden) 0f else 1f
-                                                            }
-                                                            .focusRing()
-                                                            .clickable(
-                                                                onClickLabel = tr("launcher.details"),
-                                                            ) { selectedRomId = item.rom.id },
-                                                    )
-                                                    else -> GameCard(
-                                                        item = item,
-                                                        favorite = playStats.statsOf(item).favorite,
-                                                        modifier = Modifier
-                                                            .fillMaxHeight()
-                                                            .graphicsLayer { alpha = 0.75f }
-                                                            .clickable {
-                                                                scope.launch { pagerState.animateScrollToPage(index) }
-                                                            },
-                                                    )
-                                                }
-                                            }
+                                val item = visibleItems[page]
+                                val isCurrent = page == pagerState.currentPage
+                                val lift = if (liftingRomId == item.rom.id) cardLift.value else 0f
+                                val hidden = insertion?.item?.rom?.id == item.rom.id
+                                val flowDistance = (
+                                    (pagerState.currentPage - page) +
+                                        pagerState.currentPageOffsetFraction
+                                    ).coerceIn(-2f, 2f)
+                                Box(
+                                    modifier = Modifier
+                                        .width(cardWidth)
+                                        .height(cardHeight)
+                                        .graphicsLayer {
+                                            val distance = kotlin.math.abs(flowDistance)
+                                            rotationY = (flowDistance * 34f).coerceIn(-55f, 55f)
+                                            val pageScale = 1f - distance.coerceAtMost(1f) * 0.18f
+                                            scaleX = pageScale
+                                            scaleY = pageScale
+                                            alpha = (1f - distance * 0.45f).coerceIn(0.15f, 1f)
+                                            cameraDistance = 14f * density
                                         }
-                                    }
+                                        .focusRing()
+                                        .clickable(
+                                            onClickLabel = tr(if (isCurrent) "launcher.details" else "common.next"),
+                                        ) {
+                                            if (isCurrent) selectedRomId = item.rom.id
+                                            else scope.launch { pagerState.animateScrollToPage(page) }
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    LauncherGameObject(
+                                        item = item,
+                                        favorite = playStats.statsOf(item).favorite,
+                                        emphasized = isCurrent,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(vertical = 2.dp)
+                                            .graphicsLayer {
+                                                scaleX = 1f + 0.05f * lift
+                                                scaleY = 1f + 0.05f * lift
+                                                translationY = -10.dp.toPx() * lift
+                                                this.alpha = if (hidden) 0f else 1f
+                                            },
+                                    )
                                 }
                             }
 
