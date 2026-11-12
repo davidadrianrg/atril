@@ -20,10 +20,12 @@ data class CustomEmulator(
 /** Persistencia JSON de los emuladores manuales. */
 class CustomEmulatorStore(private val file: File) {
 
-    private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
-    private val adapter = moshi.adapter<List<CustomEmulator>>(
-        Types.newParameterizedType(List::class.java, CustomEmulator::class.java),
-    )
+    private val moshi by lazy { Moshi.Builder().add(KotlinJsonAdapterFactory()).build() }
+    private val adapter by lazy {
+        moshi.adapter<List<CustomEmulator>>(
+            Types.newParameterizedType(List::class.java, CustomEmulator::class.java),
+        )
+    }
 
     fun all(): List<CustomEmulator> =
         if (file.isFile) runCatching { adapter.fromJson(file.readText()) }.getOrNull().orEmpty()

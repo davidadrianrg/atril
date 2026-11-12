@@ -127,6 +127,7 @@ fun EmulatorsScreen() {
         PackParser.forProfile(entries.orEmpty(), dual)
             .filter { category == "All" || it.categories.contains(category) }
             .filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
+            .distinctBy { it.id }
     }
 
     fun afterDownload(entry: EmulatorEntry, file: File) {
