@@ -5,6 +5,14 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
+/** Un salto intermedio del scraping HTML de Obtainium. */
+data class PackIntermediateLink(
+    val customLinkFilterRegex: String,
+    val skipSort: Boolean,
+    val reverseSort: Boolean,
+    val sortByLastLinkSegment: Boolean,
+)
+
 /** Ajustes de Obtainium que afectan a la selección de release/APK. */
 data class PackSettings(
     val includePrereleases: Boolean,
@@ -14,6 +22,14 @@ data class PackSettings(
     val preferredApkIndex: Int,
     val autoApkFilterByArch: Boolean,
     val about: String,
+    val customLinkFilterRegex: String = "",
+    val intermediateLink: List<PackIntermediateLink> = emptyList(),
+    val versionExtractWholePage: Boolean = false,
+    val matchGroupToUse: String = "",
+    val skipSort: Boolean = false,
+    val reverseSort: Boolean = false,
+    val sortByLastLinkSegment: Boolean = false,
+    val matchLinksOutsideATags: Boolean = false,
 )
 
 /** Una app del pack de Obtainium, ya normalizada. */
@@ -27,6 +43,15 @@ data class EmulatorEntry(
 ) {
     val owner: String get() = repoUrl.trimEnd('/').substringAfter("github.com/").substringBefore('/')
     val repo: String get() = repoUrl.trimEnd('/').substringAfter("github.com/").substringAfter('/').substringBefore('/')
+
+    /** true si la fuente es un repositorio de GitHub (API de releases). */
+    val isGitHub: Boolean get() = repoUrl.contains("github.com/")
+
+    /** true si la fuente es un endpoint JSON (p. ej. Eden). */
+    val isJsonSource: Boolean get() = !isGitHub && repoUrl.substringBefore('?').endsWith(".json")
+
+    /** URL directa a un APK (sin scraping). */
+    val isDirectApk: Boolean get() = !isGitHub && repoUrl.substringBefore('?').endsWith(".apk")
 
     /** Variante pensada para dispositivos de doble pantalla. */
     val isDualScreen: Boolean
@@ -57,6 +82,21 @@ internal data class PackSettingsDto(
     @Json(name = "preferredApkIndex") val preferredApkIndex: Int = 0,
     @Json(name = "autoApkFilterByArch") val autoApkFilterByArch: Boolean = true,
     @Json(name = "about") val about: String = "",
+    @Json(name = "customLinkFilterRegex") val customLinkFilterRegex: String = "",
+    @Json(name = "intermediateLink") val intermediateLink: List<PackIntermediateLinkDto> = emptyList(),
+    @Json(name = "versionExtractWholePage") val versionExtractWholePage: Boolean = false,
+    @Json(name = "matchGroupToUse") val matchGroupToUse: String = "",
+    @Json(name = "skipSort") val skipSort: Boolean = false,
+    @Json(name = "reverseSort") val reverseSort: Boolean = false,
+    @Json(name = "sortByLastLinkSegment") val sortByLastLinkSegment: Boolean = false,
+    @Json(name = "matchLinksOutsideATags") val matchLinksOutsideATags: Boolean = false,
+)
+
+internal data class PackIntermediateLinkDto(
+    @Json(name = "customLinkFilterRegex") val customLinkFilterRegex: String = "",
+    @Json(name = "skipSort") val skipSort: Boolean = false,
+    @Json(name = "reverseSort") val reverseSort: Boolean = false,
+    @Json(name = "sortByLastLinkSegment") val sortByLastLinkSegment: Boolean = false,
 )
 
 /**
@@ -84,7 +124,6 @@ object PackParser {
             val settings = runCatching {
                 app.additionalSettings?.let { settingsAdapter.fromJson(it) }
             }.getOrNull() ?: PackSettingsDto()
-            if (!app.url.contains("github.com/")) return@mapNotNull null
             EmulatorEntry(
                 id = app.id,
                 name = app.name,
@@ -99,6 +138,21 @@ object PackParser {
                     preferredApkIndex = settings.preferredApkIndex,
                     autoApkFilterByArch = settings.autoApkFilterByArch,
                     about = settings.about,
+                    customLinkFilterRegex = settings.customLinkFilterRegex,
+                    intermediateLink = settings.intermediateLink.map {
+                        PackIntermediateLink(
+                            customLinkFilterRegex = it.customLinkFilterRegex,
+                            skipSort = it.skipSort,
+                            reverseSort = it.reverseSort,
+                            sortByLastLinkSegment = it.sortByLastLinkSegment,
+                        )
+                    },
+                    versionExtractWholePage = settings.versionExtractWholePage,
+                    matchGroupToUse = settings.matchGroupToUse,
+                    skipSort = settings.skipSort,
+                    reverseSort = settings.reverseSort,
+                    sortByLastLinkSegment = settings.sortByLastLinkSegment,
+                    matchLinksOutsideATags = settings.matchLinksOutsideATags,
                 ),
             )
         }

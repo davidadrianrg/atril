@@ -10,23 +10,25 @@ class PackParserTest {
     @Test
     fun `parses apps and nested settings`() {
         val entries = PackParser.parse(json)
-        assertEquals(2, entries.size)
+        assertEquals(3, entries.size)
         val cemu = entries.first { it.name == "Cemu" }
         assertEquals("SSimco", cemu.owner)
         assertEquals("Cemu", cemu.repo)
         assertEquals("Wii U emulator", cemu.settings.about)
+        val other = entries.first { it.name == "No GitHub" }
+        assertEquals(false, other.isGitHub)
     }
 
     @Test
     fun `single profile prefers the non dual variant`() {
         val picked = PackParser.forProfile(PackParser.parse(json), dualScreen = false)
-        assertEquals(listOf("Cemu"), picked.map { it.name })
+        assertEquals(listOf("Cemu", "No GitHub"), picked.map { it.name })
     }
 
     @Test
     fun `dual profile prefers the dual variant with the same id`() {
         val picked = PackParser.forProfile(PackParser.parse(json), dualScreen = true)
-        assertEquals(listOf("Cemu (DS)"), picked.map { it.name })
+        assertEquals(listOf("Cemu (DS)", "No GitHub"), picked.map { it.name })
     }
 
     @Test

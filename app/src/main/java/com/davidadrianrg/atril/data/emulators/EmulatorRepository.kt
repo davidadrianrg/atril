@@ -35,6 +35,8 @@ class EmulatorRepository(
 
     private val packFile = File(context.filesDir, "emulator_pack.json")
     private val customStore = CustomEmulatorStore(File(context.filesDir, "custom_emulators.json"))
+    private val packageMap = PackageMapStore(File(context.filesDir, "package_names.json"))
+    private val htmlResolver = HtmlReleaseResolver(client)
 
     /** Catálogo cacheado; si no hay caché o [force], se descarga del repositorio. */
     suspend fun loadPack(force: Boolean = false): List<EmulatorEntry> = withContext(Dispatchers.IO) {
@@ -81,11 +83,13 @@ class EmulatorRepository(
 
     /** Nombre de paquete real de la entrada (custom: el aprendido del APK). */
     fun packageNameOf(entry: EmulatorEntry): String =
-        customStore.get(entry.id)?.packageName ?: entry.id
+        packageMap.get(entry.id)
+            ?: customStore.get(entry.id)?.packageName
+            ?: KNOWN_PACKAGES[entry.name]
+            ?: entry.id
 
     /** Tras descargar un APK de un emulador manual, aprende su package name. */
     fun learnPackageName(entry: EmulatorEntry, apkFile: File): String? {
-        if (customStore.get(entry.id) == null) return null
         val info = runCatching {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                 context.packageManager.getPackageArchiveInfo(
@@ -98,7 +102,8 @@ class EmulatorRepository(
             }
         }.getOrNull() ?: return null
         val pkg = info.packageName
-        customStore.setPackageName(entry.id, pkg)
+        packageMap.set(entry.id, pkg)
+        if (customStore.get(entry.id) != null) customStore.setPackageName(entry.id, pkg)
         return pkg
     }
 
@@ -121,6 +126,7 @@ class EmulatorRepository(
         entry: EmulatorEntry,
         dualScreen: Boolean = false,
     ): SelectedRelease? = withContext(Dispatchers.IO) {
+        if (!entry.isGitHub) return@withContext htmlResolver.resolve(entry)
         val url = "https://api.github.com/repos/${entry.owner}/${entry.repo}/releases?per_page=20"
         val json = runCatching { getText(url) }.getOrNull() ?: return@withContext null
         val releases = runCatching { releasesAdapter.fromJson(json) }.getOrNull() ?: return@withContext null
@@ -170,6 +176,11 @@ class EmulatorRepository(
     private fun deviceAbi(): String = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
 
     companion object {
+        /** Packages que el pack no expone como id de paquete. */
+        private val KNOWN_PACKAGES = mapOf(
+            "RetroArch (AArch64)" to "com.retroarch.aarch64",
+        )
+
         const val PACK_URL =
             "https://raw.githubusercontent.com/RJNY/Obtainium-Emulation-Pack/main/obtainium-emulation-pack-latest.json"
 
