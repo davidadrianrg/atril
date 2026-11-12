@@ -464,15 +464,19 @@ fun PlayScreen(
                 }
             }
 
-            ContinuePlayingRow(
-                games = continueGames,
-                playStats = playStats,
-                onSelect = { item ->
-                    pendingSelectId = item.rom.id
-                    // Si el filtro de plataforma lo deja fuera, se quita para poder centrarlo.
-                    if (visibleItems.none { it.rom.id == item.rom.id }) platformFilter = null
-                },
-            )
+            // En horizontal esta fila robaba altura al carrusel y dejaba la
+            // carta central diminuta; el acceso rápido se mantiene en vertical.
+            if (!landscape) {
+                ContinuePlayingRow(
+                    games = continueGames,
+                    playStats = playStats,
+                    onSelect = { item ->
+                        pendingSelectId = item.rom.id
+                        // Si el filtro de plataforma lo deja fuera, se quita para poder centrarlo.
+                        if (visibleItems.none { it.rom.id == item.rom.id }) platformFilter = null
+                    },
+                )
+            }
 
             when {
                 loading && items.isEmpty() -> Box(
@@ -534,6 +538,10 @@ fun PlayScreen(
                                     },
                             ) { page ->
                                 val selectedItem = visibleItems[page]
+                                // Durante el deslizamiento cada página dibuja solo su
+                                // carta central: si no, el vecino de una página y el
+                                // centro de la siguiente duplican la misma carátula.
+                                val neighborsVisible = !pagerState.isScrollInProgress
                                 val lift = if (liftingRomId == selectedItem.rom.id) cardLift.value else 0f
                                 val hidden = insertion?.item?.rom?.id == selectedItem.rom.id
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -576,7 +584,7 @@ fun PlayScreen(
                                                                 onClickLabel = tr("launcher.details"),
                                                             ) { selectedRomId = item.rom.id },
                                                     )
-                                                    else -> GameCard(
+                                                    neighborsVisible -> GameCard(
                                                         item = item,
                                                         favorite = playStats.statsOf(item).favorite,
                                                         modifier = Modifier

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Arrangement
 import com.davidadrianrg.atril.ui.input.focusRing
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -81,6 +82,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -140,11 +142,10 @@ internal fun LauncherGameObject(
         modifier = modifier,
     ) { media ->
         if (media != null) {
-            Box(Modifier.fillMaxSize()) {
-                PhysicalMediaArt(media, item.rom.name, Modifier.fillMaxSize())
+            PhysicalMediaArt(media, item.rom.name, Modifier.fillMaxSize()) {
                 // El favorito también se marca sobre el cartucho/disco.
                 if (favorite) {
-                    Box(Modifier.align(Alignment.TopStart).padding(12.dp)) {
+                    Box(Modifier.align(Alignment.TopStart).padding(8.dp)) {
                         FavoriteBadge()
                     }
                 }
@@ -363,7 +364,14 @@ internal fun ContinuePlayingRow(
     modifier: Modifier = Modifier,
 ) {
     if (games.isEmpty()) return
-    Column(modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+    // En horizontal la fila tenía cartas de 76 dp y se veían diminutas.
+    val cardWidth = when {
+        maxWidth > 600.dp -> 120.dp
+        maxWidth > 420.dp -> 96.dp
+        else -> 84.dp
+    }
+    Column(Modifier.fillMaxWidth()) {
         Text(
             tr("play.continue.title"),
             style = MaterialTheme.typography.labelLarge,
@@ -379,18 +387,19 @@ internal fun ContinuePlayingRow(
                 val played = PlayTimeFormat.duration(
                     PlayStatsLogic.aggregate(item.groupRomIds + item.rom.id, playStats).totalPlayedMs,
                 )
-                ContinuePlayingCard(item = item, played = played, onClick = { onSelect(item) })
+                ContinuePlayingCard(item = item, played = played, width = cardWidth, onClick = { onSelect(item) })
             }
         }
+    }
     }
 }
 
 /** Mini-carta de «Seguir jugando»: carátula, nombre y tiempo jugado. */
 @Composable
-private fun ContinuePlayingCard(item: ShelfItem, played: String, onClick: () -> Unit) {
+private fun ContinuePlayingCard(item: ShelfItem, played: String, width: Dp, onClick: () -> Unit) {
     Column(
         modifier = Modifier
-            .width(76.dp)
+            .width(width)
             .clip(RoundedCornerShape(10.dp))
             .clickable(role = Role.Button, onClickLabel = tr("launcher.play"), onClick = onClick)
             .semantics { contentDescription = tr("play.continue.item", item.rom.name, played) }
@@ -456,8 +465,16 @@ internal fun LauncherCoverArt(
 
 /** La imagen real del medio físico, con halo cálido y sombra de suelo. */
 @Composable
-internal fun PhysicalMediaArt(media: Any, name: String, modifier: Modifier = Modifier) {
-    Box(modifier, contentAlignment = Alignment.Center) {
+internal fun PhysicalMediaArt(
+    media: Any,
+    name: String,
+    modifier: Modifier = Modifier,
+    badge: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
+) {
+    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        // El cartucho se dibuja con Fit: el hueco real es menor que la caja.
+        // La insignia se coloca sobre ese hueco, no sobre el contenedor.
+        var ratio by remember(media) { mutableStateOf(1f) }
         Box(
             Modifier
                 .fillMaxSize(0.95f)
@@ -480,14 +497,24 @@ internal fun PhysicalMediaArt(media: Any, name: String, modifier: Modifier = Mod
                     )
                 },
         )
-        AsyncImage(
-            model = media,
-            contentDescription = tr("launcher.display.physical") + ": " + name,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 6.dp, bottom = 16.dp),
-        )
+        val topPad = 6.dp
+        val bottomPad = 16.dp
+        val availableH = (maxHeight - topPad - bottomPad).coerceAtLeast(1.dp)
+        val fitW = minOf(maxWidth, availableH * ratio)
+        val fitH = fitW / ratio
+        Box(Modifier.size(fitW, fitH)) {
+            AsyncImage(
+                model = media,
+                contentDescription = tr("launcher.display.physical") + ": " + name,
+                contentScale = ContentScale.Fit,
+                onSuccess = { state ->
+                    val size = state.painter.intrinsicSize
+                    if (size.isSpecified && size.height > 0f) ratio = size.width / size.height
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+            badge?.invoke(this)
+        }
     }
 }
 
