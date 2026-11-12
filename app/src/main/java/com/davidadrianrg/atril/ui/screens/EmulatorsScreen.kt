@@ -189,9 +189,13 @@ fun EmulatorsScreen() {
     // Al volver del instalador del sistema, sigue con el siguiente de la cola.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && pendingInstall) {
-                pendingInstall = false
-                processQueue()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // Al volver del instalador, refleja lo que se acaba de instalar.
+                refreshInstalled(entries.orEmpty())
+                if (pendingInstall) {
+                    pendingInstall = false
+                    processQueue()
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -441,18 +445,14 @@ private fun EmulatorRow(
                 EmulatorIcon(entry = entry, installedPackage = installedPackage)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            entry.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        if (installedVersion != null) {
-                            Spacer(Modifier.width(6.dp))
-                            StatusChip(update = update)
-                        }
-                    }
+                    Text(
+                        entry.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     Text(
                         entry.settings.about.ifBlank { entry.repoUrl },
                         style = MaterialTheme.typography.bodySmall,
@@ -472,15 +472,21 @@ private fun EmulatorRow(
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                when {
-                    busy -> CircularProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier.size(30.dp),
-                        strokeWidth = 3.dp,
-                    )
-                    installedVersion == null -> Button(onClick = onInstall) { Text(tr("emulators.install")) }
-                    update -> Button(onClick = onInstall) { Text(tr("emulators.update")) }
-                    else -> OutlinedButton(onClick = onInstall) { Text(tr("emulators.reinstall")) }
+                Column(horizontalAlignment = Alignment.End) {
+                    if (installedVersion != null) {
+                        StatusChip(update = update)
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    when {
+                        busy -> CircularProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.size(30.dp),
+                            strokeWidth = 3.dp,
+                        )
+                        installedVersion == null -> Button(onClick = onInstall) { Text(tr("emulators.install")) }
+                        update -> Button(onClick = onInstall) { Text(tr("emulators.update")) }
+                        else -> OutlinedButton(onClick = onInstall) { Text(tr("emulators.reinstall")) }
+                    }
                 }
             }
             if (busy) {
