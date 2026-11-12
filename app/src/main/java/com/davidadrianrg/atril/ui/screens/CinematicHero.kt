@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -44,7 +45,11 @@ private const val HERO_CROSSFADE_MS = 350
  * @param modifier size and position provided by the caller.
  */
 @Composable
-internal fun CinematicHero(url: String?, modifier: Modifier = Modifier) {
+internal fun CinematicHero(
+    url: String?,
+    modifier: Modifier = Modifier,
+    blurRadius: Dp = HERO_BLUR_RADIUS,
+) {
     Box(modifier.fillMaxSize()) {
         if (url != null) {
             Crossfade(
@@ -66,8 +71,8 @@ internal fun CinematicHero(url: String?, modifier: Modifier = Modifier) {
                     modifier = Modifier
                         .fillMaxSize()
                         .then(
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                Modifier.blur(HERO_BLUR_RADIUS)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurRadius > 0.dp) {
+                                Modifier.blur(blurRadius)
                             } else {
                                 Modifier
                             },

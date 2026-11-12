@@ -39,11 +39,14 @@ class SettingsRepository(private val dataStore: SettingsDataStore) {
     suspend fun setTheme(id: String) = dataStore.setTheme(id)
     val theme: Flow<String> = dataStore.theme
     val launcherBackground: Flow<String> = dataStore.launcherBackground
+    val launcherBlur: Flow<Float> = dataStore.launcherBlur
     val scraperCredentials = dataStore.scraperCredentials
     suspend fun setScraperCredentials(c: com.davidadrianrg.atril.core.localgames.ScraperCredentials) =
         dataStore.setScraperCredentials(c)
 
     suspend fun setLauncherBackground(mode: String) = dataStore.setLauncherBackground(mode)
+
+    suspend fun setLauncherBlur(radiusDp: Float) = dataStore.setLauncherBlur(radiusDp)
     suspend fun setSaveSyncEnabled(enabled: Boolean) = dataStore.setSaveSyncEnabled(enabled)
     suspend fun setSaveSyncWatchEnabled(enabled: Boolean) = dataStore.setSaveSyncWatchEnabled(enabled)
 
