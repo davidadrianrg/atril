@@ -140,7 +140,15 @@ internal fun LauncherGameObject(
         modifier = modifier,
     ) { media ->
         if (media != null) {
-            PhysicalMediaArt(media, item.rom.name, Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize()) {
+                PhysicalMediaArt(media, item.rom.name, Modifier.fillMaxSize())
+                // El favorito también se marca sobre el cartucho/disco.
+                if (favorite) {
+                    Box(Modifier.align(Alignment.TopStart).padding(12.dp)) {
+                        FavoriteBadge()
+                    }
+                }
+            }
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 GameCard(item, favorite, Modifier.fillMaxHeight(0.98f), emphasized = emphasized)
