@@ -509,6 +509,7 @@ class ShelfViewModel(
                     knownFileNames = item.knownFileNames,
                     overrideFamilyId = item.launchOverride,
                     saveEmulatorId = item.platformEmulatorId,
+                    retroArchCore = settingsRepository.getRetroArchCoreBlocking(item.rom.platformSlug),
                 ),
             )
         }

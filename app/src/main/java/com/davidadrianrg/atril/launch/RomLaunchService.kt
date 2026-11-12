@@ -34,6 +34,7 @@ data class GameLaunchRequest(
     val knownFileNames: List<String> = emptyList(),
     val overrideFamilyId: String? = null,
     val saveEmulatorId: String? = null,
+    val retroArchCore: String? = null,
 )
 
 /** Plan de lanzamiento unificado: emulador, APK o fallo con mensaje. */

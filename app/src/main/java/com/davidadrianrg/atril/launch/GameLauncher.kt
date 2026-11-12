@@ -33,6 +33,7 @@ class GameLauncher(
                         knownFileNames = request.knownFileNames,
                         overrideFamilyId = request.overrideFamilyId,
                         saveEmulatorId = request.saveEmulatorId,
+                        retroArchCore = request.retroArchCore,
                     ),
                 )
                 when (plan) {

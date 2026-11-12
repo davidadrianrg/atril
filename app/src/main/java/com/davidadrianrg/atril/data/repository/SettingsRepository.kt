@@ -35,6 +35,9 @@ class SettingsRepository(private val dataStore: SettingsDataStore) {
     suspend fun setSkippedVersion(version: String) = dataStore.setSkippedVersion(version)
     suspend fun setConflictPolicy(policyId: String) = dataStore.setConflictPolicy(policyId)
     suspend fun setRetroArchBasePath(path: String) = dataStore.setRetroArchBasePath(path)
+    fun retroArchCore(platformSlug: String): Flow<String?> = dataStore.retroArchCore(platformSlug)
+    suspend fun setRetroArchCore(platformSlug: String, core: String?) = dataStore.setRetroArchCore(platformSlug, core)
+    fun getRetroArchCoreBlocking(platformSlug: String): String? = dataStore.getRetroArchCoreBlocking(platformSlug)
     suspend fun setLanguage(tag: String) = dataStore.setLanguage(tag)
     suspend fun setTheme(id: String) = dataStore.setTheme(id)
     val theme: Flow<String> = dataStore.theme

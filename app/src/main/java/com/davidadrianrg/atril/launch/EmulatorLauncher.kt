@@ -37,6 +37,8 @@ data class LaunchRequest(
     val overrideFamilyId: String?,
     /** Emulador de saves configurado para la plataforma (id), si lo hay. */
     val saveEmulatorId: String?,
+    /** Core de RetroArch elegido para la plataforma; null = automático. */
+    val retroArchCore: String? = null,
 )
 
 sealed interface LaunchPlan {
@@ -104,6 +106,7 @@ class EmulatorLauncher(private val appContext: Context) {
                 val env = LaunchEnvironment(Environment.getExternalStorageDirectory().absolutePath)
                 val spec = LaunchSpecBuilder.build(
                     selection.family, selection.variant, romFile.absolutePath, request.platformSlug, env,
+                    retroArchCore = request.retroArchCore,
                 ) ?: return@withContext LaunchPlan.Failed(tr("launch.error.no_core", request.platformLabel))
                 val preferred = EmulatorSelector.candidates(
                     request.platformSlug, request.overrideFamilyId, request.saveEmulatorId,

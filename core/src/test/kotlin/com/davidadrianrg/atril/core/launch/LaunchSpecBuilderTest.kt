@@ -40,6 +40,16 @@ class LaunchSpecBuilderTest {
     }
 
     @Test
+    fun `RetroArch uses the core chosen by the user`() {
+        val spec = LaunchSpecBuilder.build(
+            Family.RETROARCH, Family.RETROARCH.variants[0], "/r/game.gba", "gba", env,
+            retroArchCore = "gambatte",
+        )!!
+        val core = spec.extras.filterIsInstance<LaunchExtra.Text>().first { it.key == "LIBRETRO" }.value
+        assertEquals("/data/data/com.retroarch/cores/gambatte_libretro_android.so", core)
+    }
+
+    @Test
     fun `RetroArch without a core returns null`() {
         assertNull(LaunchSpecBuilder.build(Family.RETROARCH, Family.RETROARCH.variants[0], "/r/x", "switch", env))
     }

@@ -54,10 +54,12 @@ object LaunchSpecBuilder {
         romPath: String,
         platformSlug: String,
         env: LaunchEnvironment,
+        retroArchCore: String? = null,
     ): LaunchSpec? {
         val recipe = family.recipe
         if (recipe.retroArch) {
-            val core = RetroArchCores.coreFor(platformSlug) ?: return null
+            val core = retroArchCore?.takeIf { it.isNotBlank() }
+                ?: RetroArchCores.coreFor(platformSlug) ?: return null
             val pkg = variant.packageName
             val dataDir = "/data/data/$pkg"
             val externalDir = "${env.primaryStorageRoot}/Android/data/$pkg/files"

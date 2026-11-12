@@ -229,7 +229,55 @@ object RetroArchCores {
         "pokemini" to "pokemini",
     )
 
+    /** Alternativas razonables por plataforma; la primera del mapa es la de defecto. */
+    private val alternatives = mapOf(
+        "nes" to listOf("fceumm", "mesen", "nestopia", "quicknes"),
+        "snes" to listOf("snes9x", "snes9x2010", "bsnes", "mesen-s"),
+        "n64" to listOf("mupen64plus_next_gles3", "mupen64plus_next", "parallel_n64"),
+        "gb" to listOf("gambatte", "sameboy"),
+        "gbc" to listOf("gambatte", "sameboy"),
+        "gba" to listOf("mgba", "gambatte", "vba_next"),
+        "nds" to listOf("melonds", "desmume", "desmume2015"),
+        "genesis" to listOf("genesis_plus_gx", "picodrive"),
+        "sms" to listOf("genesis_plus_gx", "picodrive"),
+        "gg" to listOf("genesis_plus_gx", "picodrive"),
+        "scd" to listOf("genesis_plus_gx", "picodrive"),
+        "sg1000" to listOf("genesis_plus_gx", "picodrive"),
+        "32x" to listOf("picodrive", "genesis_plus_gx"),
+        "psx" to listOf("pcsx_rearmed", "swanstation", "beetle_psx_hw"),
+        "psp" to listOf("ppsspp"),
+        "saturn" to listOf("yabasanshiro", "kronos"),
+        "dreamcast" to listOf("flycast", "flycast_gles2"),
+        "gc" to listOf("dolphin"),
+        "wii" to listOf("dolphin"),
+        "tg16" to listOf("mednafen_pce_fast", "mednafen_pce"),
+        "tgcd" to listOf("mednafen_pce_fast", "mednafen_pce"),
+        "pcfx" to listOf("mednafen_pcfx"),
+        "cdi" to listOf("same_cdi"),
+        "3do" to listOf("opera"),
+        "atari2600" to listOf("stella"),
+        "atari5200" to listOf("atari800"),
+        "atari7800" to listOf("prosystem"),
+        "lynx" to listOf("handy"),
+        "jaguar" to listOf("virtualjaguar"),
+        "ngp" to listOf("mednafen_ngp"),
+        "ngpc" to listOf("mednafen_ngp"),
+        "neogeo" to listOf("fbneo", "mame"),
+        "arcade" to listOf("fbneo", "mame"),
+        "msx" to listOf("bluemsx"),
+        "wonderswan" to listOf("mednafen_wswan"),
+        "wsc" to listOf("mednafen_wswan"),
+        "virtualboy" to listOf("mednafen_vb"),
+        "pokemini" to listOf("pokemini"),
+    )
+
     val platforms: Set<String> get() = cores.keys
 
     fun coreFor(platformSlug: String): String? = cores[LaunchPlatforms.canonical(platformSlug)]
+
+    /** Cores que se pueden elegir para la plataforma, con el de defecto primero. */
+    fun alternativesFor(platformSlug: String): List<String> {
+        val slug = LaunchPlatforms.canonical(platformSlug)
+        return (listOfNotNull(cores[slug]) + alternatives[slug].orEmpty()).distinct()
+    }
 }

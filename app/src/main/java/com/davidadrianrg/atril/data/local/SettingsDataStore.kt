@@ -406,6 +406,24 @@ class SettingsDataStore(private val context: Context) {
         context.dataStore.edit { it[RETROARCH_BASE_PATH] = path.trimEnd('/') }
     }
 
+    /** Core de RetroArch elegido para una plataforma; null = automático. */
+    fun retroArchCore(platformSlug: String): Flow<String?> =
+        context.dataStore.data.map { it[retroArchCoreKey(platformSlug)] }
+
+    suspend fun setRetroArchCore(platformSlug: String, core: String?) {
+        context.dataStore.edit { prefs ->
+            if (core.isNullOrBlank()) prefs.remove(retroArchCoreKey(platformSlug))
+            else prefs[retroArchCoreKey(platformSlug)] = core
+        }
+    }
+
+    fun getRetroArchCoreBlocking(platformSlug: String): String? = runCatching {
+        runBlocking { context.dataStore.data.first()[retroArchCoreKey(platformSlug)] }
+    }.getOrNull()
+
+    private fun retroArchCoreKey(platformSlug: String) =
+        stringPreferencesKey("retroarch_core_" + platformSlug.lowercase())
+
     suspend fun setTheme(id: String) {
         context.dataStore.edit { it[THEME] = id }
     }

@@ -1596,74 +1596,56 @@ internal fun RomDetailSheet(
             .padding(top = 8.dp, bottom = 48.dp)
             .navigationBarsPadding(),
     ) {
-        // Cover + title row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-        ) {
-            // Respeta el ratio real de la carátula (cuadrada, apaisada…): alto fijo y
-            // ancho derivado, sin recortar ni deformar.
-            var coverRatio by remember(rom.id) { mutableStateOf(CoverRatio.DEFAULT) }
-            AsyncImage(
-                model = rom.coverUrlFor(coverStyle),
-                contentDescription = rom.name,
-                contentScale = ContentScale.Fit,
-                onSuccess = { st ->
-                    val sz = st.painter.intrinsicSize
-                    if (sz.isSpecified) coverRatio = CoverRatio.of(sz.width.toInt(), sz.height.toInt())
-                },
-                // Ancho acotado: una carátula apaisada (ratio hasta 2.5) no debe
-                // comerse la columna del título, sobre todo en horizontal.
-                modifier = Modifier
-                    .sizeIn(
-                        maxWidth = if (wide) 216.dp else 140.dp,
-                        maxHeight = if (wide) 216.dp else 140.dp,
-                    )
-                    .aspectRatio(coverRatio)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        // Cabecera: en horizontal portada, título y acciones en una fila; en
+        // vertical el título ocupa todo el ancho para que no se parta letra a letra.
+        var coverRatio by remember(rom.id) { mutableStateOf(CoverRatio.DEFAULT) }
+        val onCoverLoaded: (coil.compose.AsyncImagePainter.State.Success) -> Unit = { st ->
+            val sz = st.painter.intrinsicSize
+            if (sz.isSpecified) coverRatio = CoverRatio.of(sz.width.toInt(), sz.height.toInt())
+        }
+
+        if (wide) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                Text(
-                    text = rom.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
+                AsyncImage(
+                    model = rom.coverUrlFor(coverStyle),
+                    contentDescription = rom.name,
+                    contentScale = ContentScale.Fit,
+                    onSuccess = onCoverLoaded,
+                    modifier = Modifier
+                        .sizeIn(maxWidth = 216.dp, maxHeight = 216.dp)
+                        .aspectRatio(coverRatio)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 )
-                val metadata = rom.metadataLine(platformName)
-                if (metadata != null) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Text(
-                        text = metadata,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = rom.name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                }
-                val metaParts = buildList {
-                    if (rom.regions.isNotEmpty()) addAll(rom.regions)
-                    rom.revision?.takeIf { it.isNotBlank() }?.let { add("Rev $it") }
-                }
-                if (metaParts.isNotEmpty()) {
-                    Text(
-                        text = metaParts.joinToString(" • "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                // En horizontal la acción principal va junto al título: sin esto había que
-                // desplazar la hoja para ver "Descargar".
-                if (wide && !isDownloaded && !isDownloading) {
-                    androidx.compose.material3.Button(onClick = onDownload) {
-                        Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Text("  " + tr("common.download"))
+                    val metadata = rom.metadataLine(platformName)
+                    if (metadata != null) {
+                        Text(
+                            text = metadata,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                }
-                // En horizontal aprovechamos el ancho: la sinopsis acompaña
-                // a la portada en vez de dejar media pantalla vacía.
-                if (wide) {
+                    MetaParts(rom)
+                    if (!isDownloaded && !isDownloading) {
+                        androidx.compose.material3.Button(onClick = onDownload) {
+                            Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Text("  " + tr("common.download"))
+                        }
+                    }
                     rom.summary?.takeIf { it.isNotBlank() }?.let { summary ->
                         Spacer(Modifier.size(10.dp))
                         Text(
@@ -1692,11 +1674,65 @@ internal fun RomDetailSheet(
                         }
                     }
                 }
+                FavoriteStar(favorite = stats.favorite, onClick = onToggleFavorite)
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, contentDescription = tr("game.viewer.close"))
+                }
             }
-            FavoriteStar(favorite = stats.favorite, onClick = onToggleFavorite)
-            IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = tr("game.viewer.close"))
+        } else {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                FavoriteStar(favorite = stats.favorite, onClick = onToggleFavorite)
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, contentDescription = tr("game.viewer.close"))
+                }
             }
+            Spacer(Modifier.size(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                AsyncImage(
+                    model = rom.coverUrlFor(coverStyle),
+                    contentDescription = rom.name,
+                    contentScale = ContentScale.Fit,
+                    onSuccess = onCoverLoaded,
+                    modifier = Modifier
+                        .sizeIn(maxWidth = 120.dp, maxHeight = 150.dp)
+                        .aspectRatio(coverRatio)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val metadata = rom.metadataLine(platformName)
+                    if (metadata != null) {
+                        Text(
+                            text = metadata,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    MetaParts(rom)
+                    if (!isDownloaded && !isDownloading) {
+                        Spacer(Modifier.size(4.dp))
+                        androidx.compose.material3.Button(onClick = onDownload) {
+                            Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Text("  " + tr("common.download"))
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.size(12.dp))
+            Text(
+                text = rom.name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
         // Summary with expandable text (en horizontal ya va junto a la portada)
@@ -2395,3 +2431,19 @@ private fun LibrarySearchField(
 
 /** Proporción de las tarjetas de la rejilla de Biblioteca (3:4, ancho/alto). */
 private const val UNIFORM_CARD_RATIO = 0.75f
+
+/** Regiones y revisión, una línea discreta bajo los metadatos. */
+@Composable
+private fun MetaParts(rom: Rom) {
+    val parts = buildList {
+        if (rom.regions.isNotEmpty()) addAll(rom.regions)
+        rom.revision?.takeIf { it.isNotBlank() }?.let { add("Rev $it") }
+    }
+    if (parts.isNotEmpty()) {
+        Text(
+            text = parts.joinToString(" • "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}

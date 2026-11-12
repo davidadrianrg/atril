@@ -49,7 +49,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.davidadrianrg.atril.RomMSyncApplication
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.launch.EmulatorCatalog
 import com.davidadrianrg.atril.core.launch.LaunchPlatforms
+import com.davidadrianrg.atril.core.launch.RetroArchCores
 import com.davidadrianrg.atril.data.local.ServerConfig
 import com.davidadrianrg.atril.data.repository.LauncherDisplayMode
 import com.davidadrianrg.atril.domain.model.Rom
@@ -81,6 +83,14 @@ internal data class LauncherDetailControls(
     val selectedEmulatorId: String?,
     val automaticEmulatorName: String?,
     val onEmulatorChange: (String?) -> Unit,
+    /** true si el emulador efectivo es RetroArch (muestra el selector de core). */
+    val showRetroArchCore: Boolean,
+    val retroArchCoreAlternatives: List<String>,
+    /** Core por defecto de la plataforma (para la etiqueta Automático). */
+    val retroArchDefaultCore: String?,
+    /** Core elegido; null = automático. */
+    val selectedRetroArchCore: String?,
+    val onRetroArchCoreChange: (String?) -> Unit,
 )
 
 /** Estado de una petición de scrapeo de medio físico a RomM. */
@@ -127,6 +137,13 @@ internal fun rememberLauncherDetailControls(
             container.emulatorLauncher.currentFamily(rom.platformSlug, null, platformEmulatorId)?.displayName
         }
     }
+    val effectiveFamilyId by produceState<String?>(null, rom.platformSlug, platformEmulatorId, options, override) {
+        value = withContext(Dispatchers.IO) {
+            container.emulatorLauncher.currentFamily(rom.platformSlug, override, platformEmulatorId)?.id
+        }
+    }
+    val retroArchCore by container.settingsRepository.retroArchCore(platformKey)
+        .collectAsState(initial = null)
     val scope = rememberCoroutineScope()
     var scrape by remember(rom.id) { mutableStateOf<ScrapeUi?>(null) }
     // URL conseguida tras un scrapeo: la lista de roms en memoria no se refresca sola.
@@ -188,6 +205,13 @@ internal fun rememberLauncherDetailControls(
         automaticEmulatorName = automaticName,
         onEmulatorChange = { id ->
             scope.launch { container.settingsRepository.setLaunchEmulatorOverride(platformKey, id) }
+        },
+        showRetroArchCore = effectiveFamilyId == EmulatorCatalog.Family.RETROARCH.id,
+        retroArchCoreAlternatives = RetroArchCores.alternativesFor(platformKey),
+        retroArchDefaultCore = RetroArchCores.coreFor(platformKey),
+        selectedRetroArchCore = retroArchCore,
+        onRetroArchCoreChange = { core ->
+            scope.launch { container.settingsRepository.setRetroArchCore(platformKey, core) }
         },
     )
 }
@@ -330,7 +354,49 @@ internal fun LauncherControlsSection(controls: LauncherDetailControls) {
         }
 
         EmulatorPicker(controls)
+        if (controls.showRetroArchCore) RetroArchCorePicker(controls)
     }
+}
+
+@Composable
+private fun RetroArchCorePicker(controls: LauncherDetailControls) {
+    Text(
+        tr("launcher.retroarch.core"),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+    )
+    var open by remember { mutableStateOf(false) }
+    val autoLabel = tr("launcher.retroarch.core_auto", controls.retroArchDefaultCore ?: "—")
+    val selected = controls.selectedRetroArchCore
+    Box {
+        OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
+            Text(selected ?: autoLabel, modifier = Modifier.weight(1f))
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(autoLabel) },
+                onClick = {
+                    open = false
+                    controls.onRetroArchCoreChange(null)
+                },
+            )
+            controls.retroArchCoreAlternatives.forEach { core ->
+                DropdownMenuItem(
+                    text = { Text(core) },
+                    onClick = {
+                        open = false
+                        controls.onRetroArchCoreChange(core)
+                    },
+                )
+            }
+        }
+    }
+    Text(
+        tr("launcher.retroarch.core_hint"),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

@@ -527,6 +527,7 @@ class LibraryViewModel(
                 knownFileNames = rom.files.map { it.filename },
                 overrideFamilyId = overrideFamilyId,
                 saveEmulatorId = platformEmulatorId,
+                retroArchCore = settingsRepository?.getRetroArchCoreBlocking(rom.platformSlug),
             ),
         )
     }
