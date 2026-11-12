@@ -424,7 +424,7 @@ fun PlayScreen(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 // Hueco inferior para la leyenda del mando (anclada abajo en el Box).
-                .padding(bottom = if (visibleItems.isNotEmpty()) 40.dp else 0.dp),
+                .padding(bottom = if (visibleItems.isNotEmpty()) 24.dp else 0.dp),
         ) {
             LauncherHeader(
                 count = visibleItems.size,
@@ -499,9 +499,13 @@ fun PlayScreen(
                                 (maxWidth * 0.66f).coerceAtMost(maxHeight * 0.62f)
                             }
 
-                            // Ancho de una carta: alto por la proporción 0,70. Con dos
-                            // huecos a cada lado siguen cabiendo carátulas completas.
-                            val cardWidth = (maxHeight * 0.98f) * 0.70f
+                            // Tamaño de carta: alto por la proporción 0,70, pero sin
+                            // pasarse del ancho disponible (en vertical la altura sola
+                            // haría una carta más ancha que la pantalla).
+                            val cardAspect = 0.70f
+                            val maxCardWidth = maxWidth * (if (landscape) 0.42f else 0.86f)
+                            val cardWidth = minOf(maxHeight * cardAspect, maxCardWidth)
+                            val cardHeight = cardWidth / cardAspect
                             val slots = 2
 
                             HorizontalPager(
@@ -541,8 +545,7 @@ fun PlayScreen(
                                     val rowWidth = cardWidth * (slots * 2 + 1) + 10.dp * (slots * 2)
                                     Row(
                                         modifier = Modifier
-                                            .requiredWidth(rowWidth)
-                                            .fillMaxHeight(),
+                                            .requiredWidth(rowWidth),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     ) {
@@ -552,7 +555,7 @@ fun PlayScreen(
                                             Box(
                                                 modifier = Modifier
                                                     .width(cardWidth)
-                                                    .fillMaxHeight(),
+                                                    .height(cardHeight),
                                                 contentAlignment = Alignment.Center,
                                             ) {
                                                 when {
@@ -699,9 +702,10 @@ fun PlayScreen(
         ) { data ->
             Snackbar(
                 snackbarData = data,
-                containerColor = Color(0xFF2A241C),
-                contentColor = LauncherCream,
-                actionColor = LauncherAmber,
+                // Colores inversos del tema: legibles tanto en oscuro como en claro.
+                containerColor = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                actionColor = MaterialTheme.colorScheme.inversePrimary,
                 shape = RoundedCornerShape(14.dp),
             )
         }

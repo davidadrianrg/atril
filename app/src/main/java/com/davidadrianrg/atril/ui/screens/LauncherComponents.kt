@@ -606,11 +606,13 @@ internal fun PadLegendBar(
     onFavorite: (() -> Unit)? = null,
     onDetails: (() -> Unit)? = null,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(50))
-            .background(Color(0xCC0B0907))
-            .border(1.dp, LauncherOnDark.copy(alpha = 0.10f), RoundedCornerShape(50))
+            // La barra sigue al tema: clara en Crimson Light, oscura en el resto.
+            .background(scheme.surfaceContainerHigh.copy(alpha = 0.95f))
+            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(50))
             .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -625,6 +627,7 @@ internal fun PadLegendBar(
 /** Glifo del botón (A/B/X/Y) seguido de la acción que hace en esta pantalla. */
 @Composable
 private fun PadLegendChip(glyph: String, label: String, onClick: (() -> Unit)? = null) {
+    val scheme = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = if (onClick != null) {
@@ -640,21 +643,21 @@ private fun PadLegendChip(glyph: String, label: String, onClick: (() -> Unit)? =
             Modifier
                 .size(18.dp)
                 .clip(CircleShape)
-                .background(LauncherOnDark.copy(alpha = 0.14f)),
+                .background(scheme.primary.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 glyph,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = LauncherOnDark,
+                color = scheme.primary,
             )
         }
         Spacer(Modifier.width(5.dp))
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = LauncherOnDark.copy(alpha = 0.78f),
+            color = scheme.primary,
             maxLines = 1,
         )
     }
