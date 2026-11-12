@@ -706,6 +706,7 @@ fun PlayScreen(
                 if (screen != Screen.Play) onNavigate(screen)
             },
             onDismiss = { menuOpen = false },
+            currentRoute = Screen.Play.route,
         )
     }
 

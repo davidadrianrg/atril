@@ -679,6 +679,7 @@ internal fun LauncherMenuOverlay(
     landscape: Boolean,
     onNavigate: (Screen) -> Unit,
     onDismiss: () -> Unit,
+    currentRoute: String? = null,
 ) {
     AnimatedVisibility(visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(180))) {
         Box(
@@ -759,7 +760,7 @@ internal fun LauncherMenuOverlay(
                 }
                 Spacer(Modifier.height(12.dp))
                 items.forEach { screen ->
-                    val selected = screen == Screen.Play
+                    val selected = screen.route == currentRoute
                     Row(
                         Modifier
                             .fillMaxWidth()

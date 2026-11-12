@@ -158,6 +158,7 @@ fun RomMSyncApp(startInUpdates: Boolean = false) {
                 navigateTo(screen.route, navController)
             },
             onDismiss = { appMenuOpen = false },
+            currentRoute = currentDestination?.route,
         )
     }
     }
