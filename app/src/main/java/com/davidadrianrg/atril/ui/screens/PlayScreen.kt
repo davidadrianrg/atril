@@ -651,6 +651,9 @@ fun PlayScreen(
                                 alignStart = false,
                                 onPlay = { play(item) },
                                 onDetails = { selectedRomId = item.rom.id },
+                                // La leyenda inferior ya ofrece A Play / Y Details:
+                                // en vertical no se duplican los botones.
+                                showActions = false,
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
                             )
                         }
@@ -686,9 +689,23 @@ fun PlayScreen(
                         insertion != null -> launchJob?.cancel()
                         menuOpen -> menuOpen = false
                         selectedRomId != null -> selectedRomId = null
+                        // Nada abierto: mismo comportamiento que el botón Atrás.
+                        else -> (context as? androidx.activity.ComponentActivity)
+                            ?.onBackPressedDispatcher?.onBackPressed()
                     }
                 },
-                onFavorite = { current?.let { viewModel.toggleFavorite(it) } },
+                onFavorite = {
+                    current?.let { item ->
+                        val wasFavorite = playStats.statsOf(item).favorite
+                        viewModel.toggleFavorite(item)
+                        notify(
+                            tr(
+                                if (wasFavorite) "launcher.favorite.removed"
+                                else "launcher.favorite.added",
+                            ),
+                        )
+                    }
+                },
                 onDetails = { current?.let { selectedRomId = it.rom.id } },
             )
         }
@@ -872,6 +889,7 @@ private fun Caption(
     onPlay: () -> Unit,
     onDetails: () -> Unit,
     modifier: Modifier = Modifier,
+    showActions: Boolean = true,
 ) {
     // El nombre del emulador consulta PackageManager: fuera del hilo principal.
     val emulatorName by produceState<String?>(null, item.rom.id, item.launchOverride, item.platformEmulatorId) {
@@ -898,6 +916,7 @@ private fun Caption(
         playBusy = busy,
         secondaryMeta = secondaryMeta,
         alignStart = alignStart,
+        showActions = showActions,
         modifier = modifier,
     )
 }
