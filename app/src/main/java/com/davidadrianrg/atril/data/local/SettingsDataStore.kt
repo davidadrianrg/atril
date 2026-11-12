@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -80,6 +81,7 @@ class SettingsDataStore(private val context: Context) {
         val LANGUAGE = stringPreferencesKey("language")
         val THEME = stringPreferencesKey("theme")
         val LAUNCHER_BG = stringPreferencesKey("launcher_background")
+        val LAUNCHER_BLUR = floatPreferencesKey("launcher_blur_strength")
         // Vista/orden/origen/tamaño/estilo de carátula de la biblioteca. Las
         // claves canónicas viven en :core para que Android y desktop no
         // inventen grafías distintas.
@@ -413,6 +415,13 @@ class SettingsDataStore(private val context: Context) {
 
     suspend fun setLauncherBackground(mode: String) {
         context.dataStore.edit { it[LAUNCHER_BG] = mode }
+    }
+
+    /** Radio de difuminado del fondo, en dp (0 = imagen nítida, 28 = valor histórico). */
+    val launcherBlur: Flow<Float> = context.dataStore.data.map { it[LAUNCHER_BLUR] ?: 28f }
+
+    suspend fun setLauncherBlur(radiusDp: Float) {
+        context.dataStore.edit { it[LAUNCHER_BLUR] = radiusDp.coerceIn(0f, 28f) }
     }
 
     /** Persiste la vista de la biblioteca (rejilla / cover flow). */

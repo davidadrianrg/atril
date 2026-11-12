@@ -258,6 +258,12 @@ class ConfigViewModel(
         viewModelScope.launch { settingsRepository.setLauncherBackground(mode) }
     }
 
+    val launcherBlur = settingsRepository.launcherBlur
+
+    fun setLauncherBlur(radiusDp: Float) {
+        viewModelScope.launch { settingsRepository.setLauncherBlur(radiusDp) }
+    }
+
     /** Claves de SteamGridDB / ScreenScraper para las carátulas de juegos locales. */
     val scraperCredentials = settingsRepository.scraperCredentials
 

@@ -952,6 +952,21 @@ fun ConfigScreen(
                         label = { Text(tr("config.launcher_bg.solid"), style = MaterialTheme.typography.labelMedium) },
                     )
                 }
+                if (bg != "solid") {
+                    val blur by viewModel.launcherBlur.collectAsState(initial = 28f)
+                    var blurLocal by remember(blur) { mutableStateOf(blur) }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        tr("config.launcher_bg.blur_strength", (blurLocal / 28f * 100).toInt()),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    androidx.compose.material3.Slider(
+                        value = blurLocal,
+                        onValueChange = { blurLocal = it },
+                        onValueChangeFinished = { viewModel.setLauncherBlur(blurLocal) },
+                        valueRange = 0f..28f,
+                    )
+                }
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     tr("config.launcher_bg.hint"),

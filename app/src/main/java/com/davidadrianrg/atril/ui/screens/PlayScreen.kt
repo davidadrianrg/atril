@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -388,6 +389,7 @@ fun PlayScreen(
 
     // Fondo del launcher: captura difuminada (por defecto) o degradado sólido del tema.
     val launcherBg by container.settingsRepository.launcherBackground.collectAsState(initial = "blur")
+    val launcherBlur by container.settingsRepository.launcherBlur.collectAsState(initial = 28f)
 
     BackHandler(enabled = insertion != null) { launchJob?.cancel() }
     BackHandler(enabled = menuOpen && insertion == null) { menuOpen = false }
@@ -401,6 +403,7 @@ fun PlayScreen(
         // decorativo y va detrás de todo (sin foco ni toques).
         CinematicHero(
             url = if (launcherBg == "solid") null else current?.rom?.heroBackdropUrl(),
+            blurRadius = launcherBlur.dp,
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -532,8 +535,14 @@ fun PlayScreen(
                                 val lift = if (liftingRomId == selectedItem.rom.id) cardLift.value else 0f
                                 val hidden = insertion?.item?.rom?.id == selectedItem.rom.id
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    // Ancho exacto de los 2*slots+1 huecos: aunque supere
+                                    // la pantalla, requiredWidth deja que el Box lo centre
+                                    // y la carta del medio queda siempre en el centro.
+                                    val rowWidth = cardWidth * (slots * 2 + 1) + 10.dp * (slots * 2)
                                     Row(
-                                        modifier = Modifier.fillMaxHeight(),
+                                        modifier = Modifier
+                                            .requiredWidth(rowWidth)
+                                            .fillMaxHeight(),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     ) {
@@ -668,6 +677,16 @@ fun PlayScreen(
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(bottom = 6.dp),
+                onPlay = { current?.let { play(it) } },
+                onBack = {
+                    when {
+                        insertion != null -> launchJob?.cancel()
+                        menuOpen -> menuOpen = false
+                        selectedRomId != null -> selectedRomId = null
+                    }
+                },
+                onFavorite = { current?.let { viewModel.toggleFavorite(it) } },
+                onDetails = { current?.let { selectedRomId = it.rom.id } },
             )
         }
 

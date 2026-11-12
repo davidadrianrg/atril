@@ -599,7 +599,13 @@ private fun PlayPill(enabledLook: Boolean, onClick: () -> Unit) {
  * y de los overlays (van después en el orden de hijos del Box raíz).
  */
 @Composable
-internal fun PadLegendBar(modifier: Modifier = Modifier) {
+internal fun PadLegendBar(
+    modifier: Modifier = Modifier,
+    onPlay: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
+    onFavorite: (() -> Unit)? = null,
+    onDetails: (() -> Unit)? = null,
+) {
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(50))
@@ -609,17 +615,27 @@ internal fun PadLegendBar(modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PadLegendChip("A", tr("pad.legend.play"))
-        PadLegendChip("B", tr("pad.legend.back"))
-        PadLegendChip("X", tr("pad.legend.favorite"))
-        PadLegendChip("Y", tr("pad.legend.details"))
+        PadLegendChip("A", tr("pad.legend.play"), onPlay)
+        PadLegendChip("B", tr("pad.legend.back"), onBack)
+        PadLegendChip("X", tr("pad.legend.favorite"), onFavorite)
+        PadLegendChip("Y", tr("pad.legend.details"), onDetails)
     }
 }
 
 /** Glifo del botón (A/B/X/Y) seguido de la acción que hace en esta pantalla. */
 @Composable
-private fun PadLegendChip(glyph: String, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun PadLegendChip(glyph: String, label: String, onClick: (() -> Unit)? = null) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = if (onClick != null) {
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        } else {
+            Modifier
+        },
+    ) {
         Box(
             Modifier
                 .size(18.dp)
