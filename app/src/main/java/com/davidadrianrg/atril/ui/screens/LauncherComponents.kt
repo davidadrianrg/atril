@@ -13,6 +13,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material3.ripple
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -235,8 +238,19 @@ internal fun GameCard(
  */
 @Composable
 internal fun FavoriteBadge() {
+    val popScale = remember { androidx.compose.animation.core.Animatable(0.72f) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        popScale.animateTo(
+            1f,
+            androidx.compose.animation.core.spring(
+                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                stiffness = 900f,
+            ),
+        )
+    }
     Row(
         modifier = Modifier
+            .graphicsLayer { scaleX = popScale.value; scaleY = popScale.value }
             .clip(RoundedCornerShape(6.dp))
             .background(LauncherAmber)
             .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -487,6 +501,7 @@ internal fun LauncherCaption(
     secondaryMeta: List<String> = emptyList(),
     modifier: Modifier = Modifier,
     alignStart: Boolean = false,
+    showActions: Boolean = true,
 ) {
     Column(
         modifier = modifier,
@@ -544,6 +559,7 @@ internal fun LauncherCaption(
                 color = LauncherAmber.copy(alpha = 0.8f),
             )
         }
+        if (showActions) {
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             PlayPill(enabledLook = canAttemptLaunch && !playBusy, onClick = onPlay)
@@ -560,6 +576,7 @@ internal fun LauncherCaption(
                 Spacer(Modifier.width(8.dp))
                 Text(tr("launcher.details"), style = MaterialTheme.typography.labelLarge, color = LauncherCream)
             }
+        }
         }
     }
 }
@@ -628,12 +645,22 @@ internal fun PadLegendBar(
 @Composable
 private fun PadLegendChip(glyph: String, label: String, onClick: (() -> Unit)? = null) {
     val scheme = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(if (pressed) 0.90f else 1f, label = "padChipScale")
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = if (onClick != null) {
             Modifier
+                .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
                 .clip(RoundedCornerShape(50))
-                .clickable(role = Role.Button, onClick = onClick)
+                .background(if (pressed) scheme.primary.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
+                .clickable(
+                    interactionSource = interaction,
+                    indication = ripple(),
+                    role = Role.Button,
+                    onClick = onClick,
+                )
                 .padding(horizontal = 4.dp, vertical = 2.dp)
         } else {
             Modifier
