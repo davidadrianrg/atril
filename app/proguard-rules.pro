@@ -17,6 +17,10 @@
 -keepclassmembers class com.davidadrianrg.atril.data.sync.FailedOpInfo { *; }
 -keepclassmembers class com.davidadrianrg.atril.data.update.GitHubReleaseDto { *; }
 -keepclassmembers class com.davidadrianrg.atril.data.update.GitHubAssetDto { *; }
+# Catálogo de emuladores (Moshi reflexivo): R8 no debe renombrar sus campos.
+-keepclassmembers class com.davidadrianrg.atril.core.emulators.** { *; }
+-keepclassmembers class com.davidadrianrg.atril.data.emulators.** { *; }
+-keep class kotlin.Metadata { *; }
 -keep @com.squareup.moshi.JsonClass class * { *; }
 -keep class **JsonAdapter { *; }
 -keepclassmembers class * {

@@ -26,10 +26,12 @@ class EmulatorRepository(
     private val client: OkHttpClient = defaultClient(),
 ) {
 
-    private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
-    private val releasesAdapter = moshi.adapter<List<GhRelease>>(
-        Types.newParameterizedType(List::class.java, GhRelease::class.java),
-    )
+    private val moshi by lazy { Moshi.Builder().add(KotlinJsonAdapterFactory()).build() }
+    private val releasesAdapter by lazy {
+        moshi.adapter<List<GhRelease>>(
+            Types.newParameterizedType(List::class.java, GhRelease::class.java),
+        )
+    }
 
     private val packFile = File(context.filesDir, "emulator_pack.json")
     private val customStore = CustomEmulatorStore(File(context.filesDir, "custom_emulators.json"))

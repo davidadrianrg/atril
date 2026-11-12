@@ -140,6 +140,7 @@ class MainActivity : ComponentActivity() {
                 val themeId by remember { SettingsDataStore(applicationContext).theme }.collectAsState(initial = "")
                 RomMSyncTheme(theme = com.davidadrianrg.atril.core.theme.AppTheme.fromId(themeId)) {
                     RomMSyncApp(startInUpdates = openUpdates, startInEmulators = openEmulators)
+                    com.davidadrianrg.atril.ui.components.CrashReportDialog()
                 }
             }
         }

@@ -28,6 +28,7 @@ class RomMSyncApplication : Application(), Configuration.Provider, ImageLoaderFa
 
     override fun onCreate() {
         super.onCreate()
+        com.davidadrianrg.atril.util.CrashLogger.install(this)
         container = AppContainer(this)
         restorePeriodicSync()
         startForegroundFastSync()
