@@ -52,34 +52,30 @@ internal fun CinematicHero(
 ) {
     Box(modifier.fillMaxSize()) {
         if (url != null) {
-            Crossfade(
-                targetState = url,
-                animationSpec = tween(HERO_CROSSFADE_MS),
-                label = "cinematicHero",
-            ) { currentUrl ->
-                val context = LocalContext.current
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(currentUrl)
-                        .size(HERO_REQUEST_SIZE, HERO_REQUEST_SIZE)
-                        .precision(Precision.INEXACT)
-                        .crossfade(false)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    filterQuality = FilterQuality.Low,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurRadius > 0.dp) {
-                                Modifier.blur(blurRadius)
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .clearAndSetSemantics {},
-                )
-            }
+            val context = LocalContext.current
+            // Sin fundido: al cambiar de juego el fondo cambia de golpe y el
+            // único movimiento es el deslizamiento del carrusel.
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(url)
+                    .size(HERO_REQUEST_SIZE, HERO_REQUEST_SIZE)
+                    .precision(Precision.INEXACT)
+                    .crossfade(false)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                filterQuality = FilterQuality.Low,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurRadius > 0.dp) {
+                            Modifier.blur(blurRadius)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .clearAndSetSemantics {},
+            )
         }
         Box(
             modifier = Modifier

@@ -538,10 +538,6 @@ fun PlayScreen(
                                     },
                             ) { page ->
                                 val selectedItem = visibleItems[page]
-                                // Durante el deslizamiento cada página dibuja solo su
-                                // carta central: si no, el vecino de una página y el
-                                // centro de la siguiente duplican la misma carátula.
-                                val neighborsVisible = !pagerState.isScrollInProgress
                                 val lift = if (liftingRomId == selectedItem.rom.id) cardLift.value else 0f
                                 val hidden = insertion?.item?.rom?.id == selectedItem.rom.id
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -584,7 +580,7 @@ fun PlayScreen(
                                                                 onClickLabel = tr("launcher.details"),
                                                             ) { selectedRomId = item.rom.id },
                                                     )
-                                                    neighborsVisible -> GameCard(
+                                                    else -> GameCard(
                                                         item = item,
                                                         favorite = playStats.statsOf(item).favorite,
                                                         modifier = Modifier
