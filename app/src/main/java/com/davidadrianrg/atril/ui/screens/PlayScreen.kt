@@ -422,9 +422,7 @@ fun PlayScreen(
         Column(
             Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                // Hueco inferior para la leyenda del mando (anclada abajo en el Box).
-                .padding(bottom = if (visibleItems.isNotEmpty()) 24.dp else 0.dp),
+                .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
             LauncherHeader(
                 count = visibleItems.size,
@@ -658,31 +656,15 @@ fun PlayScreen(
                             )
                         }
                     }
-                }
-            }
-        }
 
-        // Gesto de borde: arrastrar desde la izquierda abre el menú.
-        if (menuItems.isNotEmpty() && !menuOpen && insertion == null) {
-            EdgeSwipeZone(
-                onOpen = { menuOpen = true },
-                // Justo después de la zona del gesto Atrás del sistema; en
-                // vertical, en la parte baja (las flechas ocupan el centro).
-                modifier = Modifier
-                    .align(if (landscape) Alignment.CenterStart else Alignment.BottomStart)
-                    .windowInsetsPadding(WindowInsets.systemGestures.only(WindowInsetsSides.Start))
-                    .fillMaxHeight(if (landscape) 0.7f else 0.3f),
-            )
-        }
-
-        // Leyenda del mando: por debajo del snackbar y de los overlays (se
-        // declaran después, así que se dibujan encima) y sin capturar toques.
-        if (visibleItems.isNotEmpty()) {
-            PadLegendBar(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(bottom = 6.dp),
+                // Leyenda del mando en el flujo: nunca se solapa con el texto
+                // del juego (Android · Local, etc.).
+                if (visibleItems.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                    PadLegendBar(
                 onPlay = { current?.let { play(it) } },
                 onBack = {
                     when {
@@ -707,6 +689,23 @@ fun PlayScreen(
                     }
                 },
                 onDetails = { current?.let { selectedRomId = it.rom.id } },
+            )
+                            }
+                }
+                }
+            }
+        }
+
+        // Gesto de borde: arrastrar desde la izquierda abre el menú.
+        if (menuItems.isNotEmpty() && !menuOpen && insertion == null) {
+            EdgeSwipeZone(
+                onOpen = { menuOpen = true },
+                // Justo después de la zona del gesto Atrás del sistema; en
+                // vertical, en la parte baja (las flechas ocupan el centro).
+                modifier = Modifier
+                    .align(if (landscape) Alignment.CenterStart else Alignment.BottomStart)
+                    .windowInsetsPadding(WindowInsets.systemGestures.only(WindowInsetsSides.Start))
+                    .fillMaxHeight(if (landscape) 0.7f else 0.3f),
             )
         }
 
