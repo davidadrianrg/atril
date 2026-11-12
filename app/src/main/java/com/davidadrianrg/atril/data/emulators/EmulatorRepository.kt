@@ -32,20 +32,77 @@ class EmulatorRepository(
     )
 
     private val packFile = File(context.filesDir, "emulator_pack.json")
+    private val customStore = CustomEmulatorStore(File(context.filesDir, "custom_emulators.json"))
 
     /** Catálogo cacheado; si no hay caché o [force], se descarga del repositorio. */
     suspend fun loadPack(force: Boolean = false): List<EmulatorEntry> = withContext(Dispatchers.IO) {
-        if (!force && packFile.isFile) {
+        val pack = if (!force && packFile.isFile) {
             val cached = runCatching { PackParser.parse(packFile.readText()) }.getOrDefault(emptyList())
-            if (cached.isNotEmpty()) return@withContext cached
+            if (cached.isNotEmpty()) cached else downloadPack()
+        } else {
+            downloadPack()
         }
+        pack + customEntries()
+    }
+
+    private fun downloadPack(): List<EmulatorEntry> {
         val body = getText(PACK_URL)
-        PackParser.parse(body).also { entries ->
+        return PackParser.parse(body).also { entries ->
             if (entries.isNotEmpty()) packFile.writeText(body)
         }
     }
 
-    fun installedVersion(packageName: String): String? = try {
+    /** Emuladores añadidos a mano, normalizados al mismo modelo que el pack. */
+    fun customEntries(): List<EmulatorEntry> = customStore.all().map { custom ->
+        EmulatorEntry(
+            id = custom.id,
+            name = custom.name,
+            author = custom.repoUrl.substringAfter("github.com/").substringBefore('/'),
+            repoUrl = custom.repoUrl,
+            categories = listOf("Emulator"),
+            settings = com.davidadrianrg.atril.core.emulators.PackSettings(
+                includePrereleases = custom.includePrereleases,
+                apkFilterRegEx = custom.apkFilterRegEx,
+                versionExtractionRegEx = "",
+                releaseTitleAsVersion = false,
+                preferredApkIndex = 0,
+                autoApkFilterByArch = true,
+                about = custom.repoUrl,
+            ),
+        )
+    }
+
+    fun addCustom(repoUrl: String, name: String, regex: String, prereleases: Boolean): EmulatorEntry {
+        customStore.add(repoUrl, name, regex, prereleases)
+        return customEntries().last { it.repoUrl == repoUrl.trim().removeSuffix("/").removeSuffix(".git") }
+    }
+
+    /** Nombre de paquete real de la entrada (custom: el aprendido del APK). */
+    fun packageNameOf(entry: EmulatorEntry): String =
+        customStore.get(entry.id)?.packageName ?: entry.id
+
+    /** Tras descargar un APK de un emulador manual, aprende su package name. */
+    fun learnPackageName(entry: EmulatorEntry, apkFile: File): String? {
+        if (customStore.get(entry.id) == null) return null
+        val info = runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageArchiveInfo(
+                    apkFile.path,
+                    PackageManager.PackageInfoFlags.of(0),
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageArchiveInfo(apkFile.path, 0)
+            }
+        }.getOrNull() ?: return null
+        val pkg = info.packageName
+        customStore.setPackageName(entry.id, pkg)
+        return pkg
+    }
+
+    fun installedVersion(entry: EmulatorEntry): String? = installedVersionOf(packageNameOf(entry))
+
+    fun installedVersionOf(packageName: String): String? = try {
         val info = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             context.packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
         } else {

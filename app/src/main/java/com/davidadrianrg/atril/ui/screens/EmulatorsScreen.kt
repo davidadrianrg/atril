@@ -1,6 +1,6 @@
 package com.davidadrianrg.atril.ui.screens
 
-import android.content.Context
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,12 +15,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -31,11 +33,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +53,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.davidadrianrg.atril.RomMSyncApplication
 import com.davidadrianrg.atril.core.emulators.EmulatorEntry
 import com.davidadrianrg.atril.core.emulators.PackParser
@@ -59,11 +66,12 @@ import com.davidadrianrg.atril.data.update.InstallLaunchResult
 import com.davidadrianrg.atril.ui.components.Panel
 import com.davidadrianrg.atril.ui.components.PageHeader
 import com.davidadrianrg.atril.ui.components.pageBackground
+import java.io.File
 import kotlinx.coroutines.launch
 
 /**
- * Catálogo de emuladores del pack de Obtainium: importa el JSON del repositorio,
- * elige variante single/dual y consulta las releases de GitHub bajo demanda.
+ * Catálogo de emuladores del pack de Obtainium + emuladores manuales.
+ * Permite instalar/actualizar uno a uno o en cola (los seleccionados).
  */
 @Composable
 fun EmulatorsScreen() {
@@ -72,6 +80,7 @@ fun EmulatorsScreen() {
     val repository = remember { EmulatorRepository(context) }
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var entries by remember { mutableStateOf<List<EmulatorEntry>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -83,9 +92,13 @@ fun EmulatorsScreen() {
     var busyId by remember { mutableStateOf<String?>(null) }
     var progress by remember { mutableStateOf(0f) }
     var checking by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showAdd by remember { mutableStateOf(false) }
+    var queue by remember { mutableStateOf<List<EmulatorEntry>>(emptyList()) }
+    var pendingInstall by remember { mutableStateOf(false) }
 
     fun refreshInstalled(list: List<EmulatorEntry>) {
-        installed = list.associate { it.id to repository.installedVersion(it.id) }
+        installed = list.associate { it.id to repository.installedVersion(it) }
     }
 
     LaunchedEffect(Unit) {
@@ -96,13 +109,17 @@ fun EmulatorsScreen() {
     }
 
     val visible = remember(entries, dual, category, query) {
-        val profile = PackParser.forProfile(entries.orEmpty(), dual)
-        profile
+        PackParser.forProfile(entries.orEmpty(), dual)
             .filter { category == "All" || it.categories.contains(category) }
             .filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
     }
 
-    fun install(entry: EmulatorEntry) {
+    fun afterDownload(entry: EmulatorEntry, file: File) {
+        repository.learnPackageName(entry, file)
+        refreshInstalled(entries.orEmpty())
+    }
+
+    fun launch(entry: EmulatorEntry) {
         if (busyId != null) return
         busyId = entry.id
         progress = 0f
@@ -115,30 +132,62 @@ fun EmulatorsScreen() {
                 }
                 latest = latest + (entry.id to release.version)
                 val file = repository.download(release) { progress = it }
+                afterDownload(entry, file)
                 when (val result = container.apkInstallHelper.launchInstaller(file)) {
                     InstallLaunchResult.Started ->
                         snackbar.showSnackbar(tr("emulators.installer_opened", entry.name, release.version))
                     InstallLaunchResult.NeedsPermission ->
                         snackbar.showSnackbar(tr("emulators.needs_install_permission"))
-                    is InstallLaunchResult.Error ->
-                        snackbar.showSnackbar(result.message)
+                    is InstallLaunchResult.Error -> snackbar.showSnackbar(result.message)
                 }
             } catch (e: Exception) {
                 snackbar.showSnackbar(e.message ?: tr("emulators.error"))
             } finally {
                 busyId = null
-                refreshInstalled(entries.orEmpty())
             }
         }
     }
 
+    fun processQueue() {
+        if (busyId != null || pendingInstall || queue.isEmpty()) return
+        val next = queue.first()
+        queue = queue.drop(1)
+        busyId = next.id
+        progress = 0f
+        scope.launch {
+            try {
+                val release = repository.latestRelease(next, dualScreen = dual) ?: return@launch
+                latest = latest + (next.id to release.version)
+                val file = repository.download(release) { progress = it }
+                afterDownload(next, file)
+                pendingInstall = true
+                container.apkInstallHelper.launchInstaller(file)
+            } catch (e: Exception) {
+                snackbar.showSnackbar(e.message ?: tr("emulators.error"))
+            } finally {
+                busyId = null
+            }
+        }
+    }
+
+    // Al volver del instalador del sistema, sigue con el siguiente de la cola.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && pendingInstall) {
+                pendingInstall = false
+                processQueue()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     fun checkUpdates() {
-        val list = entries.orEmpty()
         checking = true
         scope.launch {
             try {
-                for (entry in list) {
-                    val version = repository.installedVersion(entry.id) ?: continue
+                for (entry in entries.orEmpty()) {
+                    val version = repository.installedVersion(entry) ?: continue
                     val release = repository.latestRelease(entry, dualScreen = dual) ?: continue
                     if (VersionCompare.isNewer(release.version, version)) {
                         latest = latest + (entry.id to release.version)
@@ -157,6 +206,9 @@ fun EmulatorsScreen() {
                 title = tr("nav.emulators"),
                 compact = false,
                 actions = {
+                    IconButton(onClick = { showAdd = true }) {
+                        Icon(Icons.Filled.Add, contentDescription = tr("emulators.add"))
+                    }
                     IconButton(onClick = { checkUpdates() }, enabled = !checking && entries != null) {
                         if (checking) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -199,6 +251,7 @@ fun EmulatorsScreen() {
                             .onFailure { error = it.message }
                             .getOrDefault(emptyList())
                             .also { refreshInstalled(it) }
+                        selected = emptySet()
                     }
                 }) { Text(tr("emulators.refresh")) }
             }
@@ -210,25 +263,34 @@ fun EmulatorsScreen() {
                     .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf("Emulator" to "emulators.filter.emulators", "Utilities" to "emulators.filter.utilities", "All" to "emulators.filter.all")
-                    .forEach { (key, label) ->
-                        FilterChip(
-                            selected = category == key,
-                            onClick = { category = key },
-                            label = { Text(tr(label)) },
-                        )
-                    }
+                listOf(
+                    "Emulator" to "emulators.filter.emulators",
+                    "Utilities" to "emulators.filter.utilities",
+                    "All" to "emulators.filter.all",
+                ).forEach { (key, label) ->
+                    FilterChip(selected = category == key, onClick = { category = key }, label = { Text(tr(label)) })
+                }
                 Spacer(Modifier.width(12.dp))
-                FilterChip(
-                    selected = !dual,
-                    onClick = { dual = false },
-                    label = { Text(tr("emulators.profile.single")) },
-                )
-                FilterChip(
-                    selected = dual,
-                    onClick = { dual = true },
-                    label = { Text(tr("emulators.profile.dual")) },
-                )
+                FilterChip(selected = !dual, onClick = { dual = false }, label = { Text(tr("emulators.profile.single")) })
+                FilterChip(selected = dual, onClick = { dual = true }, label = { Text(tr("emulators.profile.dual")) })
+            }
+
+            if (selected.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Button(onClick = {
+                        val chosen = visible.filter { it.id in selected }
+                        selected = emptySet()
+                        queue = queue + chosen
+                        processQueue()
+                    }) { Text(tr("emulators.install_selected", selected.size)) }
+                    TextButton(onClick = { selected = emptySet() }) {
+                        Text(tr("emulators.clear_selection"))
+                    }
+                }
             }
 
             when {
@@ -258,13 +320,88 @@ fun EmulatorsScreen() {
                             latestVersion = latest[entry.id],
                             busy = busyId == entry.id,
                             progress = progress,
-                            onInstall = { install(entry) },
+                            checked = entry.id in selected,
+                            onCheckedChange = { checked ->
+                                selected = if (checked) selected + entry.id else selected - entry.id
+                            },
+                            onInstall = { launch(entry) },
                         )
                     }
                 }
             }
         }
     }
+
+    if (showAdd) {
+        AddEmulatorDialog(
+            onDismiss = { showAdd = false },
+            onAdd = { url, name, regex, prereleases ->
+                val valid = url.contains("github.com/") &&
+                    url.substringAfter("github.com/").contains('/')
+                if (!valid) {
+                    scope.launch { snackbar.showSnackbar(tr("emulators.invalid_url")) }
+                } else {
+                    val added = repository.addCustom(url, name, regex, prereleases)
+                    entries = (entries.orEmpty() + added).distinctBy { it.id }
+                    refreshInstalled(entries.orEmpty())
+                    showAdd = false
+                    scope.launch { snackbar.showSnackbar(tr("emulators.added", added.name)) }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun AddEmulatorDialog(
+    onDismiss: () -> Unit,
+    onAdd: (String, String, String, Boolean) -> Unit,
+) {
+    var url by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var regex by remember { mutableStateOf("") }
+    var prereleases by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("emulators.add.title")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                TextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text(tr("emulators.add.url")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(tr("emulators.add.name")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextField(
+                    value = regex,
+                    onValueChange = { regex = it },
+                    label = { Text(tr("emulators.add.regex")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = prereleases, onCheckedChange = { prereleases = it })
+                    Spacer(Modifier.width(10.dp))
+                    Text(tr("emulators.add.prereleases"))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onAdd(url, name, regex, prereleases) }) {
+                Text(tr("emulators.add.confirm"))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("common.cancel")) } },
+    )
 }
 
 @Composable
@@ -274,12 +411,15 @@ private fun EmulatorRow(
     latestVersion: String?,
     busy: Boolean,
     progress: Float,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
     onInstall: () -> Unit,
 ) {
     val update = VersionCompare.isNewer(latestVersion, installedVersion)
     Panel(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = checked, onCheckedChange = onCheckedChange)
                 Column(Modifier.weight(1f)) {
                     Text(entry.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
@@ -307,9 +447,7 @@ private fun EmulatorRow(
                         modifier = Modifier.size(30.dp),
                         strokeWidth = 3.dp,
                     )
-                    installedVersion == null -> Button(onClick = onInstall) {
-                        Text(tr("emulators.install"))
-                    }
+                    installedVersion == null -> Button(onClick = onInstall) { Text(tr("emulators.install")) }
                     update -> Button(onClick = onInstall) { Text(tr("emulators.update")) }
                     else -> OutlinedButton(onClick = onInstall) { Text(tr("emulators.reinstall")) }
                 }
