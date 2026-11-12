@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.DownloadForOffline
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material.icons.outlined.Image
@@ -970,6 +971,70 @@ fun ConfigScreen(
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     tr("config.launcher_bg.hint"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // ── Copia de seguridad ──────────────────────────────────────
+            SettingsSection(
+                icon = Icons.Outlined.SettingsBackupRestore,
+                title = tr("backup.title"),
+            ) {
+                val backup = remember {
+                    com.davidadrianrg.atril.data.backup.BackupManager(
+                        context,
+                        com.davidadrianrg.atril.data.local.SettingsDataStore(context),
+                    )
+                }
+                val backupScope = androidx.compose.runtime.rememberCoroutineScope()
+                var includeSecrets by remember { mutableStateOf(false) }
+                var backupStatus by remember { mutableStateOf<String?>(null) }
+
+                val createDoc = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json"),
+                ) { uri ->
+                    if (uri != null) backupScope.launch {
+                        runCatching {
+                            val json = backup.export(includeSecrets)
+                            context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                        }
+                        backupStatus = tr("backup.exported")
+                    }
+                }
+                val openDoc = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+                ) { uri ->
+                    if (uri != null) backupScope.launch {
+                        val text = runCatching {
+                            context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                        }.getOrNull()
+                        val ok = text != null && backup.import(text)
+                        backupStatus = tr(if (ok) "backup.imported" else "backup.import_failed")
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { createDoc.launch("atril-backup.json") }) {
+                        Text(tr("backup.export"))
+                    }
+                    OutlinedButton(onClick = { openDoc.launch(arrayOf("application/json")) }) {
+                        Text(tr("backup.import"))
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = includeSecrets, onCheckedChange = { includeSecrets = it })
+                    Spacer(Modifier.width(10.dp))
+                    Text(tr("backup.include_secrets"), style = MaterialTheme.typography.bodyMedium)
+                }
+                backupStatus?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    tr("backup.hint"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

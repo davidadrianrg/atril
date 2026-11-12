@@ -33,6 +33,7 @@ class RomMSyncApplication : Application(), Configuration.Provider, ImageLoaderFa
         startForegroundFastSync()
         restoreSaveWatch()
         scheduleUpdateChecks()
+        com.davidadrianrg.atril.emulators.EmulatorUpdateWorker.schedule(this)
     }
 
     /**

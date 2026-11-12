@@ -66,7 +66,7 @@ import com.davidadrianrg.atril.ui.screens.SyncScreen
 import com.davidadrianrg.atril.util.hasAllFilesAccess
 
 @Composable
-fun RomMSyncApp(startInUpdates: Boolean = false) {
+fun RomMSyncApp(startInUpdates: Boolean = false, startInEmulators: Boolean = false) {
     val context = LocalContext.current
     val container = (context.applicationContext as RomMSyncApplication).container
 
@@ -134,6 +134,7 @@ fun RomMSyncApp(startInUpdates: Boolean = false) {
                 navController = navController,
                 needsOnboarding = needsOnboarding,
                 startInUpdates = startInUpdates,
+                startInEmulators = startInEmulators,
                 menuItems = navItems,
                 onNavigate = { route -> navigateTo(route, navController) },
                 modifier = Modifier
@@ -170,6 +171,7 @@ private fun AppNavHost(
     navController: NavHostController,
     needsOnboarding: Boolean,
     startInUpdates: Boolean,
+    startInEmulators: Boolean,
     menuItems: List<Screen>,
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -179,6 +181,7 @@ private fun AppNavHost(
         startDestination = when {
             needsOnboarding -> Screen.Config.route
             startInUpdates -> Screen.Config.route
+            startInEmulators -> Screen.Emulators.route
             else -> Screen.Play.route
         },
         modifier = modifier,

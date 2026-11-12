@@ -129,13 +129,17 @@ class MainActivity : ComponentActivity() {
         LocaleController.apply(languageTag)
 
         val openUpdates = intent?.getBooleanExtra(UpdateNotificationManager.EXTRA_OPEN_UPDATES, false) == true
+        val openEmulators = intent?.getBooleanExtra(
+            com.davidadrianrg.atril.emulators.EmulatorUpdateWorker.EXTRA_OPEN_EMULATORS,
+            false,
+        ) == true
 
         setContent {
             val revision by LocaleController.revision.collectAsState()
             key(revision) {
                 val themeId by remember { SettingsDataStore(applicationContext).theme }.collectAsState(initial = "")
                 RomMSyncTheme(theme = com.davidadrianrg.atril.core.theme.AppTheme.fromId(themeId)) {
-                    RomMSyncApp(startInUpdates = openUpdates)
+                    RomMSyncApp(startInUpdates = openUpdates, startInEmulators = openEmulators)
                 }
             }
         }
