@@ -1,7 +1,19 @@
 package com.davidadrianrg.atril.ui.screens
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.core.graphics.drawable.toBitmap
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -102,6 +114,10 @@ fun EmulatorsScreen() {
     }
 
     LaunchedEffect(Unit) {
+        // Versiones detectadas por el chequeo diario en segundo plano.
+        latest = com.davidadrianrg.atril.data.emulators.EmulatorUpdatesStore(
+            File(context.filesDir, "emulator_updates.json"),
+        ).read()
         entries = runCatching { repository.loadPack() }
             .onFailure { error = it.message }
             .getOrDefault(emptyList())
@@ -320,6 +336,7 @@ fun EmulatorsScreen() {
                             latestVersion = latest[entry.id],
                             busy = busyId == entry.id,
                             progress = progress,
+                            installedPackage = if (installed[entry.id] != null) repository.packageNameOf(entry) else null,
                             checked = entry.id in selected,
                             onCheckedChange = { checked ->
                                 selected = if (checked) selected + entry.id else selected - entry.id
@@ -411,6 +428,7 @@ private fun EmulatorRow(
     latestVersion: String?,
     busy: Boolean,
     progress: Float,
+    installedPackage: String?,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     onInstall: () -> Unit,
@@ -420,8 +438,21 @@ private fun EmulatorRow(
         Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+                EmulatorIcon(entry = entry, installedPackage = installedPackage)
+                Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(entry.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            entry.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (installedVersion != null) {
+                            Spacer(Modifier.width(6.dp))
+                            StatusChip(update = update)
+                        }
+                    }
                     Text(
                         entry.settings.about.ifBlank { entry.repoUrl },
                         style = MaterialTheme.typography.bodySmall,
@@ -456,6 +487,56 @@ private fun EmulatorRow(
                 Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
             }
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(update: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Text(
+        text = tr(if (update) "emulators.chip.update" else "emulators.chip.installed"),
+        style = MaterialTheme.typography.labelSmall,
+        color = if (update) scheme.onPrimaryContainer else scheme.onSecondaryContainer,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (update) scheme.primaryContainer else scheme.secondaryContainer)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+private fun EmulatorIcon(entry: EmulatorEntry, installedPackage: String?) {
+    val context = LocalContext.current
+    var icon by remember(entry.id, installedPackage) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(entry.id, installedPackage) {
+        icon = withContext(Dispatchers.IO) {
+            runCatching {
+                if (installedPackage != null) {
+                    context.packageManager.getApplicationIcon(installedPackage)
+                        .toBitmap(96, 96).asImageBitmap()
+                } else {
+                    null
+                }
+            }.getOrNull()
+        }
+    }
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (icon != null) {
+            Image(bitmap = icon!!, contentDescription = null, modifier = Modifier.fillMaxSize())
+        } else {
+            AsyncImage(
+                model = "https://github.com/${entry.owner}.png?size=96",
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
