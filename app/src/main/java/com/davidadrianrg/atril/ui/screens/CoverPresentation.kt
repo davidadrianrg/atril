@@ -23,9 +23,9 @@ internal fun Rom.coverUrlFor(style: CoverStyle): String? =
         screenshots = screenshots,
     )
 
-/** Backdrop URL for the cinematic hero: first screenshot, then the large cover. */
+/** Backdrop URL for the cinematic hero: first screenshot only, never the cover. */
 internal fun Rom.heroBackdropUrl(): String? =
-    CoverArtwork.heroBackdropUrl(screenshots, coverUrlLarge)
+    CoverArtwork.heroBackdropUrl(screenshots)
 
 /**
  * Metadata line shown under the title, with [platform] as the display name.

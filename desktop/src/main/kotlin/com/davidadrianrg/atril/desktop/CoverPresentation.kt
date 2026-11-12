@@ -31,13 +31,12 @@ internal fun coverUrlFor(rep: RomDto, serverUrl: String, style: CoverStyle): Str
     )
 }
 
-/** Backdrop URL for the cinematic hero: first screenshot, then the large cover. */
+/** Backdrop URL for the cinematic hero: first screenshot only, never the cover. */
 internal fun heroBackdropUrl(rep: RomDto, serverUrl: String): String? {
-    val coverUrlLarge = resolveMediaUrl(rep.urlCover, rep.pathCoverLarge, serverUrl)
     val screenshots = rep.mergedScreenshots
         .map { resolveMediaUrl(null, it, serverUrl) }
         .mapNotNull { it }
-    return CoverArtwork.heroBackdropUrl(screenshots, coverUrlLarge)
+    return CoverArtwork.heroBackdropUrl(screenshots)
 }
 
 /**
