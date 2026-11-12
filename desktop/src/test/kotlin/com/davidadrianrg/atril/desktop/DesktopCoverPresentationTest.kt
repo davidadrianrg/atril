@@ -144,13 +144,10 @@ class DesktopCoverPresentationTest {
     }
 
     @Test
-    fun `hero falls back to the large cover when there is no screenshot`() {
+    fun `hero is null without a screenshot even when the cover exists`() {
         val dto = rom(pathCoverLarge = "/assets/romm/resources/roms/7/cover/big.png")
 
-        assertEquals(
-            "http://romm.local:8080/assets/romm/resources/roms/7/cover/big.png",
-            heroBackdropUrl(dto, server),
-        )
+        assertNull(heroBackdropUrl(dto, server))
     }
 
     @Test
@@ -180,11 +177,11 @@ class DesktopCoverPresentationTest {
     }
 
     @Test
-    fun `a local-game shaped dto resolves its file url for cover and hero`() {
+    fun `a local-game shaped dto resolves its file url for the cover but not the hero`() {
         val dto = rom(urlCover = "file:///roms/local-game.zip")
 
         assertEquals("file:///roms/local-game.zip", coverUrlFor(dto, server, CoverStyle.CASE))
-        assertEquals("file:///roms/local-game.zip", heroBackdropUrl(dto, server))
+        assertNull(heroBackdropUrl(dto, server))
         assertEquals("Mega Drive", metadataLine(dto, "Mega Drive", server))
         assertNull(metadataLine(dto, null, server))
     }

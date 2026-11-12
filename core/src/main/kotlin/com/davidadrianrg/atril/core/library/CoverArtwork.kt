@@ -35,13 +35,13 @@ object CoverArtwork {
     /**
      * Backdrop URL for the cinematic hero.
      *
-     * Strictly the first non-blank screenshot, then [coverUrlLarge], then null.
-     * [coverUrlSmall] is never a hero fallback: it is too small to upscale.
+     * Only an in-game screenshot (or fanart, when it arrives through the same
+     * list) is valid: the cover is deliberately never reused as the backdrop,
+     * because showing the same artwork twice adds no information.
      *
-     * @return the trimmed URL, or null when both are absent.
+     * @return the trimmed URL, or null when there is no screenshot.
      */
-    fun heroBackdropUrl(screenshots: List<String>, coverUrlLarge: String?): String? =
-        firstNonBlank(screenshots) ?: nonBlank(coverUrlLarge)
+    fun heroBackdropUrl(screenshots: List<String>): String? = firstNonBlank(screenshots)
 
     /** Large cover first, then the small one; absent when both are blank. */
     private fun caseChain(coverUrlLarge: String?, coverUrlSmall: String?): String? =
