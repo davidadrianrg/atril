@@ -1877,11 +1877,8 @@ internal fun RomDetailSheet(
 
         // Action button
         if (isDownloaded || isDownloading) {
-        com.davidadrianrg.atril.ui.components.SectionLabel(
-            tr("game.section.files"),
-            Modifier.padding(start = 4.dp, bottom = 10.dp),
-        )
-        com.davidadrianrg.atril.ui.components.Panel(modifier = Modifier.fillMaxWidth()) {
+        Spacer(modifier = Modifier.size(16.dp))
+        DetailGroup(tr("game.section.files")) {
         when {
             isDownloaded -> {
                 Column(
