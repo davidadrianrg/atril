@@ -9,9 +9,16 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /**
  * Checks whether the app has the MANAGE_EXTERNAL_STORAGE permission
@@ -93,4 +100,24 @@ fun requestIgnoreBatteryOptimizations(context: android.content.Context) {
         data = Uri.parse("package:${context.packageName}")
     }
     context.startActivity(intent)
+}
+
+/**
+ * [hasAllFilesAccess] como estado reactivo: se vuelve a comprobar cada vez que
+ * la app pasa a primer plano, para que el aviso desaparezca al conceder el
+ * permiso en Ajustes y volver atrás, sin esperar a guardar la configuración.
+ */
+@Composable
+fun rememberAllFilesAccess(): Boolean {
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(hasAllFilesAccess()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) granted = hasAllFilesAccess()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    return granted
 }

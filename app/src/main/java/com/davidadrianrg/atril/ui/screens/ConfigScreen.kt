@@ -172,7 +172,8 @@ fun ConfigScreen(
             SettingsCategoryBar(settingsCat) { settingsCat = it }
 
             // ── Permiso de almacenamiento ───────────────────────────────
-            if (!hasAllFilesAccess()) {
+            val hasStorageAccess = com.davidadrianrg.atril.util.rememberAllFilesAccess()
+            if (!hasStorageAccess) {
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
