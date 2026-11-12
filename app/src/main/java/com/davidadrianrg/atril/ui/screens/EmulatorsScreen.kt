@@ -6,9 +6,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.core.graphics.drawable.toBitmap
-import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.horizontalScroll
@@ -31,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -531,11 +530,12 @@ private fun EmulatorIcon(entry: EmulatorEntry, installedPackage: String?) {
         if (icon != null) {
             Image(bitmap = icon!!, contentDescription = null, modifier = Modifier.fillMaxSize())
         } else {
-            AsyncImage(
-                model = "https://github.com/${entry.owner}.png?size=96",
+            // Como Obtainium: sin app instalada no hay icono que mostrar.
+            Icon(
+                Icons.Outlined.Extension,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(22.dp),
             )
         }
     }
