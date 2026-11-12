@@ -77,7 +77,8 @@ fun RomMSyncApp(startInUpdates: Boolean = false) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    val needsOnboarding = !settings.canStart || !hasAllFilesAccess()
+    val hasStorageAccess = com.davidadrianrg.atril.util.rememberAllFilesAccess()
+    val needsOnboarding = !settings.canStart || !hasStorageAccess
     val windowInfo = rememberWindowInfo()
 
     // La pestaña Sync solo existe si la función de sincronizar saves está
