@@ -654,6 +654,14 @@ class SettingsDataStore(private val context: Context) {
         }.getOrDefault(DEFAULT_MAX_DOWNLOADS).coerceIn(1, 5)
     }
 
+    fun getThemeBlocking(): String = runCatching {
+        runBlocking { context.dataStore.data.first()[THEME] ?: "" }
+    }.getOrDefault("")
+
+    fun getLauncherBackgroundBlocking(): String = runCatching {
+        runBlocking { context.dataStore.data.first()[LAUNCHER_BG] ?: "blur" }
+    }.getOrDefault("blur")
+
     fun getRetroArchBasePathBlocking(): String {
         return runCatching {
             runBlocking { context.dataStore.data.first()[RETROARCH_BASE_PATH] ?: DEFAULT_RETROARCH_PATH }

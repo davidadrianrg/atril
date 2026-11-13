@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SportsEsports
@@ -89,6 +90,7 @@ import com.davidadrianrg.atril.core.settings.SettingsCategory
 import com.davidadrianrg.atril.data.update.UpdateCheckResult
 import com.davidadrianrg.atril.data.update.UpdateDownloadState
 import com.davidadrianrg.atril.ui.components.FolderPickerDialog
+import com.davidadrianrg.atril.ui.components.ReportIssueDialog
 import com.davidadrianrg.atril.ui.viewmodel.ConfigViewModel
 import com.davidadrianrg.atril.ui.viewmodel.LibraryScanState
 import com.davidadrianrg.atril.util.hasAllFilesAccess
@@ -133,6 +135,7 @@ fun ConfigScreen(
     var showManualToken by remember { mutableStateOf(false) }
     var settingsCat by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialCategory) }
     var showQrDialog by remember { mutableStateOf(false) }
+    var showReportDialog by remember { mutableStateOf(false) }
     val qrState by viewModel.qrLogin.collectAsState()
 
     // ── Folder picker dialog state ───────────────────────────────────────
@@ -1259,6 +1262,19 @@ fun ConfigScreen(
                     tr("settings.about.version", viewModel.currentVersion),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showReportDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        Icons.Outlined.BugReport,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(tr("report.open"))
+                }
             }
             }
 
@@ -1301,6 +1317,13 @@ fun ConfigScreen(
             }
             }
         }
+    }
+
+    if (showReportDialog) {
+        ReportIssueDialog(
+            rommConfigured = settings.isConfigured,
+            onDismiss = { showReportDialog = false },
+        )
     }
 
     if (showQrDialog) {

@@ -37,6 +37,15 @@ android {
         versionCode = 87
         versionName = "0.9.2"
 
+        // Endpoint opcional para crear issues automáticamente (worker propio).
+        // Sin URL, el botón abre una issue prellenada en GitHub.
+        val reportUrl = (project.findProperty("atril.reportUrl") as String?)
+            ?: System.getenv("ATRIL_REPORT_URL").orEmpty()
+        val reportKey = (project.findProperty("atril.reportKey") as String?)
+            ?: System.getenv("ATRIL_REPORT_KEY").orEmpty()
+        buildConfigField("String", "REPORT_URL", "\"$reportUrl\"")
+        buildConfigField("String", "REPORT_KEY", "\"$reportKey\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
