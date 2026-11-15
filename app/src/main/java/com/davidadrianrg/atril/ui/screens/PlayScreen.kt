@@ -195,6 +195,8 @@ fun PlayScreen(
     var pendingAddPath by remember { mutableStateOf<String?>(null) }
     var coverTargetId by remember { mutableStateOf<String?>(null) }
     var scrapingId by remember { mutableStateOf<String?>(null) }
+    var mediaPick by remember { mutableStateOf<ShelfItem?>(null) }
+    var mediaPickKind by remember { mutableStateOf("cover") }
     val knownPlatforms = remember { runCatching { container.platformDao.getAllPlatformsBlocking() }.getOrDefault(emptyList()) }
     val platformChoices = remember(knownPlatforms) {
         knownPlatforms.map { it.slug to it.name }.distinctBy { it.first }.sortedBy { it.second.lowercase() }
@@ -412,6 +414,19 @@ fun PlayScreen(
         .collectAsState(initial = com.davidadrianrg.atril.core.localgames.ScraperCredentials())
     val fanartStore = remember { com.davidadrianrg.atril.data.media.FanartStore(context) }
     val currentNowState by androidx.compose.runtime.rememberUpdatedState(current)
+    val gameBgPath by androidx.compose.runtime.produceState<String?>(
+        initialValue = null,
+        currentNowState?.rom?.id,
+    ) {
+        val id = currentNowState?.rom?.id
+        value = if (id != null) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                container.settingsRepository.getGameBackgroundBlocking(id)
+            }
+        } else {
+            null
+        }
+    }
     val fanartPath by androidx.compose.runtime.produceState<String?>(
         initialValue = null,
         currentNowState?.rom?.id,
@@ -444,11 +459,13 @@ fun PlayScreen(
         // Fondo cinematográfico: primera captura del juego, si la hay. Es
         // decorativo y va detrás de todo (sin foco ni toques).
         CinematicHero(
-            url = when (launcherBg) {
-                "solid" -> null
+            url = when {
+                launcherBg == "solid" -> null
+                // Imagen elegida a mano tiene prioridad sobre cualquier otra.
+                gameBgPath != null -> gameBgPath
                 // Fanart si está descargado; si aún no, se muestra la captura
                 // del juego mientras se descarga en segundo plano.
-                "fanart" -> fanartPath ?: current?.rom?.heroBackdropUrl()
+                launcherBg == "fanart" -> fanartPath ?: current?.rom?.heroBackdropUrl()
                 else -> current?.rom?.heroBackdropUrl()
             },
             blurRadius = launcherBlur.dp,
@@ -836,6 +853,14 @@ fun PlayScreen(
                 scope.launch { kotlinx.coroutines.delay(1500); if (scrapingId == id) scrapingId = null }
             },
             onPickCover = { coverTargetId = item.localGame!!.id; pickCover.launch("image/*") },
+            onPickMedia = {
+                mediaPickKind = "cover"
+                mediaPick = item
+            },
+            onPickBackground = {
+                mediaPickKind = "background"
+                mediaPick = item
+            },
             onRemove = { selectedRomId = null; viewModel.removeLocal(item) },
             onClose = { selectedRomId = null },
             onSelectDisc = { choiceId ->
@@ -902,6 +927,40 @@ fun PlayScreen(
                 coverStyle = viewPrefs.coverStyle,
             )
         }
+    }
+
+    mediaPick?.let { item ->
+        com.davidadrianrg.atril.ui.components.MediaPickerDialog(
+            title = item.rom.name,
+            platformSlug = item.rom.platformSlug,
+            creds = scraperCreds,
+            kinds = setOf(mediaPickKind),
+            onSelect = { candidate ->
+                mediaPick = null
+                scope.launch {
+                    val file = com.davidadrianrg.atril.data.media.MediaCache.saveTemp(context, candidate.url)
+                    when {
+                        mediaPickKind == "cover" && file != null && item.localGame != null -> {
+                            file.inputStream().use { viewModel.setLocalCover(item.localGame!!.id, it) }
+                            notify(tr("local.scrape.done", candidate.provider))
+                        }
+                        mediaPickKind == "background" && file != null -> {
+                            val saved = com.davidadrianrg.atril.data.media.MediaCache.save(
+                                context, candidate.url, "game_backgrounds", "${item.rom.id}.jpg",
+                            )
+                            if (saved != null) {
+                                viewModel.setGameBackground(item.rom.id, saved)
+                                notify(tr("media.background.saved"))
+                            } else {
+                                notify(tr("media.background.failed"))
+                            }
+                        }
+                        else -> notify(tr("media.background.failed"))
+                    }
+                }
+            },
+            onDismiss = { mediaPick = null },
+        )
     }
 
     if (showSearch) {

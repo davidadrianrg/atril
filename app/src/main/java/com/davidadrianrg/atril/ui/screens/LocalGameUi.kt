@@ -113,6 +113,10 @@ internal fun LocalGameSheet(
     onRename: (String) -> Unit,
     onRetryScrape: () -> Unit,
     onPickCover: () -> Unit,
+    /** Selector con previsualización (ScreenScraper + SteamGridDB). */
+    onPickMedia: () -> Unit = {},
+    /** Elige la imagen de fondo del juego desde el mismo selector. */
+    onPickBackground: () -> Unit = {},
     onRemove: () -> Unit,
     onClose: () -> Unit,
     onSelectDisc: (String) -> Unit = {},
@@ -204,6 +208,14 @@ internal fun LocalGameSheet(
                     Text(tr("local.scrape.retry"))
                 }
                 OutlinedButton(onClick = onPickCover, modifier = Modifier.weight(1f)) { Text(tr("local.cover.choose")) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onPickMedia, modifier = Modifier.weight(1f)) {
+                    Text(tr("local.media.search"))
+                }
+                OutlinedButton(onClick = onPickBackground, modifier = Modifier.weight(1f)) {
+                    Text(tr("local.media.background"))
+                }
             }
             TextButton(onClick = { confirmRemove = true }) {
                 Text(tr("local.remove"), color = MaterialTheme.colorScheme.error)

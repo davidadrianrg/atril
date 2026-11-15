@@ -40,6 +40,8 @@ class SettingsRepository(private val dataStore: SettingsDataStore) {
     fun getRetroArchCoreBlocking(platformSlug: String): String? = dataStore.getRetroArchCoreBlocking(platformSlug)
     fun getInstalledLinksBlocking(): Map<String, String> = dataStore.getInstalledLinksBlocking()
     suspend fun setInstalledLink(romId: Int, packageName: String?) = dataStore.setInstalledLink(romId, packageName)
+    fun getGameBackgroundBlocking(romId: Int): String? = dataStore.getGameBackgroundBlocking(romId)
+    suspend fun setGameBackground(romId: Int, path: String?) = dataStore.setGameBackground(romId, path)
     suspend fun setLanguage(tag: String) = dataStore.setLanguage(tag)
     suspend fun setTheme(id: String) = dataStore.setTheme(id)
     val theme: Flow<String> = dataStore.theme

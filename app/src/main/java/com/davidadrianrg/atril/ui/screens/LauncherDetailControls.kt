@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -103,6 +104,8 @@ internal data class LauncherDetailControls(
     val linkedApp: String?,
     val onLinkApp: (String) -> Unit,
     val onUnlinkApp: () -> Unit,
+    /** Abre el selector de media para elegir el fondo del juego. */
+    val onPickBackground: () -> Unit,
 )
 
 /** Estado de una petición de scrapeo de medio físico a RomM. */
@@ -159,6 +162,9 @@ internal fun rememberLauncherDetailControls(
     var linkedApp by remember(rom.id) {
         mutableStateOf(container.settingsRepository.getInstalledLinksBlocking()[rom.id.toString()])
     }
+    var backgroundPick by remember { mutableStateOf(false) }
+    val pickerCreds by container.settingsRepository.scraperCredentials
+        .collectAsState(initial = com.davidadrianrg.atril.core.localgames.ScraperCredentials())
     val scope = rememberCoroutineScope()
     var scrape by remember(rom.id) { mutableStateOf<ScrapeUi?>(null) }
     // URL conseguida tras un scrapeo: la lista de roms en memoria no se refresca sola.
@@ -229,6 +235,7 @@ internal fun rememberLauncherDetailControls(
             scope.launch { container.settingsRepository.setRetroArchCore(platformKey, core) }
         },
         linkedApp = linkedApp,
+        onPickBackground = { backgroundPick = true },
         onLinkApp = { pkg ->
             scope.launch { container.settingsRepository.setInstalledLink(rom.id, pkg) }
             linkedApp = pkg
@@ -237,7 +244,26 @@ internal fun rememberLauncherDetailControls(
             scope.launch { container.settingsRepository.setInstalledLink(rom.id, null) }
             linkedApp = null
         },
-    )
+    ).also {
+        if (backgroundPick) {
+            com.davidadrianrg.atril.ui.components.MediaPickerDialog(
+                title = rom.name,
+                platformSlug = rom.platformSlug,
+                creds = pickerCreds,
+                kinds = setOf("background"),
+                onSelect = { candidate ->
+                    backgroundPick = false
+                    scope.launch {
+                        val saved = com.davidadrianrg.atril.data.media.MediaCache.save(
+                            context, candidate.url, "game_backgrounds", "${rom.id}.jpg",
+                        )
+                        if (saved != null) container.settingsRepository.setGameBackground(rom.id, saved)
+                    }
+                },
+                onDismiss = { backgroundPick = false },
+            )
+        }
+    }
 }
 
 /** Sección del detalle con los controles del launcher. */
@@ -413,6 +439,10 @@ private fun AppLinkSection(controls: LauncherDetailControls) {
         OutlinedButton(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
             Text(tr("launcher.link.link"))
         }
+    }
+    Spacer(Modifier.height(4.dp))
+    OutlinedButton(onClick = controls.onPickBackground, modifier = Modifier.fillMaxWidth()) {
+        Text(tr("launcher.media.background"))
     }
     if (picking) {
         InstalledAppPickerDialog(

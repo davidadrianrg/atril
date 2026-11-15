@@ -81,6 +81,7 @@ class SettingsDataStore(private val context: Context) {
         val LANGUAGE = stringPreferencesKey("language")
         val THEME = stringPreferencesKey("theme")
         val INSTALLED_LINKS = stringPreferencesKey("installed_app_links")
+        val GAME_BACKGROUNDS = stringPreferencesKey("game_backgrounds")
         val LAUNCHER_BG = stringPreferencesKey("launcher_background")
         val LAUNCHER_BLUR = floatPreferencesKey("launcher_blur_strength")
         // Vista/orden/origen/tamaño/estilo de carátula de la biblioteca. Las
@@ -679,6 +680,29 @@ class SettingsDataStore(private val context: Context) {
         val value = links.entries.joinToString(";") { "${it.key}=${it.value}" }
         context.dataStore.edit { prefs ->
             if (value.isBlank()) prefs.remove(INSTALLED_LINKS) else prefs[INSTALLED_LINKS] = value
+        }
+    }
+
+    // ── Fondo elegido a mano por juego (selector de media) ──
+    fun getGameBackgroundBlocking(romId: Int): String? = runCatching {
+        runBlocking { context.dataStore.data.first()[GAME_BACKGROUNDS] }
+            .orEmpty().split(';')
+            .mapNotNull { entry ->
+                val key = entry.substringBefore('=')
+                val value = entry.substringAfter('=', "")
+                if (key == romId.toString() && value.isNotBlank()) value else null
+            }.firstOrNull()
+    }.getOrNull()
+
+    suspend fun setGameBackground(romId: Int, path: String?) {
+        val current = runCatching {
+            runBlocking { context.dataStore.data.first()[GAME_BACKGROUNDS] }.orEmpty()
+                .split(';').filter { it.contains('=') && it.substringBefore('=') != romId.toString() }
+        }.getOrDefault(emptyList()).toMutableList()
+        if (path != null) current += "$romId=$path"
+        val value = current.joinToString(";")
+        context.dataStore.edit { prefs ->
+            if (value.isBlank()) prefs.remove(GAME_BACKGROUNDS) else prefs[GAME_BACKGROUNDS] = value
         }
     }
 

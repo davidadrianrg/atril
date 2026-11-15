@@ -452,6 +452,11 @@ class ShelfViewModel(
         }
     }
 
+    /** Guarda una imagen de fondo elegida a mano para el juego. */
+    fun setGameBackground(romId: Int, path: String?) {
+        viewModelScope.launch { settingsRepository.setGameBackground(romId, path) }
+    }
+
     fun scrapeLocal(id: String) {
         viewModelScope.launch {
             _messages.tryEmit(
