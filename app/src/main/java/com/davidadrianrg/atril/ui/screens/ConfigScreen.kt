@@ -946,7 +946,7 @@ fun ConfigScreen(
                 val bg by viewModel.launcherBackground.collectAsState(initial = "blur")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
-                        selected = bg != "solid",
+                        selected = bg == "blur",
                         onClick = { viewModel.setLauncherBackground("blur") },
                         label = { Text(tr("config.launcher_bg.blur"), style = MaterialTheme.typography.labelMedium) },
                     )
@@ -955,8 +955,13 @@ fun ConfigScreen(
                         onClick = { viewModel.setLauncherBackground("solid") },
                         label = { Text(tr("config.launcher_bg.solid"), style = MaterialTheme.typography.labelMedium) },
                     )
+                    FilterChip(
+                        selected = bg == "fanart",
+                        onClick = { viewModel.setLauncherBackground("fanart") },
+                        label = { Text(tr("config.launcher_bg.fanart"), style = MaterialTheme.typography.labelMedium) },
+                    )
                 }
-                if (bg != "solid") {
+                if (bg == "blur") {
                     val blur by viewModel.launcherBlur.collectAsState(initial = 28f)
                     var blurLocal by remember(blur) { mutableStateOf(blur) }
                     Spacer(modifier = Modifier.height(10.dp))

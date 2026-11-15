@@ -404,9 +404,29 @@ fun PlayScreen(
     val carouselFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(visibleItems.isNotEmpty()) { runCatching { carouselFocus.requestFocus() } }
 
-    // Fondo del launcher: captura difuminada (por defecto) o degradado sólido del tema.
+    // Fondo del launcher: captura difuminada (por defecto), degradado sólido
+    // del tema o fanart de SteamGridDB descargado a la primera vez.
     val launcherBg by container.settingsRepository.launcherBackground.collectAsState(initial = "blur")
     val launcherBlur by container.settingsRepository.launcherBlur.collectAsState(initial = 28f)
+    val scraperCreds by container.settingsRepository.scraperCredentials
+        .collectAsState(initial = com.davidadrianrg.atril.core.localgames.ScraperCredentials())
+    val fanartStore = remember { com.davidadrianrg.atril.data.media.FanartStore(context) }
+    val currentNowState by androidx.compose.runtime.rememberUpdatedState(current)
+    val fanartPath by androidx.compose.runtime.produceState<String?>(
+        initialValue = null,
+        currentNowState?.rom?.id,
+        launcherBg,
+        scraperCreds.steamGridDbKey,
+    ) {
+        val item = currentNowState
+        value = if (launcherBg == "fanart" && item != null && scraperCreds.steamGridDbKey.isNotBlank()) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                fanartStore.get(item.rom.id, item.rom.name, scraperCreds.steamGridDbKey)
+            }
+        } else {
+            null
+        }
+    }
 
     BackHandler(enabled = showSearch) { showSearch = false }
     BackHandler(enabled = insertion != null) { launchJob?.cancel() }
@@ -424,7 +444,13 @@ fun PlayScreen(
         // Fondo cinematográfico: primera captura del juego, si la hay. Es
         // decorativo y va detrás de todo (sin foco ni toques).
         CinematicHero(
-            url = if (launcherBg == "solid") null else current?.rom?.heroBackdropUrl(),
+            url = when (launcherBg) {
+                "solid" -> null
+                // Fanart si está descargado; si aún no, se muestra la captura
+                // del juego mientras se descarga en segundo plano.
+                "fanart" -> fanartPath ?: current?.rom?.heroBackdropUrl()
+                else -> current?.rom?.heroBackdropUrl()
+            },
             blurRadius = launcherBlur.dp,
             modifier = Modifier.fillMaxSize(),
         )

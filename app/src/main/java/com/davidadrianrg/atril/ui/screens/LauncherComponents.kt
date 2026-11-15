@@ -62,6 +62,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.focusable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
@@ -766,14 +768,19 @@ internal fun LauncherMenuOverlay(
     // Al abrir con el mando, el foco debe entrar en el menú; si no, el D-pad
     // sigue moviendo el carrusel que hay detrás.
     val firstItemFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    var menuFocused by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(visible) {
-        if (visible) {
-            // La animación de entrada dura ~280 ms; pedir el foco antes de que
-            // la fila esté medida no hace nada.
-            kotlinx.coroutines.delay(320)
+        if (!visible) {
+            menuFocused = false
+            return@LaunchedEffect
+        }
+        // La animación de entrada dura ~280 ms; pedir el foco antes de que la
+        // fila esté medida no hace nada. Se reintenta hasta que entre.
+        kotlinx.coroutines.delay(300)
+        repeat(10) {
+            if (menuFocused) return@LaunchedEffect
             runCatching { firstItemFocus.requestFocus() }
-            kotlinx.coroutines.delay(200)
-            runCatching { firstItemFocus.requestFocus() }
+            kotlinx.coroutines.delay(150)
         }
     }
     AnimatedVisibility(visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(180))) {
@@ -861,7 +868,14 @@ internal fun LauncherMenuOverlay(
                             .fillMaxWidth()
                             .heightIn(min = 58.dp)
                             .then(
-                                if (index == 0) Modifier.focusRequester(firstItemFocus) else Modifier,
+                                if (index == 0) {
+                                    Modifier
+                                        .focusRequester(firstItemFocus)
+                                        .focusable()
+                                        .onFocusChanged { state -> if (state.isFocused) menuFocused = true }
+                                } else {
+                                    Modifier.focusable()
+                                },
                             )
                             .focusRing()
                             .clip(RoundedCornerShape(16.dp))
