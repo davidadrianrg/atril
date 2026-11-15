@@ -3,13 +3,13 @@ package com.davidadrianrg.atril.core.input
 import kotlin.math.abs
 
 /** Platform-neutral gamepad intents (Android and Linux map their raw events to these). */
-enum class PadAction { UP, DOWN, LEFT, RIGHT, SELECT, BACK, MENU, DETAILS, PREV_PAGE, NEXT_PAGE, FAVORITE }
+enum class PadAction { UP, DOWN, LEFT, RIGHT, SELECT, BACK, MENU, DETAILS, SEARCH, PREV_PAGE, NEXT_PAGE, FAVORITE }
 
 /**
  * Mapping (documented in Settings → Controls):
  *  D-pad / left stick = move focus · A (south) = select / play · B (east) = back ·
  *  X (west) = favorite · Y (north) = open the game details (Play) ·
- *  Start = open the game details (Play) · Select/Back/Home = open the menu ·
+ *  Start = search downloaded games (Play) · Select/Back/Home = open the menu ·
  *  L1/R1 = previous/next platform filter (Play); R1 opens the Library view options.
  */
 object PadKeyMap {
@@ -39,7 +39,7 @@ object PadKeyMap {
         BUTTON_B -> PadAction.BACK
         BUTTON_X -> PadAction.FAVORITE
         BUTTON_Y -> PadAction.DETAILS
-        BUTTON_START -> PadAction.DETAILS
+        BUTTON_START -> PadAction.SEARCH
         BUTTON_SELECT, BUTTON_MODE -> PadAction.MENU
         BUTTON_L1 -> PadAction.PREV_PAGE
         BUTTON_R1 -> PadAction.NEXT_PAGE
@@ -75,7 +75,7 @@ object PadKeyMap {
             BTN_EAST -> PadAction.BACK
             BTN_WEST -> PadAction.FAVORITE
             BTN_NORTH -> PadAction.DETAILS
-            BTN_START -> PadAction.DETAILS
+            BTN_START -> PadAction.SEARCH
             BTN_SELECT, BTN_MODE -> PadAction.MENU
             BTN_TL -> PadAction.PREV_PAGE
             BTN_TR -> PadAction.NEXT_PAGE

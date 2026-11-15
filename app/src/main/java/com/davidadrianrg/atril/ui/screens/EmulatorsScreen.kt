@@ -48,6 +48,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -98,6 +101,15 @@ fun EmulatorsScreen() {
     var dual by remember { mutableStateOf(false) }
     var category by remember { mutableStateOf("Emulator") }
     var query by remember { mutableStateOf("") }
+    var installedOnly by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
+    val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(searchOpen) {
+        if (searchOpen) {
+            kotlinx.coroutines.delay(100)
+            runCatching { searchFocus.requestFocus() }
+        }
+    }
     var installed by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var latest by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var busyId by remember { mutableStateOf<String?>(null) }
@@ -123,10 +135,11 @@ fun EmulatorsScreen() {
             .also { refreshInstalled(it) }
     }
 
-    val visible = remember(entries, dual, category, query) {
+    val visible = remember(entries, dual, category, query, installedOnly, installed) {
         PackParser.forProfile(entries.orEmpty(), dual)
             .filter { category == "All" || it.categories.contains(category) }
             .filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
+            .filter { !installedOnly || installed[it.id] != null }
             .distinctBy { it.id }
     }
 
@@ -252,19 +265,6 @@ fun EmulatorsScreen() {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                TextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text(tr("emulators.search")) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(50),
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                    ),
-                )
                 TextButton(onClick = {
                     scope.launch {
                         entries = runCatching { repository.loadPack(force = true) }
@@ -274,6 +274,27 @@ fun EmulatorsScreen() {
                         selected = emptySet()
                     }
                 }) { Text(tr("emulators.refresh")) }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { searchOpen = !searchOpen }) {
+                    Icon(
+                        if (searchOpen) Icons.Filled.Close else Icons.Outlined.Search,
+                        contentDescription = tr("emulators.search"),
+                    )
+                }
+            }
+            if (searchOpen) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp)
+                        .focusRequester(searchFocus),
+                    placeholder = { Text(tr("emulators.search")) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(50),
+                )
             }
 
             Row(
@@ -290,6 +311,11 @@ fun EmulatorsScreen() {
                 ).forEach { (key, label) ->
                     FilterChip(selected = category == key, onClick = { category = key }, label = { Text(tr(label)) })
                 }
+                FilterChip(
+                    selected = installedOnly,
+                    onClick = { installedOnly = !installedOnly },
+                    label = { Text(tr("emulators.filter.installed")) },
+                )
                 Spacer(Modifier.width(12.dp))
                 FilterChip(selected = !dual, onClick = { dual = false }, label = { Text(tr("emulators.profile.single")) })
                 FilterChip(selected = dual, onClick = { dual = true }, label = { Text(tr("emulators.profile.dual")) })

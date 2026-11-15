@@ -61,6 +61,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
@@ -762,6 +763,19 @@ internal fun LauncherMenuOverlay(
     onDismiss: () -> Unit,
     currentRoute: String? = null,
 ) {
+    // Al abrir con el mando, el foco debe entrar en el menú; si no, el D-pad
+    // sigue moviendo el carrusel que hay detrás.
+    val firstItemFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(visible) {
+        if (visible) {
+            // La animación de entrada dura ~280 ms; pedir el foco antes de que
+            // la fila esté medida no hace nada.
+            kotlinx.coroutines.delay(320)
+            runCatching { firstItemFocus.requestFocus() }
+            kotlinx.coroutines.delay(200)
+            runCatching { firstItemFocus.requestFocus() }
+        }
+    }
     AnimatedVisibility(visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(180))) {
         Box(
             Modifier
@@ -840,12 +854,15 @@ internal fun LauncherMenuOverlay(
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                items.forEach { screen ->
+                items.forEachIndexed { index, screen ->
                     val selected = screen.route == currentRoute
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .heightIn(min = 58.dp)
+                            .then(
+                                if (index == 0) Modifier.focusRequester(firstItemFocus) else Modifier,
+                            )
                             .focusRing()
                             .clip(RoundedCornerShape(16.dp))
                             .background(

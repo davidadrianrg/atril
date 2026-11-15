@@ -56,6 +56,10 @@ class MainActivity : ComponentActivity() {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) PadEvents.menu.tryEmit(Unit)
                 return true
             }
+            PadAction.SEARCH -> {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) PadEvents.search.tryEmit(Unit)
+                return true
+            }
             PadAction.DETAILS -> {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) PadEvents.details.tryEmit(Unit)
                 return true

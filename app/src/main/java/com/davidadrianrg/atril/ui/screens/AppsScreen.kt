@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -31,6 +32,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -74,6 +78,14 @@ fun AppsScreen(compact: Boolean = false) {
 
     var apps by remember { mutableStateOf<List<InstalledApp>?>(null) }
     var query by remember { mutableStateOf("") }
+    var searchOpen by remember { mutableStateOf(false) }
+    val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) {
+            kotlinx.coroutines.delay(100)
+            runCatching { searchFocus.requestFocus() }
+        }
+    }
     var gamesOnly by remember { mutableStateOf(false) }
     var pendingAdd by remember { mutableStateOf<InstalledApp?>(null) }
 
@@ -95,19 +107,6 @@ fun AppsScreen(compact: Boolean = false) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    TextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text(tr("apps.search")) },
-                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(50),
-                        colors = TextFieldDefaults.colors(
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                        ),
-                    )
                     FilterChip(
                         selected = !gamesOnly,
                         onClick = { gamesOnly = false },
@@ -117,6 +116,27 @@ fun AppsScreen(compact: Boolean = false) {
                         selected = gamesOnly,
                         onClick = { gamesOnly = true },
                         label = { Text(tr("apps.filter.games")) },
+                    )
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = { searchOpen = !searchOpen }) {
+                        Icon(
+                            if (searchOpen) Icons.Filled.Close else Icons.Filled.Search,
+                            contentDescription = tr("apps.search"),
+                        )
+                    }
+                }
+                if (searchOpen) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp)
+                            .focusRequester(searchFocus),
+                        placeholder = { Text(tr("apps.search")) },
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(50),
                     )
                 }
 

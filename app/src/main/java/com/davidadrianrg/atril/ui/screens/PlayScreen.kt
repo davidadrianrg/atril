@@ -24,6 +24,9 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -183,7 +186,9 @@ fun PlayScreen(
     var selectedRomId by remember { mutableStateOf<Int?>(null) }
     var pendingDelete by remember { mutableStateOf<ShelfItem?>(null) }
     var platformFilter by remember { mutableStateOf<String?>(null) }
+    var quickFilter by remember { mutableStateOf<String?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     // ── Juegos locales (fuera de RomM) ──
@@ -237,13 +242,19 @@ fun PlayScreen(
             platformFilter = null
         }
     }
-    val visibleItems = items.filter {
-        platformFilter == null || it.rom.platformSlug == platformFilter
+    val visibleItems = items.filter { item ->
+        val platformOk = platformFilter == null || item.rom.platformSlug == platformFilter
+        val quickOk = when (quickFilter) {
+            "favorites" -> playStats.statsOf(item).favorite
+            "recent" -> playStats.statsOf(item).lastPlayedAt != null
+            else -> true
+        }
+        platformOk && quickOk
     }
     val pagerState = rememberPagerState(pageCount = { visibleItems.size })
     // Juego elegido desde «Seguir jugando»: se lleva el carrusel a su página.
     var pendingSelectId by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(platformFilter) {
+    LaunchedEffect(platformFilter, quickFilter) {
         // Un cambio de filtro vuelve al principio, salvo que la selección
         // venga de «Seguir jugando» (entonces manda esa página).
         if (pendingSelectId == null) pagerState.scrollToPage(0)
@@ -358,7 +369,13 @@ fun PlayScreen(
     LaunchedEffect(Unit) {
         com.davidadrianrg.atril.ui.input.PadEvents.menu.collect { if (insertion == null) menuOpen = !menuOpen }
     }
-    // Start abre el detalle del juego seleccionado; L1/R1 cambian el filtro de plataforma.
+    // Start abre el buscador de juegos descargados.
+    LaunchedEffect(Unit) {
+        com.davidadrianrg.atril.ui.input.PadEvents.search.collect {
+            if (insertion == null && !menuOpen) showSearch = true
+        }
+    }
+    // L1/R1 cambian el filtro de plataforma.
     // `current` y `platformsInShelf` son valores de composición: los colectores de larga vida
     // deben leer la versión actual, no la capturada en el primer frame (lista vacía al cargar).
     val currentNow by androidx.compose.runtime.rememberUpdatedState(current)
@@ -391,8 +408,13 @@ fun PlayScreen(
     val launcherBg by container.settingsRepository.launcherBackground.collectAsState(initial = "blur")
     val launcherBlur by container.settingsRepository.launcherBlur.collectAsState(initial = 28f)
 
+    BackHandler(enabled = showSearch) { showSearch = false }
     BackHandler(enabled = insertion != null) { launchJob?.cancel() }
     BackHandler(enabled = menuOpen && insertion == null) { menuOpen = false }
+    // En Play, B nunca cierra la app: con todo cerrado se consume sin efecto.
+    BackHandler(
+        enabled = insertion == null && !menuOpen && selectedRomId == null && !showSearch,
+    ) {}
 
     Box(
         modifier = Modifier
@@ -437,7 +459,15 @@ fun PlayScreen(
                     } else {
                         LauncherDisplayMode.PHYSICAL.id
                     }
-                    scope.launch { container.settingsRepository.setLauncherDefaultDisplay(next) }
+                    scope.launch {
+                        container.settingsRepository.setLauncherDefaultDisplay(next)
+                        // El juego puede tener una preferencia propia guardada; el
+                        // conmutador global debe aplicarse también a esos juegos.
+                        container.physicalMediaRepository.updateDisplayMode(
+                            visibleItems.map { it.rom.id },
+                            LauncherDisplayMode.fromId(next) ?: LauncherDisplayMode.CARD,
+                        )
+                    }
                 },
             )
 
@@ -447,6 +477,20 @@ fun PlayScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
+                    item {
+                        LauncherPill(
+                            label = tr("play.filter.favorites"),
+                            selected = quickFilter == "favorites",
+                            onClick = { quickFilter = if (quickFilter == "favorites") null else "favorites" },
+                        )
+                    }
+                    item {
+                        LauncherPill(
+                            label = tr("play.filter.recent"),
+                            selected = quickFilter == "recent",
+                            onClick = { quickFilter = if (quickFilter == "recent") null else "recent" },
+                        )
+                    }
                     item {
                         LauncherPill(
                             label = tr("shelf.filter.all"),
@@ -831,6 +875,18 @@ fun PlayScreen(
         }
     }
 
+    if (showSearch) {
+        GameSearchDialog(
+            items = visibleItems,
+            onSelect = { item ->
+                showSearch = false
+                val target = visibleItems.indexOfFirst { it.rom.id == item.rom.id }
+                if (target >= 0) scope.launch { pagerState.animateScrollToPage(target) }
+            },
+            onDismiss = { showSearch = false },
+        )
+    }
+
     // ── Alta de un juego local tras elegir el fichero ──
     pendingAddPath?.let { path ->
         AddLocalGameDialog(
@@ -1091,3 +1147,69 @@ private fun Modifier.fadeEdges(): Modifier = this
             blendMode = BlendMode.DstIn,
         )
     }
+
+/** Buscador de juegos descargados (Start en el mando). */
+@Composable
+private fun GameSearchDialog(
+    items: List<ShelfItem>,
+    onSelect: (ShelfItem) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(120)
+        runCatching { focus.requestFocus() }
+    }
+    val results = remember(items, query) {
+        items.filter { query.isBlank() || it.rom.name.contains(query, ignoreCase = true) }
+    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        androidx.compose.material3.Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                    singleLine = true,
+                    placeholder = { Text(tr("play.search.hint")) },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                )
+                if (results.isEmpty()) {
+                    Text(
+                        tr("play.search.empty"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        Modifier.heightIn(max = 380.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        items(results, key = { it.rom.id }) { item ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                                    .clickable { onSelect(item) }
+                                    .padding(horizontal = 10.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(item.rom.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    item.platformLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
