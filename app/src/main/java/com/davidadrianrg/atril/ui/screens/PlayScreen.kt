@@ -448,6 +448,44 @@ fun PlayScreen(
         ) {
             LauncherHeader(
                 count = visibleItems.size,
+                filters = {
+                    if (platformsInShelf.size > 1) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            item {
+                                LauncherPill(
+                                    label = tr("play.filter.favorites"),
+                                    selected = quickFilter == "favorites",
+                                    onClick = { quickFilter = if (quickFilter == "favorites") null else "favorites" },
+                                )
+                            }
+                            item {
+                                LauncherPill(
+                                    label = tr("play.filter.recent"),
+                                    selected = quickFilter == "recent",
+                                    onClick = { quickFilter = if (quickFilter == "recent") null else "recent" },
+                                )
+                            }
+                            item {
+                                LauncherPill(
+                                    label = tr("shelf.filter.all"),
+                                    selected = platformFilter == null,
+                                    onClick = { platformFilter = null },
+                                )
+                            }
+                            items(platformsInShelf, key = { it.first }) { (slug, label) ->
+                                LauncherPill(
+                                    label = label,
+                                    selected = platformFilter == slug,
+                                    onClick = { platformFilter = slug },
+                                )
+                            }
+                        }
+                    }
+                },
                 onAddLocal = { pickGame.launch(arrayOf("*/*")) },
                 onOpenDownloads = onOpenDownloads,
                 onOpenMenu = { menuOpen = true },
@@ -470,43 +508,6 @@ fun PlayScreen(
                     }
                 },
             )
-
-            if (platformsInShelf.size > 1) {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 18.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    item {
-                        LauncherPill(
-                            label = tr("play.filter.favorites"),
-                            selected = quickFilter == "favorites",
-                            onClick = { quickFilter = if (quickFilter == "favorites") null else "favorites" },
-                        )
-                    }
-                    item {
-                        LauncherPill(
-                            label = tr("play.filter.recent"),
-                            selected = quickFilter == "recent",
-                            onClick = { quickFilter = if (quickFilter == "recent") null else "recent" },
-                        )
-                    }
-                    item {
-                        LauncherPill(
-                            label = tr("shelf.filter.all"),
-                            selected = platformFilter == null,
-                            onClick = { platformFilter = null },
-                        )
-                    }
-                    items(platformsInShelf, key = { it.first }) { (slug, label) ->
-                        LauncherPill(
-                            label = label,
-                            selected = platformFilter == slug,
-                            onClick = { platformFilter = slug },
-                        )
-                    }
-                }
-            }
 
             // En horizontal esta fila robaba altura al carrusel y dejaba la
             // carta central diminuta; el acceso rápido se mantiene en vertical.
@@ -549,7 +550,7 @@ fun PlayScreen(
                             // pasarse del ancho disponible (en vertical la altura sola
                             // haría una carta más ancha que la pantalla).
                             val cardAspect = 0.70f
-                            val maxCardWidth = maxWidth * (if (landscape) 0.42f else 0.86f)
+                            val maxCardWidth = maxWidth * (if (landscape) 0.5f else 0.9f)
                             val cardWidth = minOf(maxHeight * cardAspect, maxCardWidth)
                             val cardHeight = cardWidth / cardAspect
                             // Un único pager con una carta por página, como el
@@ -702,8 +703,10 @@ fun PlayScreen(
                 // del juego (Android · Local, etc.).
                 if (visibleItems.isNotEmpty()) {
                     Box(
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 6.dp),
-                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp, bottom = 6.dp, end = 16.dp),
+                        contentAlignment = Alignment.BottomEnd,
                     ) {
                     PadLegendBar(
                 onPlay = { current?.let { play(it) } },
@@ -982,6 +985,8 @@ private fun LauncherHeader(
     showMenu: Boolean,
     displayMode: String,
     onToggleDisplay: () -> Unit,
+    /** Filtros de plataforma/quick filters, integrados en la cabecera. */
+    filters: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
@@ -999,6 +1004,10 @@ private fun LauncherHeader(
                 fontWeight = FontWeight.Bold,
                 color = LauncherCream,
             )
+        }
+        if (filters != null) {
+            Box(Modifier.weight(2f), contentAlignment = Alignment.CenterStart) { filters() }
+            Spacer(Modifier.width(8.dp))
         }
         if (count > 0) {
             Text(

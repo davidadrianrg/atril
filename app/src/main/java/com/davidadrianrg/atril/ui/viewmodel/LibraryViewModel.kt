@@ -517,12 +517,18 @@ class LibraryViewModel(
         // La hoja puede abrirse antes de que el Flow de sync haya entregado la
         // ruta: se prioriza la que ya está persistida en Room.
         val effectivePath = localPath.takeIf { it.isNotBlank() } ?: romRepository.getLocalPath(rom.id)
+        val linkedApp = settingsRepository?.getInstalledLinksBlocking()?.get(rom.id.toString())
+        val launchPath = if (linkedApp != null && !effectivePath.startsWith("package:")) {
+            "package:$linkedApp"
+        } else {
+            effectivePath
+        }
         return service.prepare(
             GameLaunchRequest(
                 romId = rom.id,
                 platformSlug = rom.platformSlug,
                 platformLabel = platformLabel,
-                localPath = effectivePath,
+                localPath = launchPath,
                 fileName = rom.fileName,
                 knownFileNames = rom.files.map { it.filename },
                 overrideFamilyId = overrideFamilyId,

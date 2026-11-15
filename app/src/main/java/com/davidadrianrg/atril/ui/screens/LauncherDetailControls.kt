@@ -28,10 +28,18 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +99,10 @@ internal data class LauncherDetailControls(
     /** Core elegido; null = automático. */
     val selectedRetroArchCore: String?,
     val onRetroArchCoreChange: (String?) -> Unit,
+    /** Paquete de la app Android vinculada a este juego de RomM (null = ninguna). */
+    val linkedApp: String?,
+    val onLinkApp: (String) -> Unit,
+    val onUnlinkApp: () -> Unit,
 )
 
 /** Estado de una petición de scrapeo de medio físico a RomM. */
@@ -144,6 +156,9 @@ internal fun rememberLauncherDetailControls(
     }
     val retroArchCore by container.settingsRepository.retroArchCore(platformKey)
         .collectAsState(initial = null)
+    var linkedApp by remember(rom.id) {
+        mutableStateOf(container.settingsRepository.getInstalledLinksBlocking()[rom.id.toString()])
+    }
     val scope = rememberCoroutineScope()
     var scrape by remember(rom.id) { mutableStateOf<ScrapeUi?>(null) }
     // URL conseguida tras un scrapeo: la lista de roms en memoria no se refresca sola.
@@ -212,6 +227,15 @@ internal fun rememberLauncherDetailControls(
         selectedRetroArchCore = retroArchCore,
         onRetroArchCoreChange = { core ->
             scope.launch { container.settingsRepository.setRetroArchCore(platformKey, core) }
+        },
+        linkedApp = linkedApp,
+        onLinkApp = { pkg ->
+            scope.launch { container.settingsRepository.setInstalledLink(rom.id, pkg) }
+            linkedApp = pkg
+        },
+        onUnlinkApp = {
+            scope.launch { container.settingsRepository.setInstalledLink(rom.id, null) }
+            linkedApp = null
         },
     )
 }
@@ -355,7 +379,102 @@ internal fun LauncherControlsSection(controls: LauncherDetailControls) {
 
         EmulatorPicker(controls)
         if (controls.showRetroArchCore) RetroArchCorePicker(controls)
+        AppLinkSection(controls)
     }
+}
+
+/** Vincula el juego con la app Android instalada (para juegos descargados de RomM). */
+@Composable
+private fun AppLinkSection(controls: LauncherDetailControls) {
+    var picking by remember { mutableStateOf(false) }
+    Text(
+        tr("launcher.link.title"),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+    )
+    val linked = controls.linkedApp
+    if (linked != null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                linked,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            TextButton(onClick = controls.onUnlinkApp) { Text(tr("launcher.link.unlink")) }
+        }
+        Text(
+            tr("launcher.link.hint"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    } else {
+        OutlinedButton(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
+            Text(tr("launcher.link.link"))
+        }
+    }
+    if (picking) {
+        InstalledAppPickerDialog(
+            onPick = {
+                picking = false
+                controls.onLinkApp(it)
+            },
+            onDismiss = { picking = false },
+        )
+    }
+}
+
+/** Selector de app instalada con buscador. */
+@Composable
+private fun InstalledAppPickerDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var apps by remember { mutableStateOf<List<com.davidadrianrg.atril.apps.InstalledApp>?>(null) }
+    var query by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        apps = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { com.davidadrianrg.atril.apps.InstalledAppsRepository(context).list() }
+                .getOrDefault(emptyList())
+        }
+    }
+    val filtered = remember(apps, query) {
+        apps.orEmpty().filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("launcher.link.picker")) },
+        text = {
+            Column(Modifier.heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text(tr("apps.search")) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    items(filtered, key = { it.packageName }) { app ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onPick(app.packageName) }
+                                .padding(horizontal = 10.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(app.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                app.packageName,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("common.close")) } },
+    )
 }
 
 @Composable

@@ -80,6 +80,7 @@ class SettingsDataStore(private val context: Context) {
         val MEDIA_DOWNLOAD_PATH = stringPreferencesKey("media_download_path")
         val LANGUAGE = stringPreferencesKey("language")
         val THEME = stringPreferencesKey("theme")
+        val INSTALLED_LINKS = stringPreferencesKey("installed_app_links")
         val LAUNCHER_BG = stringPreferencesKey("launcher_background")
         val LAUNCHER_BLUR = floatPreferencesKey("launcher_blur_strength")
         // Vista/orden/origen/tamaño/estilo de carátula de la biblioteca. Las
@@ -661,6 +662,25 @@ class SettingsDataStore(private val context: Context) {
     fun getLauncherBackgroundBlocking(): String = runCatching {
         runBlocking { context.dataStore.data.first()[LAUNCHER_BG] ?: "blur" }
     }.getOrDefault("blur")
+
+    // ── Vincular un juego de RomM con la app Android instalada ──
+    // Formato plano `romId=paquete;...` para no depender de Moshi en R8.
+    fun getInstalledLinksBlocking(): Map<String, String> = runCatching {
+        runBlocking {
+            context.dataStore.data.first()[INSTALLED_LINKS].orEmpty()
+        }.split(';')
+            .filter { it.contains('=') }
+            .associate { it.substringBefore('=') to it.substringAfter('=') }
+    }.getOrDefault(emptyMap())
+
+    suspend fun setInstalledLink(romId: Int, packageName: String?) {
+        val links = getInstalledLinksBlocking().toMutableMap()
+        if (packageName.isNullOrBlank()) links.remove(romId.toString()) else links[romId.toString()] = packageName
+        val value = links.entries.joinToString(";") { "${it.key}=${it.value}" }
+        context.dataStore.edit { prefs ->
+            if (value.isBlank()) prefs.remove(INSTALLED_LINKS) else prefs[INSTALLED_LINKS] = value
+        }
+    }
 
     fun getRetroArchBasePathBlocking(): String {
         return runCatching {

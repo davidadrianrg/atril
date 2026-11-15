@@ -191,45 +191,6 @@ fun SyncScreen() {
                 }
             }
 
-            // -- Boton de sincronizar
-            item {
-                val isRunning = syncState is SyncState.Running || syncState is SyncState.Pending
-                Button(
-                    onClick = { viewModel.triggerSync() },
-                    modifier = Modifier
-                        .widthIn(min = 240.dp)
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    enabled = settings.isConfigured && !isRunning,
-                ) {
-                    if (isRunning) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                        Spacer(modifier = Modifier.size(10.dp))
-                        Text(
-                            if (syncState is SyncState.Pending) tr("android.sync.button.pending")
-                            else tr("saves.sync_button.syncing"),
-                        )
-                    } else {
-                        Icon(Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.size(8.dp))
-                        Text(tr("saves.sync_button.sync_now"))
-                    }
-                }
-
-                if (!settings.isConfigured) {
-                    Text(
-                        tr("android.sync.not_configured"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-            }
-
             // -- Ruta base RetroArch
             item {
                 SyncSection(
@@ -503,6 +464,42 @@ fun SyncScreen() {
                         )
                         Spacer(modifier = Modifier.size(6.dp))
                         Text(tr("android.sync.pending.check_button"))
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val isRunning = syncState is SyncState.Running || syncState is SyncState.Pending
+                    Button(
+                        onClick = { viewModel.triggerSync() },
+                        modifier = Modifier
+                            .widthIn(min = 240.dp)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        enabled = settings.isConfigured && !isRunning,
+                    ) {
+                        if (isRunning) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                            )
+                            Spacer(modifier = Modifier.size(10.dp))
+                            Text(
+                                if (syncState is SyncState.Pending) tr("android.sync.button.pending")
+                                else tr("saves.sync_button.syncing"),
+                            )
+                        } else {
+                            Icon(Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text(tr("saves.sync_button.sync_now"))
+                        }
+                    }
+                    if (!settings.isConfigured) {
+                        Text(
+                            tr("android.sync.not_configured"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
                     }
                 }
             }

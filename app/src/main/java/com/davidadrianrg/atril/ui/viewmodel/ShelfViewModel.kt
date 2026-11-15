@@ -497,6 +497,14 @@ class ShelfViewModel(
                 _messages.tryEmit(tr("sync.before_launch.failed"))
             }
         }
+        // Si el usuario vinculó la app Android instalada, se lanza por paquete
+        // aunque el APK descargado ya se haya borrado (sigue en RomM).
+        val linkedApp = settingsRepository.getInstalledLinksBlocking()[item.rom.id.toString()]
+        val launchPath = if (!item.isLocalSource && linkedApp != null) {
+            "package:$linkedApp"
+        } else {
+            item.localLaunchPath
+        }
         val service = romLaunchService
         if (service != null) {
             return service.prepare(
@@ -504,7 +512,7 @@ class ShelfViewModel(
                     romId = item.rom.id,
                     platformSlug = item.rom.platformSlug,
                     platformLabel = item.platformLabel,
-                    localPath = item.localLaunchPath,
+                    localPath = launchPath,
                     fileName = item.rom.fileName,
                     knownFileNames = item.knownFileNames,
                     overrideFamilyId = item.launchOverride,
