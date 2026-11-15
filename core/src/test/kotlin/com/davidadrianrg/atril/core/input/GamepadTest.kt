@@ -9,7 +9,7 @@ class GamepadTest {
         assertEquals(PadAction.SELECT, PadKeyMap.fromAndroidKeyCode(96))  // BUTTON_A
         assertEquals(PadAction.SELECT, PadKeyMap.fromAndroidKeyCode(23))  // DPAD_CENTER
         assertEquals(PadAction.BACK, PadKeyMap.fromAndroidKeyCode(97))    // BUTTON_B
-        assertEquals(PadAction.DETAILS, PadKeyMap.fromAndroidKeyCode(108)) // BUTTON_START
+        assertEquals(PadAction.SEARCH, PadKeyMap.fromAndroidKeyCode(108))  // BUTTON_START
         assertEquals(PadAction.MENU, PadKeyMap.fromAndroidKeyCode(109))    // BUTTON_SELECT
         assertEquals(PadAction.MENU, PadKeyMap.fromAndroidKeyCode(110))    // BUTTON_MODE
         assertEquals(PadAction.PREV_PAGE, PadKeyMap.fromAndroidKeyCode(102)) // L1
@@ -23,7 +23,7 @@ class GamepadTest {
         assertNull(PadKeyMap.fromEvdevKey(304, 0)) // release
         assertNull(PadKeyMap.fromEvdevKey(304, 2)) // autorepeat
         assertEquals(PadAction.BACK, PadKeyMap.fromEvdevKey(305, 1))
-        assertEquals(PadAction.DETAILS, PadKeyMap.fromEvdevKey(315, 1))
+        assertEquals(PadAction.SEARCH, PadKeyMap.fromEvdevKey(315, 1))
         assertEquals(PadAction.MENU, PadKeyMap.fromEvdevKey(314, 1))
         assertEquals(PadAction.PREV_PAGE, PadKeyMap.fromEvdevKey(310, 1))
         assertEquals(PadAction.NEXT_PAGE, PadKeyMap.fromEvdevKey(311, 1))
@@ -47,9 +47,9 @@ class GamepadTest {
         assertNull(PadKeyMap.fromEvdevKey(307, 0))
     }
 
-    @Test fun `Start keeps opening the details`() {
-        assertEquals(PadAction.DETAILS, PadKeyMap.fromAndroidKeyCode(108)) // BUTTON_START
-        assertEquals(PadAction.DETAILS, PadKeyMap.fromEvdevKey(315, 1))   // BTN_START
+    @Test fun `Start opens the game search`() {
+        assertEquals(PadAction.SEARCH, PadKeyMap.fromAndroidKeyCode(108)) // BUTTON_START
+        assertEquals(PadAction.SEARCH, PadKeyMap.fromEvdevKey(315, 1))   // BTN_START
     }
 
     @Test fun `the existing A and B mappings are unchanged`() {

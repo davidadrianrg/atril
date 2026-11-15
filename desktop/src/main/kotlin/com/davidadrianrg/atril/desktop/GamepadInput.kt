@@ -99,6 +99,8 @@ class GamepadInput(private val onAction: (PadAction) -> Unit) {
             PadAction.BACK -> KeyEvent.VK_ESCAPE
             PadAction.MENU -> KeyEvent.VK_F10
             PadAction.DETAILS -> KeyEvent.VK_F9
+            // El buscador del launcher aún no está en escritorio.
+            PadAction.SEARCH -> KeyEvent.VK_UNDEFINED
             PadAction.PREV_PAGE -> KeyEvent.VK_PAGE_UP
             PadAction.NEXT_PAGE -> KeyEvent.VK_PAGE_DOWN
             // El escritorio no tiene atajo de favorito: X no se traduce a ninguna tecla.
