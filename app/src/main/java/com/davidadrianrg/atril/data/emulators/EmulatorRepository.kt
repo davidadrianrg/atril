@@ -13,6 +13,7 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -183,23 +184,35 @@ class EmulatorRepository(
         val dir = File(context.cacheDir, "emulator-apks").apply { mkdirs() }
         val target = File(dir, safeAssetName(release.assetName))
         val request = Request.Builder().url(release.downloadUrl).build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("HTTP ${response.code}")
-            val body = response.body ?: error("Empty body")
-            val total = body.contentLength().takeIf { it > 0 } ?: release.sizeBytes
-            body.byteStream().use { input ->
-                target.outputStream().use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    var written = 0L
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read <= 0) break
-                        output.write(buffer, 0, read)
-                        written += read
-                        if (total > 0) onProgress((written.toFloat() / total).coerceIn(0f, 1f))
+        val call = client.newCall(request)
+        // Cancelar la corrutina (el usuario quita el emulador de la cola)
+        // corta también la lectura bloqueante de OkHttp.
+        val cancelHook = coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion { if (it != null) call.cancel() }
+        try {
+            call.execute().use { response ->
+                if (!response.isSuccessful) error("HTTP ${response.code}")
+                val body = response.body ?: error("Empty body")
+                val total = body.contentLength().takeIf { it > 0 } ?: release.sizeBytes
+                body.byteStream().use { input ->
+                    target.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        var written = 0L
+                        while (true) {
+                            ensureActive()
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            output.write(buffer, 0, read)
+                            written += read
+                            if (total > 0) onProgress((written.toFloat() / total).coerceIn(0f, 1f))
+                        }
                     }
                 }
             }
+        } catch (e: Throwable) {
+            target.delete()
+            throw e
+        } finally {
+            cancelHook?.dispose()
         }
         if (expectedPackage != null) {
             val info = runCatching {
