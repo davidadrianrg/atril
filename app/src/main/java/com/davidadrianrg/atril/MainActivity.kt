@@ -27,6 +27,7 @@ import com.davidadrianrg.atril.util.LocaleController
 import com.davidadrianrg.atril.util.hasNotificationPermission
 import kotlinx.coroutines.runBlocking
 
+@android.annotation.SuppressLint("RestrictedApi")
 class MainActivity : ComponentActivity() {
 
     private val leftStick = StickRepeater()

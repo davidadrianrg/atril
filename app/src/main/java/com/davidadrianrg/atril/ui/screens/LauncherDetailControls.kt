@@ -119,6 +119,7 @@ internal sealed interface ScrapeUi {
  * contenedor (Room + DataStore), así el launcher y la Biblioteca ven siempre
  * el mismo estado.
  */
+@android.annotation.SuppressLint("ProduceStateDoesNotAssignValue")
 @Composable
 internal fun rememberLauncherDetailControls(
     rom: Rom,

@@ -28,7 +28,13 @@ object DeviceReportCollector {
                 @Suppress("DEPRECATION")
                 pm.getPackageInfo(context.packageName, 0)
             }
-            "${info.versionName} (${info.longVersionCode})"
+            val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                info.versionCode.toLong()
+            }
+            "${info.versionName} ($code)"
         }.getOrDefault("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
 
         val stat = StatFs(Environment.getDataDirectory().absolutePath)

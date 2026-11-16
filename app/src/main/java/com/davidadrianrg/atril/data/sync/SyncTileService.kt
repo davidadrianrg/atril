@@ -15,7 +15,9 @@ class SyncTileService : TileService() {
         super.onStartListening()
         qsTile?.apply {
             state = Tile.STATE_ACTIVE
-            subtitle = tr("android.tile.sync")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                subtitle = tr("android.tile.sync")
+            }
             updateTile()
         }
     }

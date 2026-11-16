@@ -140,6 +140,7 @@ private fun Map<Int, PlayStats>.statsOf(item: ShelfItem): GamePlayStats =
  * si el usuario lo eligió y está descargado, como su medio físico real.
  */
 @OptIn(ExperimentalMaterial3Api::class)
+@android.annotation.SuppressLint("ProduceStateDoesNotAssignValue")
 @Composable
 fun PlayScreen(
     onOpenDownloads: () -> Unit = {},
@@ -1089,6 +1090,7 @@ fun PlayScreen(
     }
 }
 
+@android.annotation.SuppressLint("ProduceStateDoesNotAssignValue")
 @Composable
 private fun Caption(
     item: ShelfItem,
