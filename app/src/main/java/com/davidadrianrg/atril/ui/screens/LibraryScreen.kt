@@ -480,6 +480,18 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
 
     // "Localizar archivo": el picker vive aquí y el detalle solo dispara la acción.
     var locateTarget by remember { mutableStateOf<Pair<Rom, List<Int>>?>(null) }
+    var appPickTarget by remember { mutableStateOf<Pair<Rom, List<Int>>?>(null) }
+
+    appPickTarget?.let { (rom, groupIds) ->
+        com.davidadrianrg.atril.ui.components.InstalledAppPickerDialog(
+            title = tr("library.mark_with_app"),
+            onPick = { app ->
+                appPickTarget = null
+                viewModel.markDownloadedWithApp(rom, groupIds, app.packageName)
+            },
+            onDismiss = { appPickTarget = null },
+        )
+    }
     val locateFilePicker = com.davidadrianrg.atril.ui.components.rememberLocateFilePicker(
         onPicked = { uri, overwrite ->
             val target = locateTarget
@@ -1095,14 +1107,17 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                     viewModel.unmarkDownloadedManually(rom, manualGroupIds)
                     selectedRom = null
                 },
-                onLocateFile = if (manualDownloaded) {
-                    {
-                        locateTarget = rom to manualGroupIds
-                        locateFilePicker()
-                    }
-                } else {
-                    null
+                onLocateFile = {
+                    locateTarget = rom to manualGroupIds
+                    locateFilePicker()
                 },
+                onPickFile = {
+                    locateTarget = rom to manualGroupIds
+                    locateFilePicker()
+                },
+                isAndroidGame = com.davidadrianrg.atril.core.launch.LaunchPlatforms
+                    .canonical(rom.platformSlug) in com.davidadrianrg.atril.core.launch.LaunchTargetResolver.APK_PLATFORMS,
+                onMarkWithApp = { appPickTarget = rom to manualGroupIds },
                 showMoveOption = settings.dualRomsPathsEnabled,
                 isOnSd = isOnSd,
                 isMoving = isMovingRom,
@@ -1574,6 +1589,11 @@ internal fun RomDetailSheet(
     onUnmarkDownloaded: () -> Unit = {},
     /** Abre el selector para asociar un fichero al juego marcado a mano. */
     onLocateFile: (() -> Unit)? = null,
+    /** Abre el selector de ficheros ANTES de marcar (asociar sin descargar). */
+    onPickFile: (() -> Unit)? = null,
+    /** true si la plataforma usa APK (Android): marcar con la app instalada. */
+    isAndroidGame: Boolean = false,
+    onMarkWithApp: (() -> Unit)? = null,
     showMoveOption: Boolean = false,
     isOnSd: Boolean = false,
     isMoving: Boolean = false,
@@ -1885,14 +1905,6 @@ internal fun RomDetailSheet(
                     Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(20.dp))
                     Text("  " + tr("common.download"))
                 }
-                Spacer(modifier = Modifier.size(8.dp))
-                OutlinedButton(
-                    onClick = onMarkDownloaded,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Filled.DownloadDone, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Text("  " + tr("library.mark_downloaded"))
-                }
             }
 
             // ── Buscar coincidencia (si el escaneo no reconoció el juego) ──
@@ -1912,8 +1924,8 @@ internal fun RomDetailSheet(
             }
         }
 
-        // Action button
-        if (isDownloaded || isDownloading) {
+        // Action button: ficheros de lo descargado o acciones de asociado manual
+        if (true) {
         Spacer(modifier = Modifier.size(16.dp))
         DetailGroup(tr("game.section.files")) {
         when {
@@ -2033,7 +2045,7 @@ internal fun RomDetailSheet(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (!wide) androidx.compose.material3.Button(
+                    if (!wide && serverUrl.isNotBlank()) androidx.compose.material3.Button(
                         onClick = onDownload,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -2046,6 +2058,20 @@ internal fun RomDetailSheet(
                     ) {
                         Icon(Icons.Filled.DownloadDone, contentDescription = null, modifier = Modifier.size(20.dp))
                         Text("  " + tr("library.mark_downloaded"))
+                    }
+                    onPickFile?.let {
+                        OutlinedButton(
+                            onClick = it,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(tr("library.pick_file")) }
+                    }
+                    if (isAndroidGame) {
+                        onMarkWithApp?.let {
+                            OutlinedButton(
+                                onClick = it,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text(tr("library.mark_with_app")) }
+                        }
                     }
                 }
             }

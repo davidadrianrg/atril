@@ -64,10 +64,17 @@ internal fun BackgroundPickerDialog(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(title, platformSlug) {
+    val creds = DesktopConfig.scraperCredentials()
+    val hasAnyCredentials = creds.steamGridDbKey.isNotBlank() || creds.screenScraper() != null
+
+    LaunchedEffect(title, platformSlug, hasAnyCredentials) {
+        if (!hasAnyCredentials) {
+            error = tr("media.picker.no_credentials")
+            return@LaunchedEffect
+        }
         candidates = withContext(Dispatchers.IO) {
             runCatching {
-                MediaCatalog().search(title, platformSlug, DesktopConfig.scraperCredentials())
+                MediaCatalog().search(title, platformSlug, creds)
                     .filter { it.kind == if (target == DesktopMediaTarget.COVER) "cover" else "background" }
             }.getOrDefault(emptyList())
         }
@@ -98,6 +105,11 @@ internal fun BackgroundPickerDialog(
                     list == null || busy -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
+                    !hasAnyCredentials -> Text(
+                        error ?: tr("media.picker.no_credentials"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     list.isEmpty() -> Text(
                         tr("media.picker.empty"),
                         style = MaterialTheme.typography.bodyMedium,

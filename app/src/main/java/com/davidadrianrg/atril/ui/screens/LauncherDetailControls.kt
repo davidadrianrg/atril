@@ -514,67 +514,17 @@ private fun AppLinkSection(controls: LauncherDetailControls) {
         }
     }
     if (picking) {
-        InstalledAppPickerDialog(
-            onPick = {
+        com.davidadrianrg.atril.ui.components.InstalledAppPickerDialog(
+            title = tr("launcher.link.picker"),
+            onPick = { app ->
                 picking = false
-                controls.onLinkApp(it)
+                controls.onLinkApp(app.packageName)
             },
             onDismiss = { picking = false },
         )
     }
 }
 
-/** Selector de app instalada con buscador. */
-@Composable
-private fun InstalledAppPickerDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    var apps by remember { mutableStateOf<List<com.davidadrianrg.atril.apps.InstalledApp>?>(null) }
-    var query by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) {
-        apps = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { com.davidadrianrg.atril.apps.InstalledAppsRepository(context).list() }
-                .getOrDefault(emptyList())
-        }
-    }
-    val filtered = remember(apps, query) {
-        apps.orEmpty().filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(tr("launcher.link.picker")) },
-        text = {
-            Column(Modifier.heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    singleLine = true,
-                    placeholder = { Text(tr("apps.search")) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    items(filtered, key = { it.packageName }) { app ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable { onPick(app.packageName) }
-                                .padding(horizontal = 10.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(app.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                app.packageName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("common.close")) } },
-    )
-}
 
 @Composable
 private fun RetroArchCorePicker(controls: LauncherDetailControls) {

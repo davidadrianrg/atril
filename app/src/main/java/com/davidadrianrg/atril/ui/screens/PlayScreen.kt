@@ -201,7 +201,6 @@ fun PlayScreen(
     var coverTargetId by remember { mutableStateOf<String?>(null) }
     var scrapingId by remember { mutableStateOf<String?>(null) }
     var mediaPick by remember { mutableStateOf<ShelfItem?>(null) }
-    var mediaPickKind by remember { mutableStateOf("cover") }
     // Room no admite consultas en el hilo principal: se observa el Flow del DAO.
     // Sin RomM la tabla está vacía y el catálogo integrado rellena la lista.
     val knownPlatforms by container.platformDao.getAllPlatforms().collectAsState(initial = emptyList())
@@ -458,6 +457,13 @@ fun PlayScreen(
     // Foco inicial en el carrusel: ←/→ (D-pad, stick o teclado) cambian de juego.
     val carouselFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(visibleItems.isNotEmpty()) { runCatching { carouselFocus.requestFocus() } }
+    // Volver del menú/detalle/buscador/inserción: el foco vuelve al carrusel
+    // para que A (mando o teclado) juegue sin reinicio de foco silencioso.
+    LaunchedEffect(menuOpen, selectedRomId, showSearch, mediaPick, insertion) {
+        if (insertion == null && !menuOpen && selectedRomId == null && !showSearch && mediaPick == null) {
+            runCatching { carouselFocus.requestFocus() }
+        }
+    }
 
     // Fondo del launcher: captura difuminada (por defecto), degradado sólido
     // del tema o fanart de SteamGridDB descargado a la primera vez.
@@ -707,7 +713,7 @@ fun PlayScreen(
                                                 }
                                                 true
                                             }
-                                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
+                                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.ButtonA ->
                                                 current?.let { play(it); true } ?: false
                                             else -> false
                                         }
@@ -962,14 +968,7 @@ fun PlayScreen(
                 scope.launch { kotlinx.coroutines.delay(1500); if (scrapingId == id) scrapingId = null }
             },
             onPickCover = { coverTargetId = item.localGame!!.id; pickCover.launch("image/*") },
-            onPickMedia = {
-                mediaPickKind = "cover"
-                mediaPick = item
-            },
-            onPickBackground = {
-                mediaPickKind = "background"
-                mediaPick = item
-            },
+            onPickMedia = { mediaPick = item },
             onRemove = { selectedRomId = null; viewModel.removeLocal(item) },
             onClose = { selectedRomId = null },
             onSelectDisc = { choiceId ->
@@ -1043,11 +1042,11 @@ fun PlayScreen(
             title = item.rom.name,
             platformSlug = item.rom.platformSlug,
             creds = scraperCreds,
-            kinds = setOf(mediaPickKind),
+            kinds = setOf("cover", "background"),
             onSelect = { candidate ->
                 mediaPick = null
                 scope.launch {
-                    if (mediaPickKind == "background") {
+                    if (candidate.kind == "background") {
                         // Una sola descarga: el fichero elegido es el fondo.
                         val saved = com.davidadrianrg.atril.data.media.MediaCache.save(
                             context, candidate.url, "game_backgrounds", "${item.rom.id}.jpg",

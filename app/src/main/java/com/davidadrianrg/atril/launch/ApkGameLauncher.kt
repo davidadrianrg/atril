@@ -78,9 +78,22 @@ class ApkGameLauncher(
 
     /** Abre una app ya instalada por su nombre de paquete (sin fichero APK). */
     fun launchPackage(packageName: String): ApkLaunchResult {
-        val intent = context.packageManager.getLaunchIntentForPackage(packageName)
-            ?: return ApkLaunchResult.NoLaunchActivity(packageName)
-        return openInstalled(packageName, intent)
+        context.packageManager.getLaunchIntentForPackage(packageName)?.let {
+            return openInstalled(packageName, it)
+        }
+        // Vínculos antiguos: si se guardó la etiqueta en vez del paquete,
+        // resuelve por nombre de app instalada antes de fallar.
+        val byLabel = runCatching {
+            context.packageManager.getInstalledPackages(0).firstOrNull { pi ->
+                pi.applicationInfo?.loadLabel(context.packageManager).toString() == packageName
+            }?.packageName
+        }.getOrNull()
+        if (byLabel != null) {
+            context.packageManager.getLaunchIntentForPackage(byLabel)?.let {
+                return openInstalled(byLabel, it)
+            }
+        }
+        return ApkLaunchResult.NoLaunchActivity(packageName)
     }
 
     /** Igual que [launch] pero con la inspección del APK en `Dispatchers.IO`. */

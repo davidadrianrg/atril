@@ -54,7 +54,15 @@ fun MediaPickerDialog(
     var kindFilter by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(title, platformSlug) {
+        val hasAnyCredentials = remember(creds) {
+        creds.steamGridDbKey.isNotBlank() || creds.screenScraper() != null
+    }
+
+    LaunchedEffect(title, platformSlug, hasAnyCredentials) {
+        if (!hasAnyCredentials) {
+            error = tr("media.picker.no_credentials")
+            return@LaunchedEffect
+        }
         candidates = MediaCatalog()
             .search(title, platformSlug, creds)
             .filter { it.kind in kinds }
@@ -99,6 +107,11 @@ fun MediaPickerDialog(
                     }
                 }
                 when {
+                    !hasAnyCredentials -> Text(
+                        error ?: tr("media.picker.no_credentials"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     candidates == null -> Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center,

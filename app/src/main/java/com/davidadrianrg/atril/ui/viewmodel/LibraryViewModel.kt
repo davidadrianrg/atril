@@ -475,6 +475,24 @@ class LibraryViewModel(
         }
     }
 
+    /** Marca como descargado apuntando a una app Android ya instalada. */
+    fun markDownloadedWithApp(rom: Rom, groupRomIds: List<Int>, packageName: String) {
+        viewModelScope.launch {
+            groupRomIds.forEach { id ->
+                romRepository.markRomDownloaded(
+                    romId = id,
+                    name = rom.name,
+                    fileName = rom.fileName,
+                    platformId = rom.platformId,
+                    platformSlug = rom.platformSlug,
+                    localPath = "package:$packageName",
+                    fileSizeBytes = rom.fileSizeBytes,
+                )
+            }
+            _events.emit(LibraryEvent.Error(tr("library.file_linked")))
+        }
+    }
+
     /** Quita la marca manual (no borra ficheros: no hay ruta gestionada). */
     fun unmarkDownloadedManually(rom: Rom, groupRomIds: List<Int>) {
         viewModelScope.launch {
