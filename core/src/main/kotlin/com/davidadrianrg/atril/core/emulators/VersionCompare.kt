@@ -3,13 +3,19 @@ package com.davidadrianrg.atril.core.emulators
 /** Comparación tolerante de versiones tipo `1.4.2`, `v1.4`, `2024.10`. */
 object VersionCompare {
 
-    /** true si [latest] parece más nueva que [installed]. */
+    /**
+     * true si [latest] parece más nueva que [installed]. Una versión remota sin
+     * números (`latest`, `nightly`: fuentes HTML o APK directo sin regex de
+     * versión) es desconocida, nunca «más nueva»: si no, el aviso diario de
+     * actualización saltaría para siempre.
+     */
     fun isNewer(latest: String?, installed: String?): Boolean {
         if (latest.isNullOrBlank()) return false
-        if (installed.isNullOrBlank()) return true
         val a = parse(latest)
+        if (a.isEmpty()) return false
+        if (installed.isNullOrBlank()) return true
         val b = parse(installed)
-        if (a.isEmpty() || b.isEmpty()) return latest.trim() != installed.trim()
+        if (b.isEmpty()) return latest.trim() != installed.trim()
         val size = maxOf(a.size, b.size)
         for (i in 0 until size) {
             val x = a.getOrElse(i) { 0 }
