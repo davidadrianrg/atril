@@ -43,5 +43,12 @@ repositorio o GitHub la ignorará silenciosamente.
 - El token de GitHub solo vive en el worker (`wrangler secret`).
 - `ATRIL_KEY` va dentro del APK y es extraíble; sirve como filtro básico, no
   como autenticación fuerte.
-- Activa el namespace KV `RATE` para limitar a 5 reportes/hora por IP.
+- Sin `ATRIL_KEY` el worker responde 503 (cerrado). Para aceptar peticiones
+  anónimas a propósito, define la variable `ALLOW_ANONYMOUS = "true"`.
+- Activa el namespace KV `RATE`: limita a 5 reportes/hora por IP, aplica un
+  tope global diario (`DAILY_LIMIT`, 30 por defecto) y deduplica reportes
+  idénticos durante 7 días (devuelve la URL de la issue existente).
+- Las `@menciones` del texto se neutralizan con un espacio de ancho cero y el
+  diagnóstico va en un bloque de código plegado: el contenido no puede
+  notificar a nadie ni inyectar Markdown en la issue pública.
 - Si hay spam, rota `ATRIL_KEY` y `GITHUB_TOKEN` y publica una app nueva.

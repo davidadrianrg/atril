@@ -21,7 +21,12 @@ object IssueReporter {
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
-    val hasEndpoint: Boolean get() = BuildConfig.REPORT_URL.isNotBlank()
+    /**
+     * Solo hay envío directo con URL **y** clave: las builds locales llevan la
+     * URL por defecto pero la clave vacía, y el worker respondería 403. Sin
+     * ambas se usa la issue prellenada en GitHub.
+     */
+    val hasEndpoint: Boolean get() = BuildConfig.REPORT_URL.isNotBlank() && BuildConfig.REPORT_KEY.isNotBlank()
 
     /** URL de GitHub con el reporte ya escrito (fallback sin backend). */
     fun prefilledIssueUrl(message: String, diagnostics: String): String {
@@ -62,7 +67,7 @@ object IssueReporter {
                 val text = response.body?.string().orEmpty()
                 if (!response.isSuccessful) error("HTTP ${response.code}: ${text.take(200)}")
                 val url = runCatching { JSONObject(text).optString("url") }.getOrDefault("")
-                if (url.isBlank()) error("Respuesta sin URL")
+                if (url.isBlank()) error("HTTP ${response.code}: no issue URL")
                 url
             }
         }
