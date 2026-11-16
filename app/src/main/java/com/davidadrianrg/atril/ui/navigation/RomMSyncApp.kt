@@ -76,16 +76,21 @@ fun RomMSyncApp(
     val context = LocalContext.current
     val container = (context.applicationContext as RomMSyncApplication).container
 
-    val settings by container.settingsRepository.settings.collectAsState(
-        initial = com.davidadrianrg.atril.data.local.ServerConfig("", "", "", 2)
-    )
+    // null hasta la primera emisión de DataStore (M5): sin ajustes no se elige
+    // destino, así Ajustes no se compone y destruye en cada arranque en frío.
+    val settings by container.settingsRepository.settings
+        .collectAsState(initial = null as com.davidadrianrg.atril.data.local.ServerConfig?)
 
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
     val hasStorageAccess = com.davidadrianrg.atril.util.rememberAllFilesAccess()
-    val needsOnboarding = !settings.canStart || !hasStorageAccess
+    val loadedSettings = settings
+    val settingsLoaded = loadedSettings != null
+    val needsOnboarding = loadedSettings == null ||
+        StartupGate.needsOnboarding(loadedSettings, hasStorageAccess)
+    val startRoute = StartupGate.startRoute(loadedSettings, hasStorageAccess, startInUpdates, startInEmulators)
     val windowInfo = rememberWindowInfo()
 
     // La pestaña Sync solo existe si la función de sincronizar saves está
@@ -127,8 +132,10 @@ fun RomMSyncApp(
     // Durante el primer arranque guiado no se sale de Ajustes.
     var configCategoryRequest by remember { mutableStateOf<ConfigCategoryRequest?>(null) }
     val onboardingNow by androidx.compose.runtime.rememberUpdatedState(needsOnboarding)
-    LaunchedEffect(navRequest) {
+    LaunchedEffect(navRequest, settingsLoaded) {
         val event = navRequest ?: return@LaunchedEffect
+        // Sin grafo todavía: se atiende cuando carguen los ajustes.
+        if (!settingsLoaded) return@LaunchedEffect
         onNavRequestHandled(event.id)
         if (onboardingNow) return@LaunchedEffect
         appMenuOpen = false
@@ -165,11 +172,11 @@ fun RomMSyncApp(
                 .weight(1f)
                 .fillMaxHeight(),
         ) {
-            AppNavHost(
+            if (startRoute != null) AppNavHost(
                 navController = navController,
+                startRoute = startRoute,
                 needsOnboarding = needsOnboarding,
                 startInUpdates = startInUpdates,
-                startInEmulators = startInEmulators,
                 configCategoryRequest = configCategoryRequest,
                 menuItems = navItems,
                 onNavigate = { route -> navigateTo(route, navController) },
@@ -205,9 +212,9 @@ fun RomMSyncApp(
 @Composable
 private fun AppNavHost(
     navController: NavHostController,
+    startRoute: String,
     needsOnboarding: Boolean,
     startInUpdates: Boolean,
-    startInEmulators: Boolean,
     configCategoryRequest: ConfigCategoryRequest?,
     menuItems: List<Screen>,
     onNavigate: (String) -> Unit,
@@ -215,12 +222,7 @@ private fun AppNavHost(
 ) {
     NavHost(
         navController = navController,
-        startDestination = when {
-            needsOnboarding -> Screen.Config.route
-            startInUpdates -> Screen.Config.route
-            startInEmulators -> Screen.Emulators.route
-            else -> Screen.Play.route
-        },
+        startDestination = startRoute,
         modifier = modifier,
         enterTransition = { fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 8 } },
         exitTransition = { fadeOut(tween(180)) },

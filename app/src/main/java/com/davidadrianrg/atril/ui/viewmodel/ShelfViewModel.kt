@@ -15,6 +15,10 @@ import com.davidadrianrg.atril.data.local.dao.RomDao
 import com.davidadrianrg.atril.data.local.entity.DownloadedRomEntity
 import com.davidadrianrg.atril.data.repository.LauncherDisplayMode
 import com.davidadrianrg.atril.data.repository.LocateOutcome
+import com.davidadrianrg.atril.data.repository.OfflineShelfCache
+import com.davidadrianrg.atril.data.repository.OfflineShelfCache.Companion.withOfflineCover
+import com.davidadrianrg.atril.core.remote.RomMApiService
+import kotlinx.coroutines.flow.flowOf
 import com.davidadrianrg.atril.data.repository.PhysicalMediaRepository
 import com.davidadrianrg.atril.data.repository.RomFileImportService
 import com.davidadrianrg.atril.data.repository.RomRepository
@@ -113,6 +117,11 @@ class ShelfViewModel(
     private val preLaunchSaveSync: com.davidadrianrg.atril.launch.PreLaunchSaveSync? = null,
     private val romLaunchService: RomLaunchService? = null,
     private val romFileImportService: RomFileImportService? = null,
+    /** Metadatos y carátulas persistidos: Play completo sin red (F1). */
+    private val offlineCache: OfflineShelfCache? = null,
+    /** Cliente de metadatos (timeout corto); inyectable para tests sin red. */
+    private val metadataApi: (serverUrl: String, apiKey: String) -> RomMApiService =
+        { url, key -> NetworkModule.createMetadataApiService(url, key) },
 ) : ViewModel() {
 
     /** Se escribe desde varias corrutinas de IO a la vez: tiene que ser concurrente. */
@@ -132,7 +141,23 @@ class ShelfViewModel(
      */
     /** Juegos de RomM descargados + juegos locales, en una sola lista. */
     private val allItems: kotlinx.coroutines.flow.Flow<List<ShelfItem>> =
-        combine(_items, localGames.games, settingsRepository.localDiscChoices) { remote, local, discChoices ->
+        combine(
+            _items,
+            localGames.games,
+            settingsRepository.localDiscChoices,
+            offlineCache?.entries ?: flowOf(emptyMap()),
+        ) { hydrated, local, discChoices, cached ->
+            // Carátula de disco si es la misma que la remota: sin red y sin
+            // repetir la descarga. Llega como Flow aparte para que guardar una
+            // carátula no relance la hidratación contra el servidor.
+            val remote = if (cached.isEmpty()) {
+                hydrated
+            } else {
+                hydrated.map { item ->
+                    val rom = item.rom.withOfflineCover(cached[item.rom.id])
+                    if (rom === item.rom) item else item.copy(rom = rom)
+                }
+            }
             if (local.isEmpty()) {
                 remote
             } else {
@@ -185,6 +210,11 @@ class ShelfViewModel(
             ) { downloaded, cfg, retroBase -> Triple(downloaded, cfg, retroBase) }
                 .distinctUntilChanged()
                 .collectLatest { (downloaded, cfg, retroBase) ->
+                    // Lo que ya no está descargado sale de la caché offline.
+                    offlineCache?.let { cache ->
+                        val ids = downloaded.map { it.romId }.toSet()
+                        viewModelScope.launch { cache.retain(ids) }
+                    }
                     if (downloaded.isEmpty()) {
                         _items.value = emptyList()
                         _loading.value = false
@@ -197,15 +227,21 @@ class ShelfViewModel(
                             .associateBy { it.slug }
                     }
                     val baseCoverUrl = cfg.serverUrl.trimEnd('/') + "/"
+                    val cached = offlineCache?.let { runCatching { it.snapshot() }.getOrNull() }.orEmpty()
 
-                    // 1) Publicar YA lo que hay en Room (+ lo ya traído del
-                    //    servidor en esta sesión): Play nunca espera a la red
-                    //    para enseñar los juegos descargados.
-                    _items.value = buildItems(downloaded, platforms, HashMap(dtoCache), baseCoverUrl, retroBase)
+                    // 1) Publicar YA lo que hay en Room (+ caché offline + lo ya
+                    //    traído del servidor en esta sesión): Play nunca espera
+                    //    a la red para enseñar los juegos descargados.
+                    _items.value = buildItems(
+                        downloaded,
+                        buildRoms(downloaded, HashMap(dtoCache), cached, baseCoverUrl),
+                        platforms,
+                        retroBase,
+                    )
                     _loading.value = false
 
                     val api = if (cfg.serverUrl.isNotBlank() && cfg.apiKey.isNotBlank()) {
-                        NetworkModule.createMetadataApiService(cfg.serverUrl, cfg.apiKey)
+                        runCatching { metadataApi(cfg.serverUrl, cfg.apiKey) }.getOrNull()
                     } else null
                     if (api == null) return@collectLatest
                     val semaphore = Semaphore(4)
@@ -271,23 +307,38 @@ class ShelfViewModel(
                         }
                     }
 
-                    _items.value = buildItems(downloaded, platforms, dtoById, baseCoverUrl, retroBase)
+                    val roms = buildRoms(downloaded, dtoById, cached, baseCoverUrl)
+                    _items.value = buildItems(downloaded, roms, platforms, retroBase)
+
+                    // 3) Persistir lo que ha llegado del servidor (metadatos +
+                    //    carátula) para el próximo arranque sin red.
+                    offlineCache?.rememberAsync(roms.filterKeys { dtoById.containsKey(it) }.values)
                 }
+        }
+    }
+
+    /** Rom por descargado: del servidor si respondió; si no, de Room + caché offline. */
+    private fun buildRoms(
+        downloaded: List<DownloadedRomEntity>,
+        dtoById: Map<Int, RomDto>,
+        cached: Map<Int, com.davidadrianrg.atril.data.local.entity.RomMetadataCacheEntity>,
+        baseCoverUrl: String,
+    ): Map<Int, Rom> = downloaded.associate { entity ->
+        val dto = dtoById[entity.romId]
+        entity.romId to if (dto != null) {
+            buildRom(entity, dto, baseCoverUrl)
+        } else {
+            OfflineShelfCache.offlineRom(entity, cached[entity.romId])
         }
     }
 
     /** Agrupa los descargados (multidisco) y los convierte en ítems de la estantería. */
     private fun buildItems(
         downloaded: List<DownloadedRomEntity>,
+        romsById: Map<Int, Rom>,
         platforms: Map<String, com.davidadrianrg.atril.data.local.entity.PlatformEntity>,
-        dtoById: Map<Int, RomDto>,
-        baseCoverUrl: String,
         retroBase: String,
     ): List<ShelfItem> {
-                    val romsById = downloaded.associate { entity ->
-                        entity.romId to buildRom(entity, dtoById[entity.romId], baseCoverUrl)
-                    }
-
                     val discEntries = romsById.values.map { rom ->
                         DiscEntry(
                             id = rom.id,
@@ -604,27 +655,10 @@ class ShelfViewModel(
     }
 
     /**
-     * Convierte el DTO del servidor en el modelo de dominio. Si no hay DTO
-     * (servidor caído o ROM eliminada) construye un Rom mínimo con los datos
-     * locales para que el detalle siga abriéndose.
+     * Convierte el DTO del servidor en el modelo de dominio. Sin DTO (servidor
+     * caído o ROM eliminada) se usa [OfflineShelfCache.offlineRom].
      */
-    private fun buildRom(entity: DownloadedRomEntity, dto: RomDto?, baseCoverUrl: String): Rom {
-        if (dto == null) {
-            return Rom(
-                id = entity.romId,
-                name = entity.name,
-                fileName = entity.fileName,
-                fileSizeBytes = entity.fileSizeBytes,
-                platformId = entity.platformId,
-                platformSlug = entity.platformSlug,
-                coverUrlSmall = null,
-                coverUrlLarge = null,
-                files = emptyList(),
-                isMulti = false,
-                revision = null,
-                regions = emptyList(),
-            )
-        }
+    private fun buildRom(entity: DownloadedRomEntity, dto: RomDto, baseCoverUrl: String): Rom {
         return Rom(
             id = dto.id,
             name = dto.name.ifBlank { dto.fileName },
@@ -632,9 +666,13 @@ class ShelfViewModel(
             fileSizeBytes = dto.fileSizeBytes,
             platformId = dto.platformId,
             platformSlug = dto.platformSlug ?: entity.platformSlug,
-            coverUrlSmall = dto.urlCover
-                ?: dto.pathCoverSmall?.let { baseCoverUrl + it.removePrefix("/") },
-            coverUrlLarge = dto.pathCoverLarge?.let { baseCoverUrl + it.removePrefix("/") },
+            // El asset local de RomM antes que la URL externa (igual que en
+            // escritorio); el `?ts=` puede llevar espacios y se codifican.
+            coverUrlSmall = dto.pathCoverSmall?.takeIf { it.isNotBlank() }
+                ?.let { baseCoverUrl + it.removePrefix("/").replace(" ", "%20") }
+                ?: dto.urlCover?.takeIf { it.isNotBlank() },
+            coverUrlLarge = dto.pathCoverLarge?.takeIf { it.isNotBlank() }
+                ?.let { baseCoverUrl + it.removePrefix("/").replace(" ", "%20") },
             files = dto.files.map { RomFile(it.filename, it.size, it.hash) },
             isMulti = dto.multi || dto.hasMultipleFiles,
             revision = dto.revision,

@@ -46,6 +46,12 @@ class AppContainer(private val appContext: Context) {
         cacheDir = java.io.File(appContext.filesDir, "physical-media"),
     )
 
+    /** Metadatos y carátulas de lo descargado, persistidos para Play sin red (F1). */
+    val offlineShelfCache = com.davidadrianrg.atril.data.repository.OfflineShelfCache(
+        dao = database.romMetadataCacheDao(),
+        coverDir = java.io.File(appContext.filesDir, "offline-covers"),
+    )
+
     /** Juegos añadidos a mano (fuera de RomM) y su scrapeo de carátulas. */
     val localGamesRepository = com.davidadrianrg.atril.core.localgames.LocalGamesRepository(
         store = com.davidadrianrg.atril.core.localgames.LocalGameStore(java.io.File(appContext.filesDir, "local_games.json")),
