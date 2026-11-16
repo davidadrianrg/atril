@@ -1394,6 +1394,8 @@ private fun GameSearchDialog(
                                 Modifier
                                     .fillMaxWidth()
                                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                                    // D-pad: se ve qué resultado elegirá la A.
+                                    .focusRing(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                                     .clickable { onSelect(item) }
                                     .padding(horizontal = 10.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,

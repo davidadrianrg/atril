@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.ui.focus.focusRequester
+import com.davidadrianrg.atril.ui.input.focusRing
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextFieldDefaults
@@ -129,15 +130,32 @@ fun EmulatorsScreen() {
         }
     }
 
+    /**
+     * Carga (o recarga) el catálogo. Un fallo ya no sustituye la lista que se
+     * tenía por una vacía, y un éxito limpia el error anterior.
+     */
+    suspend fun reloadPack(force: Boolean) {
+        runCatching { repository.loadPack(force = force) }
+            .onSuccess { pack ->
+                error = null
+                entries = pack
+                refreshInstalled(pack)
+            }
+            .onFailure { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                error = e.message?.takeIf { it.isNotBlank() } ?: tr("emulators.error")
+                if (entries == null) entries = emptyList()
+                // Con catálogo en pantalla el fallo se avisa sin vaciarla.
+                if (!entries.isNullOrEmpty()) scope.launch { snackbar.showSnackbar(tr("emulators.error")) }
+            }
+    }
+
     LaunchedEffect(Unit) {
         // Versiones detectadas por el chequeo diario en segundo plano.
         latest = com.davidadrianrg.atril.data.emulators.EmulatorUpdatesStore(
             File(context.filesDir, "emulator_updates.json"),
         ).read()
-        entries = runCatching { repository.loadPack() }
-            .onFailure { error = it.message }
-            .getOrDefault(emptyList())
-            .also { refreshInstalled(it) }
+        reloadPack(force = false)
     }
 
     val visible = remember(entries, dual, category, query, installedOnly, installed) {
@@ -298,17 +316,20 @@ fun EmulatorsScreen() {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                TextButton(onClick = {
-                    scope.launch {
-                        entries = runCatching { repository.loadPack(force = true) }
-                            .onFailure { error = it.message }
-                            .getOrDefault(emptyList())
-                            .also { refreshInstalled(it) }
-                        selected = emptySet()
-                    }
-                }) { Text(tr("emulators.refresh")) }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            reloadPack(force = true)
+                            selected = emptySet()
+                        }
+                    },
+                    modifier = Modifier.focusRing(RoundedCornerShape(50)),
+                ) { Text(tr("emulators.refresh")) }
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = { searchOpen = !searchOpen }) {
+                IconButton(
+                    onClick = { searchOpen = !searchOpen },
+                    modifier = Modifier.focusRing(CircleShape),
+                ) {
                     Icon(
                         if (searchOpen) Icons.Filled.Close else Icons.Outlined.Search,
                         contentDescription = tr("emulators.search"),
@@ -337,21 +358,39 @@ fun EmulatorsScreen() {
                     .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // `focusRing` es `composed`: cada chip materializa su propio estado.
+                val chipRing = Modifier.focusRing(RoundedCornerShape(8.dp))
                 listOf(
                     "Emulator" to "emulators.filter.emulators",
                     "Utilities" to "emulators.filter.utilities",
                     "All" to "emulators.filter.all",
                 ).forEach { (key, label) ->
-                    FilterChip(selected = category == key, onClick = { category = key }, label = { Text(tr(label)) })
+                    FilterChip(
+                        selected = category == key,
+                        onClick = { category = key },
+                        label = { Text(tr(label)) },
+                        modifier = chipRing,
+                    )
                 }
                 FilterChip(
                     selected = installedOnly,
                     onClick = { installedOnly = !installedOnly },
                     label = { Text(tr("emulators.filter.installed")) },
+                    modifier = chipRing,
                 )
                 Spacer(Modifier.width(12.dp))
-                FilterChip(selected = !dual, onClick = { dual = false }, label = { Text(tr("emulators.profile.single")) })
-                FilterChip(selected = dual, onClick = { dual = true }, label = { Text(tr("emulators.profile.dual")) })
+                FilterChip(
+                    selected = !dual,
+                    onClick = { dual = false },
+                    label = { Text(tr("emulators.profile.single")) },
+                    modifier = chipRing,
+                )
+                FilterChip(
+                    selected = dual,
+                    onClick = { dual = true },
+                    label = { Text(tr("emulators.profile.dual")) },
+                    modifier = chipRing,
+                )
             }
 
             if (selected.isNotEmpty()) {
@@ -379,13 +418,41 @@ fun EmulatorsScreen() {
                     verticalArrangement = Arrangement.Center,
                 ) { CircularProgressIndicator() }
 
+                // Sin catálogo por un fallo (sin red, GitHub limitado): error
+                // explicado y reintento, no un «no hay emuladores» engañoso.
+                entries.isNullOrEmpty() && error != null -> Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        tr("emulators.error"),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        error.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    val retryFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+                    LaunchedEffect(Unit) { runCatching { retryFocus.requestFocus() } }
+                    Button(
+                        onClick = { scope.launch { reloadPack(force = true) } },
+                        modifier = Modifier
+                            .focusRequester(retryFocus)
+                            .focusRing(RoundedCornerShape(50)),
+                    ) { Text(tr("common.retry")) }
+                }
+
                 visible.isEmpty() -> Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(tr("emulators.empty"), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    error?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 }
 
                 else -> LazyColumn(
@@ -497,7 +564,8 @@ private fun EmulatorRow(
     onInstall: () -> Unit,
 ) {
     val update = VersionCompare.isNewer(latestVersion, installedVersion)
-    Panel(modifier = Modifier.fillMaxWidth()) {
+    // El anillo rodea la fila entera cuando el mando enfoca su casilla o su botón.
+    Panel(modifier = Modifier.fillMaxWidth().focusRing(RoundedCornerShape(20.dp))) {
         Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = checked, onCheckedChange = onCheckedChange)
