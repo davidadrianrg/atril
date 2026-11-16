@@ -115,6 +115,9 @@ fun RomMSyncApp(startInUpdates: Boolean = false, startInEmulators: Boolean = fal
         com.davidadrianrg.atril.ui.input.PadEvents.menu.collect { if (menuAllowed) appMenuOpen = !appMenuOpen }
     }
     androidx.activity.compose.BackHandler(enabled = appMenuOpen) { appMenuOpen = false }
+    androidx.compose.runtime.SideEffect {
+        if (!immersive) com.davidadrianrg.atril.ui.input.PadEvents.menuOpen = appMenuOpen
+    }
 
     androidx.compose.runtime.CompositionLocalProvider(
         com.davidadrianrg.atril.ui.components.LocalOpenAppMenu provides { appMenuOpen = true },

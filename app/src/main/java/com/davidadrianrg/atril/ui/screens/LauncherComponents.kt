@@ -680,8 +680,8 @@ internal fun PadLegendBar(
         PadLegendChip("B", tr("pad.legend.back"), onBack)
         PadLegendChip("X", tr("pad.legend.favorite"), onFavorite)
         PadLegendChip("Y", tr("pad.legend.details"), onDetails)
-        PadLegendChip("Start", tr("pad.legend.search"), onSearch)
-        PadLegendChip("Select", tr("pad.legend.menu"), onMenu)
+        PadLegendChip("▶", tr("pad.legend.search"), onSearch)
+        PadLegendChip("≡", tr("pad.legend.menu"), onMenu)
     }
 }
 
@@ -796,15 +796,11 @@ internal fun LauncherMenuOverlay(
         }
     }
     androidx.compose.runtime.LaunchedEffect(visible) {
-        com.davidadrianrg.atril.ui.input.PadEvents.menuOpen = visible
         focusedIndex = if (visible) {
             items.indexOfFirst { it.route == currentRoute }.takeIf { it >= 0 } ?: 0
         } else {
             -1
         }
-    }
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        onDispose { com.davidadrianrg.atril.ui.input.PadEvents.menuOpen = false }
     }
     AnimatedVisibility(visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(180))) {
         Box(

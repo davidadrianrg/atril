@@ -458,6 +458,11 @@ fun PlayScreen(
     BackHandler(enabled = showSearch) { showSearch = false }
     BackHandler(enabled = insertion != null) { launchJob?.cancel() }
     BackHandler(enabled = menuOpen && insertion == null) { menuOpen = false }
+    // El flag que enruta el mando al menú se sincroniza con el estado real de
+    // esta pantalla (el overlay puede quedar fuera del árbol de foco).
+    androidx.compose.runtime.SideEffect {
+        com.davidadrianrg.atril.ui.input.PadEvents.menuOpen = menuOpen
+    }
     // En Play, B nunca cierra la app: con todo cerrado se consume sin efecto.
     BackHandler(
         enabled = insertion == null && !menuOpen && selectedRomId == null && !showSearch,
