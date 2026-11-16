@@ -53,6 +53,7 @@ import java.io.File
 @Composable
 fun ServerAssetsSection(
     romId: Int,
+    platformId: Int = 0,
     serverUrl: String,
     apiKey: String,
 ) {
@@ -64,6 +65,10 @@ fun ServerAssetsSection(
     var uploading by remember { mutableStateOf(false) }
     var downloadingId by remember { mutableStateOf<Int?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    // Archivos del juego en RomM (carpeta o fichero único) y actualización manual.
+    var files by remember { mutableStateOf<List<com.davidadrianrg.atril.core.remote.dto.RomFileDto>>(emptyList()) }
+    var updatingFileId by remember { mutableStateOf<Int?>(null) }
+    var updateTarget by remember { mutableStateOf<com.davidadrianrg.atril.core.remote.dto.RomFileDto?>(null) }
     // Descarga con destino elegible y borrado con confirmación.
     var downloadTarget by remember { mutableStateOf<SaveDto?>(null) }
     var deleteTarget by remember { mutableStateOf<SaveDto?>(null) }
@@ -79,12 +84,41 @@ fun ServerAssetsSection(
                 val api = NetworkModule.createApiService(serverUrl, apiKey)
                 saves = api.getSaves(romId)
                 states = api.getStates(romId)
+                // La ficha completa trae `files` (nombre, tamaño, ruta, hashes).
+                runCatching { api.getRom(romId).files }.getOrNull()?.let { files = it }
             }
             loading = false
         }
     }
 
     LaunchedEffect(romId, serverUrl, apiKey) { reload() }
+
+    val fileUpdatePicker = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent(),
+    ) { uri ->
+        val target = updateTarget
+        updateTarget = null
+        if (uri == null || target == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            updatingFileId = target.id
+            val result = runCatching {
+                val api = NetworkModule.createApiService(serverUrl, apiKey)
+                com.davidadrianrg.atril.core.upload.RomUploader(api).uploadIntoRom(
+                    com.davidadrianrg.atril.data.storage.SafUploadSource.from(context, uri),
+                    romId = romId,
+                    platformId = platformId,
+                ).getOrThrow()
+            }
+            updatingFileId = null
+            message = result.fold(
+                { tr("files.server.update_ok", target.filename) },
+                { tr("files.server.update_error", it.message ?: "") },
+            )
+            if (result.isSuccess) reload()
+        }
+    }
+
+    LaunchedEffect(updateTarget) { if (updateTarget != null) fileUpdatePicker.launch("*/*") }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -180,6 +214,33 @@ fun ServerAssetsSection(
                 fileName = state.fileName,
                 meta = listOfNotNull(state.emulator, formatServerDate(state.updatedAt)).joinToString(" · "),
             )
+        }
+
+        if (files.isNotEmpty()) {
+            Text(
+                tr("files.server.title"),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            files.forEach { file ->
+                AssetRow(
+                    label = tr("files.server.label"),
+                    fileName = file.filename,
+                    meta = file.filePath ?: "",
+                    trailing = if (platformId > 0) { {
+                        if (updatingFileId == file.id) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            IconButton(
+                                onClick = { updateTarget = file },
+                                enabled = updatingFileId == null,
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = tr("files.server.update"))
+                            }
+                        }
+                    } } else null,
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -279,6 +340,11 @@ fun ServerAssetsSection(
                         scope.launch {
                             val result = runCatching {
                                 NetworkModule.createApiService(serverUrl, apiKey).deleteSaves(mapOf("saves" to listOf(save.id)))
+                            }.recoverCatching { e ->
+                                // 404: el save ya no existía (doble borrado o id
+                                // caducado) → se trata como éxito, no como fallo.
+                                if (e is retrofit2.HttpException && e.code() == 404) Unit
+                                else throw e
                             }
                             message = result.fold(
                                 { tr("saves.server.delete_ok") },

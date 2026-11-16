@@ -265,7 +265,7 @@ fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
             // ── Archivos de la entrada (multi-disc = varios files en una ROM) ──
             if (rep.multi || rep.hasMultipleFiles || rep.files.size > 1) {
                 Spacer(Modifier.height(32.dp))
-                val fileRows = rep.files.ifEmpty { listOf(com.davidadrianrg.atril.core.remote.dto.RomFileDto(rep.fileName, rep.fileSizeBytes)) }
+                val fileRows = rep.files.ifEmpty { listOf(com.davidadrianrg.atril.core.remote.dto.RomFileDto(filename = rep.fileName, size = rep.fileSizeBytes)) }
                 Text(tr("game.files.title", fileRows.size), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(10.dp))
                 fileRows.forEach { file ->
@@ -282,7 +282,7 @@ fun GameDetailPanel(card: GameCard, state: DesktopAppState) {
 
             // ── Guardados y estados en el servidor (fecha + subida manual) ──
             Spacer(Modifier.height(32.dp))
-            ServerAssetsPanel(rep.id, state)
+            ServerAssetsPanel(rep.id, rep.platformId, state)
 
             // ── Buscar coincidencia (si el escaneo no reconoció el juego) ──
             Spacer(Modifier.height(20.dp))

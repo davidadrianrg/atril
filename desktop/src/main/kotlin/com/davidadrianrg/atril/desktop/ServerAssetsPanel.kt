@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.remote.dto.RomFileDto
 import com.davidadrianrg.atril.core.remote.dto.SaveDto
 import com.davidadrianrg.atril.core.remote.dto.StateDto
 import kotlinx.coroutines.launch
@@ -32,9 +33,11 @@ import java.io.File
 
 /** Guardados/estados del servidor para un juego + subida manual (desktop). */
 @Composable
-fun ServerAssetsPanel(romId: Int, state: DesktopAppState) {
+fun ServerAssetsPanel(romId: Int, platformId: Int = 0, state: DesktopAppState) {
     var saves by remember { mutableStateOf<List<SaveDto>>(emptyList()) }
     var states by remember { mutableStateOf<List<StateDto>>(emptyList()) }
+    var files by remember { mutableStateOf<List<RomFileDto>>(emptyList()) }
+    var updatingFile by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var uploading by remember { mutableStateOf(false) }
     var downloadingId by remember { mutableStateOf<Int?>(null) }
@@ -50,6 +53,7 @@ fun ServerAssetsPanel(romId: Int, state: DesktopAppState) {
             loading = true
             saves = state.serverSaves(romId)
             states = state.serverStates(romId)
+            files = state.serverFiles(romId)
             loading = false
         }
     }
@@ -121,6 +125,48 @@ fun ServerAssetsPanel(romId: Int, state: DesktopAppState) {
                     )
                 }
                 Text(tr("saves.server.state"), style = MaterialTheme.typography.labelSmall)
+            }
+        }
+
+        if (files.isNotEmpty()) {
+            Text(
+                tr("files.server.title"),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            files.forEach { file ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(file.filename, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            file.filePath ?: "",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (platformId > 0) {
+                        if (updatingFile) {
+                            CircularProgressIndicator(Modifier.height(14.dp), strokeWidth = 2.dp)
+                        } else {
+                            TextButton(
+                                enabled = true,
+                                onClick = {
+                                    val picked = pickFile(tr("files.server.update")) ?: return@TextButton
+                                    scope.launch {
+                                        updatingFile = true
+                                        val result = state.updateServerRomFile(romId, platformId, picked)
+                                        updatingFile = false
+                                        message = result.fold(
+                                            { tr("files.server.update_ok", file.filename) },
+                                            { tr("files.server.update_error", it.message ?: "") },
+                                        )
+                                        if (result.isSuccess) reload()
+                                    }
+                                },
+                            ) { Text(tr("files.server.update"), style = MaterialTheme.typography.labelSmall) }
+                        }
+                    }
+                }
             }
         }
 

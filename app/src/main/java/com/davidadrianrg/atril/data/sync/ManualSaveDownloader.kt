@@ -25,11 +25,14 @@ class ManualSaveDownloader(private val context: Context) {
             runCatching {
                 val settings = SettingsDataStore.get(context)
                 val database = RomSyncDatabase.getDatabase(context)
-
                 val rom = database.romDao().getDownloadedRom(romId)
-                    ?: error(tr("saves.server.download_not_downloaded"))
-                val platform = database.platformDao().getAllPlatformsBlocking()
-                    .firstOrNull { it.slug == rom.platformSlug }
+                if (rom == null && destDir.isNullOrBlank()) {
+                    error(tr("saves.server.download_not_downloaded"))
+                }
+                val platform = rom?.let { r ->
+                    database.platformDao().getAllPlatformsBlocking()
+                        .firstOrNull { it.slug == r.platformSlug }
+                }
 
                 val serverUrl = settings.getServerUrlBlocking()
                 val apiKey = settings.getApiKeyBlocking()
@@ -38,16 +41,21 @@ class ManualSaveDownloader(private val context: Context) {
                 }
 
                 val retroBase = settings.getRetroArchBasePathBlocking()
-                val emulatorId = platform?.emulatorId
-                    ?: SaveHandlerRegistry.getDefaultEmulator(rom.platformSlug).id
-                val syncBase = rom.savesPathOverride?.takeIf { it.isNotBlank() }
-                    ?: platform?.savesPathOverride?.takeIf { it.isNotBlank() }
-                    ?: AndroidSavePathResolver.resolveDefault(
-                        emulatorId = emulatorId,
-                        platformSlug = rom.platformSlug,
-                        retroArchBase = retroBase,
-                        context = context,
-                    )
+                val syncBase = if (rom != null) {
+                    val emulatorId = platform?.emulatorId
+                        ?: SaveHandlerRegistry.getDefaultEmulator(rom.platformSlug).id
+                    rom.savesPathOverride?.takeIf { it.isNotBlank() }
+                        ?: platform?.savesPathOverride?.takeIf { it.isNotBlank() }
+                        ?: AndroidSavePathResolver.resolveDefault(
+                            emulatorId = emulatorId,
+                            platformSlug = rom.platformSlug,
+                            retroArchBase = retroBase,
+                            context = context,
+                        )
+                } else {
+                    // Sin juego descargado y con carpeta elegida: destino tal cual.
+                    destDir.orEmpty()
+                }
 
                 val rawBase = com.davidadrianrg.atril.core.sync.SaveDownloadDestination.resolve(destDir, syncBase)
                 val api = NetworkModule.createApiService(serverUrl, apiKey)
@@ -64,18 +72,30 @@ class ManualSaveDownloader(private val context: Context) {
                         context,
                     )
                     try {
-                        val handler = SaveHandlerRegistry.getHandler(
-                            rom.platformSlug,
-                            platform?.emulatorId,
-                        )
-                        val ok = handler.extractDownload(
-                            tempFile = temp,
-                            romFileName = rom.fileName,
-                            platformSlug = rom.platformSlug,
-                            savesBasePath = staged.dir.path,
-                            targetFileName = com.davidadrianrg.atril.core.sync.SaveNames
-                                .stripVersionTag(fileName),
-                        )
+                        val handler = rom?.let { r ->
+                            SaveHandlerRegistry.getHandler(
+                                r.platformSlug,
+                                platform?.emulatorId,
+                            )
+                        }
+                        val ok = if (handler != null && rom != null) {
+                            handler.extractDownload(
+                                tempFile = temp,
+                                romFileName = rom.fileName,
+                                platformSlug = rom.platformSlug,
+                                savesBasePath = staged.dir.path,
+                                targetFileName = com.davidadrianrg.atril.core.sync.SaveNames
+                                    .stripVersionTag(fileName),
+                            )
+                        } else {
+                            // Sin rom (carpeta libre): copia directa del fichero.
+                            val out = java.io.File(
+                                staged.dir,
+                                com.davidadrianrg.atril.core.sync.SaveNames.stripVersionTag(fileName),
+                            )
+                            temp.copyTo(out, overwrite = true)
+                            out.length() > 0
+                        }
                         if (!ok) error(tr("saves.server.download_error", "extract"))
                         SavePathAccess.commit(staged, context)
                         Unit

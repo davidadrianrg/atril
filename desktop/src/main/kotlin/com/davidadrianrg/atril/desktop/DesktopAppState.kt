@@ -17,6 +17,7 @@ import com.davidadrianrg.atril.core.launch.LaunchTarget
 import com.davidadrianrg.atril.core.launch.LaunchTargetResolver
 import com.davidadrianrg.atril.core.remote.dto.SaveDto
 import com.davidadrianrg.atril.core.remote.dto.SearchRomDto
+import com.davidadrianrg.atril.core.remote.dto.RomFileDto
 import com.davidadrianrg.atril.core.remote.dto.StateDto
 import com.davidadrianrg.atril.core.upload.RomUploader
 import com.davidadrianrg.atril.core.upload.UploadParts
@@ -643,10 +644,33 @@ class DesktopAppState(private val scope: CoroutineScope) {
     suspend fun serverStates(romId: Int): List<StateDto> =
         runCatching { api?.getStates(romId) ?: emptyList() }.getOrDefault(emptyList())
 
+    /** Ficheros que componen la ROM en el servidor (carpeta o fichero único). */
+    suspend fun serverFiles(romId: Int): List<RomFileDto> =
+        runCatching { api?.getRom(romId)?.files ?: emptyList() }.getOrDefault(emptyList())
+
+    /** Actualiza (sobrescribe) un fichero concreto de la ROM en el servidor. */
+    suspend fun updateServerRomFile(romId: Int, platformId: Int, file: File): Result<Unit> =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val svc = api ?: error(tr("common.server_not_configured"))
+                com.davidadrianrg.atril.core.upload.RomUploader(svc).uploadIntoRom(
+                    com.davidadrianrg.atril.core.upload.FileUploadSource(file),
+                    romId = romId,
+                    platformId = platformId,
+                ).getOrThrow()
+                Unit
+            }
+        }
+
     /** Descarga un save concreto del servidor a la carpeta local del juego. */
     suspend fun deleteServerSave(saveId: Int): Result<Unit> = runCatching {
         val svc = api ?: error(tr("common.server_not_configured"))
-        svc.deleteSaves(mapOf("saves" to listOf(saveId)))
+        try {
+            svc.deleteSaves(mapOf("saves" to listOf(saveId)))
+        } catch (e: retrofit2.HttpException) {
+            // 404: el save ya no existía → éxito idempotente.
+            if (e.code() != 404) throw e
+        }
         Unit
     }
 

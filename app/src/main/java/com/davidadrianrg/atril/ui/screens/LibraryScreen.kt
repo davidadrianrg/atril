@@ -2252,6 +2252,7 @@ internal fun RomDetailSheet(
                 if (serverUrl.isNotBlank() && apiKey.isNotBlank()) {
                     com.davidadrianrg.atril.ui.components.ServerAssetsSection(
                         romId = rom.id,
+                        platformId = rom.platformId,
                         serverUrl = serverUrl,
                         apiKey = apiKey,
                     )
