@@ -266,12 +266,7 @@ fun PlayScreen(
     }
     val visibleItems = items.filter { item ->
         val platformOk = platformFilter == null || item.rom.platformSlug == platformFilter
-        val quickOk = when (quickFilter) {
-            "favorites" -> playStats.statsOf(item).favorite
-            "recent" -> playStats.statsOf(item).lastPlayedAt != null
-            else -> true
-        }
-        platformOk && quickOk
+        platformOk && com.davidadrianrg.atril.core.playstats.PlayQuickFilter.matches(quickFilter, playStats.statsOf(item))
     }
     val initialPage = visibleItems.indexOfFirst { it.rom.id == lastRomId }
         .coerceIn(0, (visibleItems.size - 1).coerceAtLeast(0))
@@ -480,7 +475,9 @@ fun PlayScreen(
         val id = currentNowState?.rom?.id
         value = if (id != null) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                // Un fichero borrado no deja el fondo vacío: cae a fanart/captura.
                 container.settingsRepository.getGameBackgroundBlocking(id)
+                    ?.takeIf { it.startsWith("http") || java.io.File(it).isFile }
             }
         } else {
             null
@@ -525,15 +522,13 @@ fun PlayScreen(
         // Fondo cinematográfico: primera captura del juego, si la hay. Es
         // decorativo y va detrás de todo (sin foco ni toques).
         CinematicHero(
-            url = when {
-                launcherBg == "solid" -> null
-                // Imagen elegida a mano tiene prioridad sobre cualquier otra.
-                gameBgPath != null -> gameBgPath
-                // Fanart si está descargado; si aún no, se muestra la captura
-                // del juego mientras se descarga en segundo plano.
-                launcherBg == "fanart" -> fanartPath ?: current?.rom?.heroBackdropUrl()
-                else -> current?.rom?.heroBackdropUrl()
-            },
+            // Regla común con escritorio: fondo elegido > fanart > captura.
+            url = com.davidadrianrg.atril.core.media.LauncherBackdrop.choose(
+                mode = launcherBg,
+                gameBackground = gameBgPath,
+                fanart = fanartPath,
+                screenshot = current?.rom?.heroBackdropUrl(),
+            ),
             blurRadius = launcherBlur.dp,
             modifier = Modifier.fillMaxSize(),
         )
@@ -648,13 +643,7 @@ fun PlayScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            tr(
-                                when (quickFilter) {
-                                    "favorites" -> "play.empty.favorites"
-                                    "recent" -> "play.empty.recent"
-                                    else -> "play.empty.platform"
-                                },
-                            ),
+                            tr(com.davidadrianrg.atril.core.playstats.PlayQuickFilter.emptyMessageKey(quickFilter)),
                             style = MaterialTheme.typography.bodyMedium,
                             color = LauncherCream.copy(alpha = 0.75f),
                         )
@@ -1369,7 +1358,7 @@ private fun GameSearchDialog(
         runCatching { focus.requestFocus() }
     }
     val results = remember(items, query) {
-        items.filter { query.isBlank() || it.rom.name.contains(query, ignoreCase = true) }
+        com.davidadrianrg.atril.core.playstats.PlayQuickFilter.search(items, query) { it.rom.name }
     }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         androidx.compose.material3.Surface(

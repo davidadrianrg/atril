@@ -54,7 +54,11 @@ class BackupManagerTest {
         }
     }
 
-    private fun manager() = BackupManager(context, settings) { url, key -> serverChanges += url to key }
+    private fun manager() = BackupManager(
+        context,
+        settings,
+        onServerChanged = { url, key -> serverChanges += url to key },
+    )
 
     /** org.json es un stub en tests JVM: se lee con Moshi, igual que la app. */
     private fun parse(json: String): Map<String, Any?> =
@@ -150,6 +154,29 @@ class BackupManagerTest {
 
         assertEquals("org.acme.emu", customStore().get("custom:acme/emu")?.packageName)
         assertTrue(serverChanges.isEmpty())
+    }
+
+    @Test
+    fun `schema 2 snapshot is restored and the sync schedule is re-applied`() = runBlocking {
+        var restored = 0
+        val m = BackupManager(context, settings, onPreferencesRestored = { restored++ })
+        val json = """{"version":2,"settings":{"save_sync_interval_minutes":"i:60","theme":"s:x"}}"""
+
+        assertEquals(BackupImportResult.OK, m.import(json))
+
+        coVerify { settings.importPreferences(mapOf("save_sync_interval_minutes" to "i:60", "theme" to "s:x")) }
+        assertEquals(1, restored)
+    }
+
+    @Test
+    fun `a v1 backup keeps current preferences and does not reschedule`() = runBlocking {
+        var restored = 0
+        val m = BackupManager(context, settings, onPreferencesRestored = { restored++ })
+
+        assertEquals(BackupImportResult.OK, m.import("""{"version":1,"theme":"amoled"}"""))
+
+        coVerify(exactly = 0) { settings.importPreferences(any()) }
+        assertEquals(0, restored)
     }
 
     @Test

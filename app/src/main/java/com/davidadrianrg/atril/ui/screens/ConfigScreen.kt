@@ -1013,6 +1013,9 @@ fun ConfigScreen(
                         context = context,
                         settings = container.settingsDataStore,
                         onServerChanged = { url, key -> container.configureApi(url, key) },
+                        onPreferencesRestored = {
+                            container.saveSyncManager.applyPeriodicSyncFromSettings(replace = true)
+                        },
                     )
                 }
                 val backupScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -1092,7 +1095,7 @@ fun ConfigScreen(
                 icon = Icons.Outlined.SportsEsports,
                 title = tr("controls.title"),
             ) {
-                listOf("controls.dpad", "controls.select", "controls.details", "controls.shoulders", "controls.back", "controls.menu").forEach { k ->
+                listOf("controls.dpad", "controls.select", "controls.details", "controls.search", "controls.favorite", "controls.shoulders", "controls.back", "controls.menu").forEach { k ->
                     Text(tr(k), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 3.dp))
                 }
                 Text(

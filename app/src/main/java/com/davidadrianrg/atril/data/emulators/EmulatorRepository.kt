@@ -13,6 +13,7 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -24,6 +25,7 @@ import okhttp3.Request
 class EmulatorRepository(
     private val context: Context,
     private val client: OkHttpClient = defaultClient(),
+    private val packUrl: String = PACK_URL,
 ) {
 
     private val moshi by lazy { Moshi.Builder().add(KotlinJsonAdapterFactory()).build() }
@@ -51,24 +53,28 @@ class EmulatorRepository(
     }
 
     private fun downloadPack(): List<EmulatorEntry> {
-        val cached = packFile.takeIf { it.isFile }?.readText()
+        // El ETag solo vale si la caché que describe se puede usar: con una
+        // caché corrupta un 304 dejaría el catálogo vacío para siempre.
+        val cached = packFile.takeIf { it.isFile }
+            ?.let { runCatching { PackParser.parse(it.readText()) }.getOrNull() }
+            ?.takeIf { it.isNotEmpty() }
         val etag = packEtagFile.takeIf { it.isFile }?.readText()?.trim()?.takeIf { it.isNotBlank() }
         val request = Request.Builder()
-            .url(PACK_URL)
+            .url(packUrl)
             .header("User-Agent", "Atril")
             .apply { if (etag != null && cached != null) header("If-None-Match", etag) }
             .build()
         client.newCall(request).execute().use { response ->
             // 304: el pack no cambió; no se gasta ancho de banda ni cuota.
-            if (response.code == 304 && cached != null) {
-                return PackParser.parse(cached)
-            }
+            if (response.code == 304 && cached != null) return cached
             if (!response.isSuccessful) error("HTTP ${response.code}")
             val body = response.body?.string().orEmpty()
             return PackParser.parse(body).also { entries ->
                 if (entries.isNotEmpty()) {
                     packFile.writeText(body)
-                    response.header("ETag")?.let { packEtagFile.writeText(it) }
+                    // Sin ETag nuevo, el anterior describiría otro contenido.
+                    val newTag = response.header("ETag")
+                    if (newTag.isNullOrBlank()) packEtagFile.delete() else packEtagFile.writeText(newTag)
                 }
             }
         }
@@ -105,6 +111,20 @@ class EmulatorRepository(
             ?: customStore.get(entry.id)?.packageName
             ?: KNOWN_PACKAGES[entry.name]
             ?: entry.id
+
+    /**
+     * Paquete que debe declarar el APK descargado, o null si no se conoce con
+     * certeza. El id del pack no siempre es el paquete real (variantes,
+     * manuales, `custom:owner/repo.x`), así que solo se exige cuando se
+     * aprendió de un APK, viene del usuario/tabla conocida o ya hay una app
+     * instalada con ese id (actualizar a otro paquete crearía un duplicado).
+     */
+    fun expectedPackageOf(entry: EmulatorEntry): String? = resolveExpectedPackage(
+        learned = packageMap.get(entry.id) ?: customStore.get(entry.id)?.packageName,
+        known = KNOWN_PACKAGES[entry.name],
+        id = entry.id,
+        isInstalled = { installedVersionOf(it) != null },
+    )
 
     /** Tras descargar un APK de un emulador manual, aprende su package name. */
     fun learnPackageName(entry: EmulatorEntry, apkFile: File): String? {
@@ -164,23 +184,35 @@ class EmulatorRepository(
         val dir = File(context.cacheDir, "emulator-apks").apply { mkdirs() }
         val target = File(dir, safeAssetName(release.assetName))
         val request = Request.Builder().url(release.downloadUrl).build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("HTTP ${response.code}")
-            val body = response.body ?: error("Empty body")
-            val total = body.contentLength().takeIf { it > 0 } ?: release.sizeBytes
-            body.byteStream().use { input ->
-                target.outputStream().use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    var written = 0L
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read <= 0) break
-                        output.write(buffer, 0, read)
-                        written += read
-                        if (total > 0) onProgress((written.toFloat() / total).coerceIn(0f, 1f))
+        val call = client.newCall(request)
+        // Cancelar la corrutina (el usuario quita el emulador de la cola)
+        // corta también la lectura bloqueante de OkHttp.
+        val cancelHook = coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion { if (it != null) call.cancel() }
+        try {
+            call.execute().use { response ->
+                if (!response.isSuccessful) error("HTTP ${response.code}")
+                val body = response.body ?: error("Empty body")
+                val total = body.contentLength().takeIf { it > 0 } ?: release.sizeBytes
+                body.byteStream().use { input ->
+                    target.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        var written = 0L
+                        while (true) {
+                            ensureActive()
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            output.write(buffer, 0, read)
+                            written += read
+                            if (total > 0) onProgress((written.toFloat() / total).coerceIn(0f, 1f))
+                        }
                     }
                 }
             }
+        } catch (e: Throwable) {
+            target.delete()
+            throw e
+        } finally {
+            cancelHook?.dispose()
         }
         if (expectedPackage != null) {
             val info = runCatching {
@@ -196,11 +228,11 @@ class EmulatorRepository(
             }.getOrNull()
             if (info == null) {
                 target.delete()
-                error("APK inválido")
+                error(com.davidadrianrg.atril.core.i18n.tr("emulators.apk_invalid"))
             }
             if (info.packageName != expectedPackage) {
                 target.delete()
-                error("El APK es ${info.packageName}, se esperaba $expectedPackage")
+                error(com.davidadrianrg.atril.core.i18n.tr("emulators.apk_mismatch", info.packageName, expectedPackage))
             }
         }
         target
@@ -230,6 +262,19 @@ class EmulatorRepository(
         private val KNOWN_PACKAGES = mapOf(
             "RetroArch (AArch64)" to "com.retroarch.aarch64",
         )
+
+        internal fun resolveExpectedPackage(
+            learned: String?,
+            known: String?,
+            id: String,
+            isInstalled: (String) -> Boolean,
+        ): String? {
+            learned?.takeIf { it.isNotBlank() }?.let { return it }
+            known?.let { return it }
+            val looksLikePackage = !id.startsWith("custom:") &&
+                id.matches(Regex("""[A-Za-z][\w]*(\.[A-Za-z_][\w]*)+"""))
+            return id.takeIf { looksLikePackage && isInstalled(it) }
+        }
 
         const val PACK_URL =
             "https://raw.githubusercontent.com/RJNY/Obtainium-Emulation-Pack/main/obtainium-emulation-pack-latest.json"

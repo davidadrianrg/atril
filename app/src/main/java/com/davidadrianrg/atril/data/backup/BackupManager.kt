@@ -18,6 +18,12 @@ class BackupManager(
     private val settings: SettingsDataStore = SettingsDataStore.get(context),
     /** Se llama tras importar credenciales para que el cliente HTTP use las nuevas. */
     private val onServerChanged: (serverUrl: String, apiKey: String) -> Unit = { _, _ -> },
+    /**
+     * Se llama tras restaurar el snapshot genérico: el intervalo y las
+     * restricciones del sync periódico viven en WorkManager, no solo en
+     * DataStore, y hay que reprogramarlos.
+     */
+    private val onPreferencesRestored: () -> Unit = {},
 ) {
     companion object {
         /** Versión del esquema que escribe esta build; se aceptan las <= a ella. */
@@ -71,9 +77,13 @@ class BackupManager(
         val version = (data["version"] as? Number)?.toInt() ?: return BackupImportResult.INVALID
         if (version > SCHEMA_VERSION) return BackupImportResult.UNSUPPORTED_VERSION
         // Snapshot genérico (versión 2+): ajustes de sync, descargas, biblioteca,
-        // overrides de emulador/core, vínculos y fondos por juego.
-        @Suppress("UNCHECKED_CAST")
-        (data["settings"] as? Map<String, String>)?.let { settings.importPreferences(it) }
+        // overrides de emulador/core, vínculos y fondos por juego. Una copia v1
+        // no lo trae y conserva los ajustes actuales.
+        // Una copia de escritorio trae `desktopSettings` (texto plano): se
+        // aplican solo las preferencias comunes, con el tipo de DataStore.
+        val snapshot = (data["settings"] as? Map<*, *>)
+            ?: (data["desktopSettings"] as? Map<*, *>)?.let(PreferenceSnapshot::fromDesktop)
+        snapshot?.let { settings.importPreferences(it) }
         (data["theme"] as? String)?.let { settings.setTheme(it) }
         (data["launcherBackground"] as? String)?.let { settings.setLauncherBackground(it) }
         (data["launcherBlur"] as? Number)?.let { settings.setLauncherBlur(it.toFloat()) }
@@ -114,6 +124,7 @@ class BackupManager(
                 }
             }
         }
+        if (snapshot != null) onPreferencesRestored()
         BackupImportResult.OK
     }.getOrDefault(BackupImportResult.INVALID)
 }

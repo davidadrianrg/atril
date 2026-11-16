@@ -1,14 +1,8 @@
 package com.davidadrianrg.atril.ui.screens
 
+import android.app.Application
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.drawable.toBitmap
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,9 +19,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Search
@@ -41,6 +37,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -48,245 +45,110 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.ui.focus.focusRequester
-import com.davidadrianrg.atril.ui.input.focusRing
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.davidadrianrg.atril.RomMSyncApplication
 import com.davidadrianrg.atril.core.emulators.EmulatorEntry
-import com.davidadrianrg.atril.core.emulators.PackParser
 import com.davidadrianrg.atril.core.emulators.VersionCompare
 import com.davidadrianrg.atril.core.i18n.tr
-import com.davidadrianrg.atril.data.emulators.EmulatorRepository
-import com.davidadrianrg.atril.data.update.InstallLaunchResult
-import com.davidadrianrg.atril.ui.components.Panel
+import com.davidadrianrg.atril.data.emulators.EmulatorJob
+import com.davidadrianrg.atril.data.emulators.EmulatorJobState
 import com.davidadrianrg.atril.ui.components.PageHeader
+import com.davidadrianrg.atril.ui.components.Panel
 import com.davidadrianrg.atril.ui.components.pageBackground
-import java.io.File
-import kotlinx.coroutines.launch
+import com.davidadrianrg.atril.ui.input.focusRing
+import com.davidadrianrg.atril.ui.viewmodel.EmulatorsViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Catálogo de emuladores del pack de Obtainium + emuladores manuales.
- * Permite instalar/actualizar uno a uno o en cola (los seleccionados).
+ * Instalar/actualizar añade a una cola persistente que descarga en segundo
+ * plano ([com.davidadrianrg.atril.emulators.EmulatorDownloadWorker]); al
+ * volver aquí se abre el instalador de cada APK listo.
  */
 @Composable
 fun EmulatorsScreen() {
     val context = LocalContext.current
-    val container = (context.applicationContext as RomMSyncApplication).container
-    val repository = remember { EmulatorRepository(context) }
-    val scope = rememberCoroutineScope()
+    val app = context.applicationContext as RomMSyncApplication
+    val viewModel: EmulatorsViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer {
+                EmulatorsViewModel(
+                    app = app as Application,
+                    saved = createSavedStateHandle(),
+                    launchInstaller = app.container.apkInstallHelper::launchInstaller,
+                )
+            }
+        },
+    )
     val snackbar = remember { SnackbarHostState() }
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    var entries by remember { mutableStateOf<List<EmulatorEntry>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var dual by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-    var category by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("Emulator") }
-    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
-    var installedOnly by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-    var searchOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-    val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    androidx.compose.runtime.LaunchedEffect(searchOpen) {
-        if (searchOpen) {
-            kotlinx.coroutines.delay(100)
-            runCatching { searchFocus.requestFocus() }
-        }
-    }
-    var installed by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
-    var latest by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var busyId by remember { mutableStateOf<String?>(null) }
-    var progress by remember { mutableStateOf(0f) }
-    var checking by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val entries by viewModel.entries.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
+    val filters by viewModel.filters.collectAsStateWithLifecycle()
+    val searchOpen by viewModel.searchOpen.collectAsStateWithLifecycle()
+    val installed by viewModel.installed.collectAsStateWithLifecycle()
+    val latest by viewModel.latest.collectAsStateWithLifecycle()
+    val checking by viewModel.checking.collectAsStateWithLifecycle()
+    val selected by viewModel.selected.collectAsStateWithLifecycle()
+    val visible by viewModel.visible.collectAsStateWithLifecycle()
+    val jobs by viewModel.jobs.collectAsStateWithLifecycle()
+    val jobsById = remember(jobs) { jobs.associateBy { it.entryId } }
     var showAdd by remember { mutableStateOf(false) }
-    var queue by remember { mutableStateOf<List<EmulatorEntry>>(emptyList()) }
-    var pendingInstall by remember { mutableStateOf(false) }
 
-    // PackageManager fuera del hilo principal: con decenas de entradas se nota.
-    fun refreshInstalled(list: List<EmulatorEntry>) {
-        scope.launch {
-            installed = withContext(Dispatchers.IO) {
-                list.associate { it.id to repository.installedVersion(it) }
-            }
-        }
+    LaunchedEffect(viewModel) {
+        viewModel.messages.collect { snackbar.showSnackbar(it) }
     }
 
-    /**
-     * Carga (o recarga) el catálogo. Un fallo ya no sustituye la lista que se
-     * tenía por una vacía, y un éxito limpia el error anterior.
-     */
-    suspend fun reloadPack(force: Boolean) {
-        runCatching { repository.loadPack(force = force) }
-            .onSuccess { pack ->
-                error = null
-                entries = pack
-                refreshInstalled(pack)
-            }
-            .onFailure { e ->
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                error = e.message?.takeIf { it.isNotBlank() } ?: tr("emulators.error")
-                if (entries == null) entries = emptyList()
-                // Con catálogo en pantalla el fallo se avisa sin vaciarla.
-                if (!entries.isNullOrEmpty()) scope.launch { snackbar.showSnackbar(tr("emulators.error")) }
-            }
-    }
-
-    LaunchedEffect(Unit) {
-        // Versiones detectadas por el chequeo diario en segundo plano.
-        latest = com.davidadrianrg.atril.data.emulators.EmulatorUpdatesStore(
-            File(context.filesDir, "emulator_updates.json"),
-        ).read()
-        reloadPack(force = false)
-    }
-
-    val visible = remember(entries, dual, category, query, installedOnly, installed) {
-        PackParser.forProfile(entries.orEmpty(), dual)
-            .filter { category == "All" || it.categories.contains(category) }
-            .filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
-            .filter { !installedOnly || installed[it.id] != null }
-            .distinctBy { it.id }
-    }
-
-    // Parsear un APK de decenas de MB no puede ir en el hilo principal.
-    suspend fun afterDownload(entry: EmulatorEntry, file: File) {
-        withContext(Dispatchers.IO) { repository.learnPackageName(entry, file) }
-        refreshInstalled(entries.orEmpty())
-    }
-
-    fun launch(entry: EmulatorEntry) {
-        if (busyId != null) return
-        busyId = entry.id
-        progress = 0f
-        scope.launch {
-            try {
-                val release = repository.latestRelease(entry, dualScreen = dual)
-                if (release == null) {
-                    snackbar.showSnackbar(tr("emulators.no_release", entry.name))
-                    return@launch
-                }
-                latest = latest + (entry.id to release.version)
-                val file = repository.download(
-                    release,
-                    expectedPackage = repository.packageNameOf(entry).takeIf { it.contains('.') },
-                ) { progress = it }
-                afterDownload(entry, file)
-                when (val result = container.apkInstallHelper.launchInstaller(file)) {
-                    InstallLaunchResult.Started ->
-                        snackbar.showSnackbar(tr("emulators.installer_opened", entry.name, release.version))
-                    InstallLaunchResult.NeedsPermission ->
-                        snackbar.showSnackbar(tr("emulators.needs_install_permission"))
-                    is InstallLaunchResult.Error -> snackbar.showSnackbar(result.message)
-                }
-            } catch (e: Exception) {
-                snackbar.showSnackbar(e.message ?: tr("emulators.error"))
-            } finally {
-                busyId = null
-            }
-        }
-    }
-
-    fun processQueue() {
-        if (busyId != null || pendingInstall || queue.isEmpty()) return
-        val next = queue.first()
-        queue = queue.drop(1)
-        busyId = next.id
-        progress = 0f
-        scope.launch {
-            try {
-                val release = repository.latestRelease(next, dualScreen = dual)
-                if (release == null) {
-                    snackbar.showSnackbar(tr("emulators.no_release", next.name))
-                    return@launch
-                }
-                latest = latest + (next.id to release.version)
-                val file = repository.download(
-                    release,
-                    expectedPackage = repository.packageNameOf(next).takeIf { it.contains('.') },
-                ) { progress = it }
-                afterDownload(next, file)
-                pendingInstall = true
-                container.apkInstallHelper.launchInstaller(file)
-            } catch (e: Exception) {
-                snackbar.showSnackbar(e.message ?: tr("emulators.error"))
-            } finally {
-                busyId = null
-            }
-        }
-    }
-
-    // Al volver del instalador del sistema, sigue con el siguiente de la cola.
-    DisposableEffect(lifecycleOwner) {
+    // Al volver del instalador del sistema: refleja lo instalado y abre el
+    // siguiente APK listo. En pausa no se abre nada solo.
+    DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                // Al volver del instalador, refleja lo que se acaba de instalar.
-                refreshInstalled(entries.orEmpty())
-                if (pendingInstall) {
-                    pendingInstall = false
-                    processQueue()
-                }
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> viewModel.onResume()
+                Lifecycle.Event.ON_PAUSE -> viewModel.onPause()
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.onPause()
+        }
     }
 
-    fun checkUpdates() {
-        checking = true
-        scope.launch {
-            try {
-                // Los fallos ya no se tragan: sin red o con el límite de GitHub
-                // agotado se dice, en vez de «actualizaciones comprobadas».
-                var failures = 0
-                var lastError: Throwable? = null
-                for (entry in entries.orEmpty()) {
-                    val version = withContext(Dispatchers.IO) { repository.installedVersion(entry) } ?: continue
-                    val release = try {
-                        repository.latestRelease(entry, dualScreen = dual)
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (e: com.davidadrianrg.atril.data.emulators.GitHubRateLimitException) {
-                        lastError = e
-                        failures++
-                        break
-                    } catch (e: Exception) {
-                        lastError = e
-                        failures++
-                        null
-                    } ?: continue
-                    if (VersionCompare.isNewer(release.version, version)) {
-                        latest = latest + (entry.id to release.version)
-                    }
-                }
-                val error = lastError
-                snackbar.showSnackbar(
-                    when {
-                        error is com.davidadrianrg.atril.data.emulators.GitHubRateLimitException -> error.message.orEmpty()
-                        error != null -> tr("emulators.updates_failed", failures, error.message ?: "")
-                        else -> tr("emulators.updates_checked")
-                    },
-                )
-            } finally {
-                checking = false
-            }
+    val searchFocus = remember { FocusRequester() }
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) {
+            kotlinx.coroutines.delay(100)
+            runCatching { searchFocus.requestFocus() }
         }
     }
 
@@ -299,7 +161,7 @@ fun EmulatorsScreen() {
                     IconButton(onClick = { showAdd = true }) {
                         Icon(Icons.Filled.Add, contentDescription = tr("emulators.add"))
                     }
-                    IconButton(onClick = { checkUpdates() }, enabled = !checking && entries != null) {
+                    IconButton(onClick = { viewModel.checkUpdates() }, enabled = !checking && entries != null) {
                         if (checking) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         } else {
@@ -323,17 +185,12 @@ fun EmulatorsScreen() {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 TextButton(
-                    onClick = {
-                        scope.launch {
-                            reloadPack(force = true)
-                            selected = emptySet()
-                        }
-                    },
+                    onClick = { viewModel.reload(force = true) },
                     modifier = Modifier.focusRing(RoundedCornerShape(50)),
                 ) { Text(tr("emulators.refresh")) }
                 Spacer(Modifier.weight(1f))
                 IconButton(
-                    onClick = { searchOpen = !searchOpen },
+                    onClick = { viewModel.toggleSearch() },
                     modifier = Modifier.focusRing(CircleShape),
                 ) {
                     Icon(
@@ -344,8 +201,8 @@ fun EmulatorsScreen() {
             }
             if (searchOpen) {
                 OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
+                    value = filters.query,
+                    onValueChange = viewModel::setQuery,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 4.dp)
@@ -372,28 +229,28 @@ fun EmulatorsScreen() {
                     "All" to "emulators.filter.all",
                 ).forEach { (key, label) ->
                     FilterChip(
-                        selected = category == key,
-                        onClick = { category = key },
+                        selected = filters.category == key,
+                        onClick = { viewModel.setCategory(key) },
                         label = { Text(tr(label)) },
                         modifier = chipRing,
                     )
                 }
                 FilterChip(
-                    selected = installedOnly,
-                    onClick = { installedOnly = !installedOnly },
+                    selected = filters.installedOnly,
+                    onClick = { viewModel.toggleInstalledOnly() },
                     label = { Text(tr("emulators.filter.installed")) },
                     modifier = chipRing,
                 )
                 Spacer(Modifier.width(12.dp))
                 FilterChip(
-                    selected = !dual,
-                    onClick = { dual = false },
+                    selected = !filters.dual,
+                    onClick = { viewModel.setDual(false) },
                     label = { Text(tr("emulators.profile.single")) },
                     modifier = chipRing,
                 )
                 FilterChip(
-                    selected = dual,
-                    onClick = { dual = true },
+                    selected = filters.dual,
+                    onClick = { viewModel.setDual(true) },
                     label = { Text(tr("emulators.profile.dual")) },
                     modifier = chipRing,
                 )
@@ -405,17 +262,16 @@ fun EmulatorsScreen() {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Button(onClick = {
-                        val chosen = visible.filter { it.id in selected }
-                        selected = emptySet()
-                        queue = queue + chosen
-                        processQueue()
-                    }) { Text(tr("emulators.install_selected", selected.size)) }
-                    TextButton(onClick = { selected = emptySet() }) {
+                    Button(onClick = { viewModel.installSelected() }) {
+                        Text(tr("emulators.install_selected", selected.size))
+                    }
+                    TextButton(onClick = { viewModel.clearSelection() }) {
                         Text(tr("emulators.clear_selection"))
                     }
                 }
             }
+
+            QueueSummary(jobs = jobs, onCancelAll = viewModel::cancelAll)
 
             when {
                 entries == null -> Column(
@@ -443,10 +299,10 @@ fun EmulatorsScreen() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(14.dp))
-                    val retryFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+                    val retryFocus = remember { FocusRequester() }
                     LaunchedEffect(Unit) { runCatching { retryFocus.requestFocus() } }
                     Button(
-                        onClick = { scope.launch { reloadPack(force = true) } },
+                        onClick = { viewModel.reload(force = true) },
                         modifier = Modifier
                             .focusRequester(retryFocus)
                             .focusRing(RoundedCornerShape(50)),
@@ -470,14 +326,12 @@ fun EmulatorsScreen() {
                             entry = entry,
                             installedVersion = installed[entry.id],
                             latestVersion = latest[entry.id],
-                            busy = busyId == entry.id,
-                            progress = progress,
-                            installedPackage = if (installed[entry.id] != null) repository.packageNameOf(entry) else null,
+                            job = jobsById[entry.id],
+                            installedPackage = if (installed[entry.id] != null) viewModel.packageNameOf(entry) else null,
                             checked = entry.id in selected,
-                            onCheckedChange = { checked ->
-                                selected = if (checked) selected + entry.id else selected - entry.id
-                            },
-                            onInstall = { launch(entry) },
+                            onCheckedChange = { checked -> viewModel.setSelected(entry.id, checked) },
+                            onInstall = { viewModel.install(entry) },
+                            onCancel = { viewModel.cancel(entry.id) },
                         )
                     }
                 }
@@ -489,19 +343,38 @@ fun EmulatorsScreen() {
         AddEmulatorDialog(
             onDismiss = { showAdd = false },
             onAdd = { url, name, regex, prereleases ->
-                val valid = url.contains("github.com/") &&
-                    url.substringAfter("github.com/").contains('/')
-                if (!valid) {
-                    scope.launch { snackbar.showSnackbar(tr("emulators.invalid_url")) }
-                } else {
-                    val added = repository.addCustom(url, name, regex, prereleases)
-                    entries = (entries.orEmpty() + added).distinctBy { it.id }
-                    refreshInstalled(entries.orEmpty())
-                    showAdd = false
-                    scope.launch { snackbar.showSnackbar(tr("emulators.added", added.name)) }
-                }
+                if (viewModel.addCustom(url, name, regex, prereleases)) showAdd = false
             },
         )
+    }
+}
+
+/** Resumen de la cola de descargas (visible aunque el filtro oculte sus filas). */
+@Composable
+private fun QueueSummary(jobs: List<EmulatorJob>, onCancelAll: () -> Unit) {
+    val pending = jobs.count { it.state == EmulatorJobState.QUEUED || it.state == EmulatorJobState.DOWNLOADING }
+    val ready = jobs.count { it.state == EmulatorJobState.READY }
+    if (pending == 0 && ready == 0) return
+    val current = jobs.firstOrNull { it.state == EmulatorJobState.DOWNLOADING }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                tr("emulators.queue.summary", pending, ready),
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onCancelAll, modifier = Modifier.focusRing(RoundedCornerShape(50))) {
+                Text(tr("emulators.queue.cancel_all"))
+            }
+        }
+        if (current != null) {
+            Text(
+                tr("emulators.downloads.progress", current.name),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LinearProgressIndicator(progress = { current.progress }, modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 
@@ -562,14 +435,15 @@ private fun EmulatorRow(
     entry: EmulatorEntry,
     installedVersion: String?,
     latestVersion: String?,
-    busy: Boolean,
-    progress: Float,
+    job: EmulatorJob?,
     installedPackage: String?,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     onInstall: () -> Unit,
+    onCancel: () -> Unit,
 ) {
     val update = VersionCompare.isNewer(latestVersion, installedVersion)
+    val pending = job?.state == EmulatorJobState.QUEUED || job?.state == EmulatorJobState.DOWNLOADING
     // El anillo rodea la fila entera cuando el mando enfoca su casilla o su botón.
     Panel(modifier = Modifier.fillMaxWidth().focusRing(RoundedCornerShape(20.dp))) {
         Column(Modifier.fillMaxWidth()) {
@@ -594,37 +468,68 @@ private fun EmulatorRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(6.dp))
+                    val failed = job?.state == EmulatorJobState.FAILED
                     Text(
                         when {
+                            failed -> tr("emulators.queue.failed", job?.error.orEmpty())
+                            job?.state == EmulatorJobState.READY -> tr("emulators.queue.ready", job.version.orEmpty())
+                            job?.state == EmulatorJobState.QUEUED -> tr("emulators.queue.queued")
+                            job?.state == EmulatorJobState.DOWNLOADING -> tr("common.downloading")
                             installedVersion == null -> tr("emulators.not_installed")
                             update -> tr("emulators.update_available", installedVersion, latestVersion ?: "")
                             else -> tr("emulators.installed", installedVersion)
                         },
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (update) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = when {
+                            failed -> MaterialTheme.colorScheme.error
+                            update || job?.state == EmulatorJobState.READY -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(horizontalAlignment = Alignment.End) {
-                    if (installedVersion != null) {
+                    if (installedVersion != null && !pending) {
                         StatusChip(update = update)
                         Spacer(Modifier.height(6.dp))
                     }
                     when {
-                        busy -> CircularProgressIndicator(
-                            progress = { progress },
-                            modifier = Modifier.size(30.dp),
-                            strokeWidth = 3.dp,
-                        )
+                        pending -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (job?.state == EmulatorJobState.DOWNLOADING) {
+                                CircularProgressIndicator(
+                                    progress = { job.progress },
+                                    modifier = Modifier.size(30.dp),
+                                    strokeWidth = 3.dp,
+                                )
+                            }
+                            IconButton(onClick = onCancel, modifier = Modifier.focusRing(CircleShape)) {
+                                Icon(Icons.Filled.Close, contentDescription = tr("emulators.queue.cancel"))
+                            }
+                        }
+                        job?.state == EmulatorJobState.READY || job?.state == EmulatorJobState.FAILED ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Button(onClick = onInstall) {
+                                    Text(
+                                        tr(
+                                            if (job.state == EmulatorJobState.FAILED) "common.retry" else "emulators.install",
+                                        ),
+                                    )
+                                }
+                                IconButton(onClick = onCancel, modifier = Modifier.focusRing(CircleShape)) {
+                                    Icon(Icons.Filled.Close, contentDescription = tr("emulators.queue.cancel"))
+                                }
+                            }
                         installedVersion == null -> Button(onClick = onInstall) { Text(tr("emulators.install")) }
                         update -> Button(onClick = onInstall) { Text(tr("emulators.update")) }
                         else -> OutlinedButton(onClick = onInstall) { Text(tr("emulators.reinstall")) }
                     }
                 }
             }
-            if (busy) {
+            if (job?.state == EmulatorJobState.DOWNLOADING) {
                 Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                LinearProgressIndicator(progress = { job.progress }, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -680,3 +585,4 @@ private fun EmulatorIcon(entry: EmulatorEntry, installedPackage: String?) {
         }
     }
 }
+
