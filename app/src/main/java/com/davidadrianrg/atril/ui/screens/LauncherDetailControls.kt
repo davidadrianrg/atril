@@ -173,23 +173,24 @@ internal fun rememberLauncherDetailControls(
         .collectAsState(initial = com.davidadrianrg.atril.core.localgames.ScraperCredentials())
     val scope = rememberCoroutineScope()
     var coverMediaPick by remember { mutableStateOf(false) }
-    var coverOverride by remember(rom.id) {
-        mutableStateOf(container.coverOverrides.get(rom.id))
+    val customCovers by container.coverOverrides.covers.collectAsState()
+    val coverOverride = customCovers[rom.id]
+    // Copia/descarga en IO (validada y con tope de tamaño); si falla, se avisa.
+    fun applyCover(action: () -> Boolean) {
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { runCatching(action).getOrDefault(false) }
+            if (!ok) {
+                android.widget.Toast.makeText(context, tr("launcher.cover.failed"), android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
     val coverFilePick = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent(),
     ) { uri ->
-        if (uri != null) scope.launch {
-            val dir = java.io.File(context.filesDir, "covers").apply { mkdirs() }
-            val target = java.io.File(dir, "${rom.id}.jpg")
-            runCatching {
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    target.outputStream().use { input.copyTo(it) }
-                }
-            }
-            if (target.isFile) {
-                container.coverOverrides.set(rom.id, target.absolutePath)
-                coverOverride = target.absolutePath
+        if (uri != null) {
+            applyCover {
+                val input = context.contentResolver.openInputStream(uri) ?: return@applyCover false
+                container.coverOverrides.setFromStream(rom.id, input)
             }
         }
     }
@@ -266,10 +267,7 @@ internal fun rememberLauncherDetailControls(
         coverOverride = coverOverride,
         onPickCoverMedia = { coverMediaPick = true },
         onPickCoverFile = { coverFilePick.launch("image/*") },
-        onClearCover = {
-            container.coverOverrides.set(rom.id, null)
-            coverOverride = null
-        },
+        onClearCover = { applyCover { container.coverOverrides.clear(rom.id); true } },
         onLinkApp = { pkg ->
             scope.launch { container.settingsRepository.setInstalledLink(rom.id, pkg) }
             linkedApp = pkg
@@ -305,15 +303,7 @@ internal fun rememberLauncherDetailControls(
                 kinds = setOf("cover"),
                 onSelect = { candidate ->
                     coverMediaPick = false
-                    scope.launch {
-                        val saved = com.davidadrianrg.atril.data.media.MediaCache.save(
-                            context, candidate.url, "covers", "${rom.id}.jpg",
-                        )
-                        if (saved != null) {
-                            container.coverOverrides.set(rom.id, saved)
-                            coverOverride = saved
-                        }
-                    }
+                    applyCover { container.coverOverrides.setFromUrl(rom.id, candidate.url) }
                 },
                 onDismiss = { coverMediaPick = false },
             )

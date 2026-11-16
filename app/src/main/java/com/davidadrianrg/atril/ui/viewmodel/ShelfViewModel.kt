@@ -148,7 +148,8 @@ class ShelfViewModel(
             localGames.games,
             settingsRepository.localDiscChoices,
             offlineCache?.entries ?: flowOf(emptyMap()),
-        ) { hydrated, local, discChoices, cached ->
+            coverOverrides?.covers ?: flowOf(emptyMap()),
+        ) { hydrated, local, discChoices, cached, customCovers ->
             // Carátula de disco si es la misma que la remota: sin red y sin
             // repetir la descarga. Llega como Flow aparte para que guardar una
             // carátula no relance la hidratación contra el servidor.
@@ -160,7 +161,7 @@ class ShelfViewModel(
                     if (rom === item.rom) item else item.copy(rom = rom)
                 }
             }
-            if (local.isEmpty()) {
+            val all = if (local.isEmpty()) {
                 remote
             } else {
                 // Sin RomM la tabla está vacía: el catálogo integrado pone nombre.
@@ -168,6 +169,16 @@ class ShelfViewModel(
                     runCatching { platformDao.getAllPlatformsBlocking() }
                         .getOrDefault(emptyList()).associate { it.slug to it.name }
                 remote + localShelfItems(local, labels, discChoices)
+            }
+            // La carátula elegida por el usuario manda sobre RomM y el caché;
+            // también es un Flow aparte: elegirla se ve al momento.
+            if (customCovers.isEmpty()) {
+                all
+            } else {
+                all.map { item ->
+                    val rom = item.rom.withCoverOverride(customCovers[item.rom.id])
+                    if (rom === item.rom) item else item.copy(rom = rom)
+                }
             }
         }.flowOn(kotlinx.coroutines.Dispatchers.IO)
 
@@ -327,13 +338,11 @@ class ShelfViewModel(
         baseCoverUrl: String,
     ): Map<Int, Rom> = downloaded.associate { entity ->
         val dto = dtoById[entity.romId]
-        val base = if (dto != null) {
+        entity.romId to if (dto != null) {
             buildRom(entity, dto, baseCoverUrl)
         } else {
             OfflineShelfCache.offlineRom(entity, cached[entity.romId])
         }
-        val override = coverOverrides?.get(entity.romId)
-        entity.romId to base.withCoverOverride(override)
     }
 
     /** Agrupa los descargados (multidisco) y los convierte en ítems de la estantería. */

@@ -41,13 +41,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Selector del fondo de un juego (como el de Android): fondos y capturas de
- * SteamGridDB/ScreenScraper con previsualización, un fichero local o quitar
- * el que haya.
- */
+/** Qué medio del juego elige [BackgroundPickerDialog]. */
 internal enum class DesktopMediaTarget { BACKGROUND, COVER }
 
+/**
+ * Selector del fondo (o la carátula, según [target]) de un juego, como el de
+ * Android: candidatos de SteamGridDB/ScreenScraper con previsualización, un
+ * fichero local o quitar el que haya.
+ */
 @Composable
 internal fun BackgroundPickerDialog(
     romId: Int,
@@ -79,7 +80,11 @@ internal fun BackgroundPickerDialog(
         scope.launch {
             val ok = action()
             busy = false
-            if (ok) onDismiss() else error = tr("media.background.failed")
+            if (ok) {
+                onDismiss()
+            } else {
+                error = tr(if (target == DesktopMediaTarget.COVER) "launcher.cover.failed" else "media.background.failed")
+            }
         }
     }
 
@@ -153,7 +158,8 @@ internal fun BackgroundPickerDialog(
             Row {
                 TextButton(enabled = !busy, onClick = {
                     scope.launch {
-                        val file = pickLocalGameFile(tr("launcher.cover.pick")) ?: return@launch
+                        val dialogTitle = if (target == DesktopMediaTarget.COVER) "launcher.cover.pick" else "launcher.media.background"
+                        val file = pickLocalGameFile(tr(dialogTitle)) ?: return@launch
                         apply {
                             if (target == DesktopMediaTarget.COVER) {
                                 DesktopCovers.setFromFile(romId, java.io.File(file))
@@ -166,8 +172,12 @@ internal fun BackgroundPickerDialog(
                 val currentPath = current[romId]
                 if (currentPath != null) {
                     TextButton(enabled = !busy, onClick = {
-                        if (target == DesktopMediaTarget.COVER) DesktopCovers.clear(romId) else DesktopBackgrounds.clear(romId)
-                        onDismiss()
+                        if (target == DesktopMediaTarget.COVER) {
+                            apply { DesktopCovers.clear(romId); true }
+                        } else {
+                            DesktopBackgrounds.clear(romId)
+                            onDismiss()
+                        }
                     }) { Text(if (target == DesktopMediaTarget.COVER) tr("launcher.cover.clear") else tr("media.background.clear")) }
                 }
             }

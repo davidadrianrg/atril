@@ -35,19 +35,20 @@ data class Rom(
 )
 
 /**
- * Aplica a [this] la URL de medio físico obtenida tras un scrapeo en RomM
- * (la lista en memoria no la tenía). Nunca pisa una URL ya existente.
- */
-/**
  * Aplica la carátula elegida por el usuario (fichero local): tiene prioridad
- * sobre las URL de RomM y sobre el caché offline.
+ * sobre las URL de RomM y sobre el caché offline. Devuelve [this] si no cambia.
  */
 fun Rom.withCoverOverride(coverPath: String?): Rom {
     if (coverPath == null) return this
     val url = "file://$coverPath"
+    if (coverUrlLarge == url && coverUrlSmall == url) return this
     return copy(coverUrlLarge = url, coverUrlSmall = url)
 }
 
+/**
+ * Aplica a [this] la URL de medio físico obtenida tras un scrapeo en RomM
+ * (la lista en memoria no la tenía). Nunca pisa una URL ya existente.
+ */
 fun Rom.withPhysicalMediaOverride(urls: Map<Int, String>): Rom {
     if (physicalMediaUrl != null) return this
     val url = urls[id] ?: return this

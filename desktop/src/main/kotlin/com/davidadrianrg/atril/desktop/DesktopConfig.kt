@@ -219,11 +219,6 @@ object DesktopConfig {
         get() = prefs.get("game_backgrounds", "")
         set(v) = prefs.put("game_backgrounds", v)
 
-    /** Carátula personalizada por juego, `romId=ruta;...`. */
-    var coverOverrides: String
-        get() = prefs.get("cover_overrides", "")
-        set(v) = prefs.put("cover_overrides", v)
-
     /** Versión de la app desktop (para el comprobador de actualizaciones). */
     const val appVersion: String = "0.9.2"
 }
