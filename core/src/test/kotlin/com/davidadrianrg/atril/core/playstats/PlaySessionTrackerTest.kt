@@ -97,4 +97,45 @@ class PlaySessionTrackerTest {
         assertEquals(105_000L, session.endedAt)
         assertEquals(5_000L, session.durationMs)
     }
+
+    // ── B3: la sesión abierta sobrevive a la muerte del proceso ──────────
+
+    @get:org.junit.Rule
+    val tmp = org.junit.rules.TemporaryFolder()
+
+    private fun journal() = FilePlaySessionJournal(java.io.File(tmp.root, "play_session"))
+
+    @Test
+    fun `an open session is restored by a new tracker after the process dies`() {
+        PlaySessionTracker(journal = journal()).begin(9, 1_000_000)
+        // Proceso nuevo: otro tracker sobre el mismo fichero.
+        val revived = PlaySessionTracker(journal = journal())
+        assertTrue(revived.isRunning())
+        val session = revived.end(1_600_000)!!
+        assertEquals(9, session.romId)
+        assertEquals(600_000L, session.durationMs)
+    }
+
+    @Test
+    fun `ending clears the journal so the session is not counted twice`() {
+        val first = PlaySessionTracker(journal = journal())
+        first.begin(9, 0)
+        assertNotNull(first.end(60_000))
+        assertFalse(PlaySessionTracker(journal = journal()).isRunning())
+    }
+
+    @Test
+    fun `a session never counts more than the maximum`() {
+        val tracker = PlaySessionTracker()
+        tracker.begin(4, 0)
+        val threeDays = 3L * 24 * 60 * 60 * 1000
+        val session = tracker.end(threeDays)!!
+        assertEquals(PlaySessionTracker.MAX_SESSION_MS, session.durationMs)
+    }
+
+    @Test
+    fun `an unreadable journal means no open session`() {
+        java.io.File(tmp.root, "play_session").writeText("garbage")
+        assertFalse(PlaySessionTracker(journal = journal()).isRunning())
+    }
 }

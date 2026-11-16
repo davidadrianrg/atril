@@ -114,6 +114,12 @@ class DesktopAppState(private val scope: CoroutineScope) {
     /** Favoritos, última partida y tiempo jugado por juego (mismo JSON que Android). */
     val playStats = PlayStatsRepository(
         store = JsonPlayStatsStore(File(DesktopConfig.configDir, "play_stats.json")),
+        // Misma persistencia de la partida en curso que Android (B3).
+        tracker = com.davidadrianrg.atril.core.playstats.PlaySessionTracker(
+            journal = com.davidadrianrg.atril.core.playstats.FilePlaySessionJournal(
+                File(DesktopConfig.configDir, "play_session"),
+            ),
+        ),
     )
 
     /** Versionado local de saves (restaurables desde el detalle de juego). */
