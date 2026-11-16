@@ -140,6 +140,7 @@ class EmulatorRepository(
 
     suspend fun download(
         release: SelectedRelease,
+        expectedPackage: String? = null,
         onProgress: (Float) -> Unit,
     ): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "emulator-apks").apply { mkdirs() }
@@ -161,6 +162,27 @@ class EmulatorRepository(
                         if (total > 0) onProgress((written.toFloat() / total).coerceIn(0f, 1f))
                     }
                 }
+            }
+        }
+        if (expectedPackage != null) {
+            val info = runCatching {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    context.packageManager.getPackageArchiveInfo(
+                        target.path,
+                        PackageManager.PackageInfoFlags.of(0),
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.packageManager.getPackageArchiveInfo(target.path, 0)
+                }
+            }.getOrNull()
+            if (info == null) {
+                target.delete()
+                error("APK inválido")
+            }
+            if (info.packageName != expectedPackage) {
+                target.delete()
+                error("El APK es ${info.packageName}, se esperaba $expectedPackage")
             }
         }
         target

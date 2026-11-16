@@ -21,7 +21,7 @@ class BackupManager(
 ) {
     companion object {
         /** Versión del esquema que escribe esta build; se aceptan las <= a ella. */
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
     }
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
@@ -37,6 +37,7 @@ class BackupManager(
             "launcherBackground" to settings.launcherBackground.first(),
             "launcherBlur" to settings.launcherBlur.first(),
             "language" to settings.language.first(),
+            "settings" to settings.exportPreferences(),
             "customEmulators" to custom.map {
                 mapOf(
                     "id" to it.id,
@@ -69,6 +70,10 @@ class BackupManager(
         // viene de una build más nueva y podría interpretarse mal.
         val version = (data["version"] as? Number)?.toInt() ?: return BackupImportResult.INVALID
         if (version > SCHEMA_VERSION) return BackupImportResult.UNSUPPORTED_VERSION
+        // Snapshot genérico (versión 2+): ajustes de sync, descargas, biblioteca,
+        // overrides de emulador/core, vínculos y fondos por juego.
+        @Suppress("UNCHECKED_CAST")
+        (data["settings"] as? Map<String, String>)?.let { settings.importPreferences(it) }
         (data["theme"] as? String)?.let { settings.setTheme(it) }
         (data["launcherBackground"] as? String)?.let { settings.setLauncherBackground(it) }
         (data["launcherBlur"] as? Number)?.let { settings.setLauncherBlur(it.toFloat()) }
