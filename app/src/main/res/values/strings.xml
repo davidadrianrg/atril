@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Atril</string>
+    <!-- La etiqueta del tile la pinta el sistema, fuera de tr(): va en recursos. -->
+    <string name="tile_sync_saves">Sync saves</string>
 </resources>

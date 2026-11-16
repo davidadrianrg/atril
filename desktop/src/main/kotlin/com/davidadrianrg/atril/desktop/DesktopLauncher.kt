@@ -195,7 +195,8 @@ fun DesktopPlayScreen(
     val discGroups by state.localDiscGroupsFlow.collectAsState()
     val platformsState by state.platforms.collectAsState()
     val entries = remember(remoteEntries, localGames, discGroups, discChoices, platformsState) {
-        val names = platformsState.associate { it.slug to (it.displayName ?: it.name) }
+        val names = com.davidadrianrg.atril.core.localgames.LocalPlatformChoices.BUILTIN.toMap() +
+            platformsState.associate { it.slug to (it.displayName ?: it.name) }
         (remoteEntries + localLauncherEntries(localGames, discGroups, discChoices, names))
             .sortedBy { it.card.rep.name.lowercase() }
     }
@@ -556,13 +557,15 @@ fun DesktopPlayScreen(
         }
 
         pendingAddPath?.let { path ->
-            val choices = platformsState.map { it.slug to (it.displayName ?: it.name) }
-                .distinctBy { it.first }.sortedBy { it.second.lowercase() }
+            // Sin RomM no hay plataformas del servidor: el catálogo integrado rellena.
+            val choices = com.davidadrianrg.atril.core.localgames.LocalPlatformChoices.build(
+                platformsState.map { it.slug to (it.displayName ?: it.name) },
+            )
             AddLocalGameDialog(
                 path = path,
                 platforms = choices,
-                initialSlug = com.davidadrianrg.atril.core.localgames.LocalGamePaths
-                    .guessPlatform(path, choices.map { it.first }),
+                initialSlug = com.davidadrianrg.atril.core.localgames.LocalPlatformChoices
+                    .guess(path, choices.map { it.first }),
                 onConfirm = { title, slug -> pendingAddPath = null; state.addLocalGame(title, slug, path) },
                 onDismiss = { pendingAddPath = null },
             )

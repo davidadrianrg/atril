@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
  */
 class SaveSyncManager(
     private val context: Context,
-    private val settings: SettingsDataStore = SettingsDataStore(context),
+    private val settings: SettingsDataStore = SettingsDataStore.get(context),
 ) {
 
     private val workManager = WorkManager.getInstance(context)
@@ -148,13 +148,13 @@ class SaveSyncManager(
                     val conflictsJson = info.outputData.getString(SaveSyncWorker.KEY_CONFLICTS_JSON)
                     if (conflictsJson != null) {
                         kotlinx.coroutines.runBlocking {
-                            SettingsDataStore(context).setLastSyncConflictsJson(conflictsJson)
+                            SettingsDataStore.get(context).setLastSyncConflictsJson(conflictsJson)
                         }
                     }
                     val failedJson = info.outputData.getString(SaveSyncWorker.KEY_FAILED_JSON)
                     if (failedJson != null) {
                         kotlinx.coroutines.runBlocking {
-                            SettingsDataStore(context).setLastSyncFailedJson(failedJson)
+                            SettingsDataStore.get(context).setLastSyncFailedJson(failedJson)
                         }
                     }
                     SyncState.Success(message, allSynced = allSynced, hasWarnings = hasWarnings)

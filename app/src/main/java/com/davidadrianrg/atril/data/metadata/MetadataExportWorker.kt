@@ -52,7 +52,7 @@ class MetadataExportWorker(
 
         if (platformId < 0) return@withContext Result.failure()
 
-        val dataStore = SettingsDataStore(applicationContext)
+        val dataStore = SettingsDataStore.get(applicationContext)
         val serverUrl = dataStore.getServerUrlBlocking()
         val apiKey = dataStore.getApiKeyBlocking()
         val romsRootPath = dataStore.getRomsRootPathBlocking()

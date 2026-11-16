@@ -127,6 +127,9 @@ fun ReportIssueDialog(rommConfigured: Boolean, onDismiss: () -> Unit) {
                 )
                 error?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    // Si el worker falla (sin red, límite, 403), el reporte no se
+                    // pierde: se abre GitHub con el texto ya rellenado.
+                    TextButton(onClick = { openGitHub() }) { Text(tr("report.open_github")) }
                 }
                 if (!IssueReporter.hasEndpoint) {
                     Text(

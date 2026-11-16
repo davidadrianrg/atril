@@ -199,9 +199,13 @@ fun PlayScreen(
     var scrapingId by remember { mutableStateOf<String?>(null) }
     var mediaPick by remember { mutableStateOf<ShelfItem?>(null) }
     var mediaPickKind by remember { mutableStateOf("cover") }
-    val knownPlatforms = remember { runCatching { container.platformDao.getAllPlatformsBlocking() }.getOrDefault(emptyList()) }
+    // Room no admite consultas en el hilo principal: se observa el Flow del DAO.
+    // Sin RomM la tabla está vacía y el catálogo integrado rellena la lista.
+    val knownPlatforms by container.platformDao.getAllPlatforms().collectAsState(initial = emptyList())
     val platformChoices = remember(knownPlatforms) {
-        knownPlatforms.map { it.slug to it.name }.distinctBy { it.first }.sortedBy { it.second.lowercase() }
+        com.davidadrianrg.atril.core.localgames.LocalPlatformChoices.build(
+            knownPlatforms.map { it.slug to it.name },
+        )
     }
     val pickGame = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
@@ -694,17 +698,20 @@ fun PlayScreen(
                             ) { page ->
                                 val item = visibleItems[page]
                                 val isCurrent = page == pagerState.currentPage
-                                val lift = if (liftingRomId == item.rom.id) cardLift.value else 0f
+                                val lifting = liftingRomId == item.rom.id
                                 val hidden = insertion?.item?.rom?.id == item.rom.id
-                                val flowDistance = (
-                                    (pagerState.currentPage - page) +
-                                        pagerState.currentPageOffsetFraction
-                                    ).coerceIn(-2f, 2f)
                                 Box(
                                     modifier = Modifier
                                         .width(cardWidth)
                                         .height(cardHeight)
                                         .graphicsLayer {
+                                            // Leído aquí (fase de dibujo) y no en la
+                                            // composición: arrastrar el carrusel no
+                                            // recompone cada página en cada frame.
+                                            val flowDistance = (
+                                                (pagerState.currentPage - page) +
+                                                    pagerState.currentPageOffsetFraction
+                                                ).coerceIn(-2f, 2f)
                                             val distance = kotlin.math.abs(flowDistance)
                                             rotationY = (flowDistance * 34f).coerceIn(-55f, 55f)
                                             val pageScale = 1f - distance.coerceAtMost(1f) * 0.18f
@@ -730,6 +737,7 @@ fun PlayScreen(
                                             .fillMaxSize()
                                             .padding(vertical = 2.dp)
                                             .graphicsLayer {
+                                                val lift = if (lifting) cardLift.value else 0f
                                                 scaleX = 1f + 0.05f * lift
                                                 scaleY = 1f + 0.05f * lift
                                                 translationY = -10.dp.toPx() * lift
@@ -879,7 +887,7 @@ fun PlayScreen(
                 title = ins.item.rom.name,
                 isOptical = ins.item.isOptical,
                 model = ins.model,
-                progress = insertProgress.value,
+                progress = { insertProgress.value },
                 onCancel = { launchJob?.cancel() },
             )
         }
@@ -1043,8 +1051,8 @@ fun PlayScreen(
         AddLocalGameDialog(
             path = path,
             platforms = platformChoices,
-            initialSlug = com.davidadrianrg.atril.core.localgames.LocalGamePaths
-                .guessPlatform(path, platformChoices.map { it.first }),
+            initialSlug = com.davidadrianrg.atril.core.localgames.LocalPlatformChoices
+                .guess(path, platformChoices.map { it.first }),
             onConfirm = { title, slug ->
                 pendingAddPath = null
                 viewModel.addLocalGame(title, slug, path)

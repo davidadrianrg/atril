@@ -125,12 +125,16 @@ jobs:
           ARCH="${{ matrix.arch }}"
           export ARCH
           APPIMAGE_EXTRACT_AND_RUN=1 /tmp/appimagetool AppDir "Atril-${VERSION}-linux-${{ matrix.arch }}.AppImage"
+          sha256sum "Atril-${VERSION}-linux-${{ matrix.arch }}.AppImage" > "Atril-${VERSION}-linux-${{ matrix.arch }}.AppImage.sha256"
+          cat "Atril-${VERSION}-linux-${{ matrix.arch }}.AppImage.sha256"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: appimage-${{ matrix.arch }}
-          path: Atril-*-linux-${{ matrix.arch }}.AppImage
+          path: |
+            Atril-*-linux-${{ matrix.arch }}.AppImage
+            Atril-*-linux-${{ matrix.arch }}.AppImage.sha256
 
       - name: Attach to release
         uses: softprops/action-gh-release@v3
@@ -156,4 +160,10 @@ jobs:
             - **Android:** Settings → Updates → *Check for updates*, or download the attached APK and open it — it installs over the previous version without losing data.
             - **Linux:** download the AppImage for your architecture, give it execute permission (`chmod +x`) and run it. Replaces the previous file.
             - **If the AppImage does not start** (`libfuse.so.2` missing): run `APPIMAGE_EXTRACT_AND_RUN=1 ./Atril-...AppImage` or install `libfuse2`.
-          files: Atril-*-linux-${{ matrix.arch }}.AppImage
+
+            ### 🔐 Verify
+
+            Each file has a `.sha256` next to it: `sha256sum -c Atril-...apk.sha256`.
+          files: |
+            Atril-*-linux-${{ matrix.arch }}.AppImage
+            Atril-*-linux-${{ matrix.arch }}.AppImage.sha256

@@ -52,7 +52,7 @@ class DownloadManager(private val context: Context) {
         // "Solo WiFi": UNMETERED evita datos móviles; saves siempre CONNECTED
         val wifiOnly = runCatching {
             kotlinx.coroutines.runBlocking {
-                com.davidadrianrg.atril.data.local.SettingsDataStore(context)
+                com.davidadrianrg.atril.data.local.SettingsDataStore.get(context)
                     .settings.first()
             }.wifiOnlyDownloads
         }.getOrDefault(false)
@@ -142,7 +142,7 @@ class DownloadManager(private val context: Context) {
         // "Solo WiFi": UNMETERED evita datos móviles; saves siempre CONNECTED
         val wifiOnly = runCatching {
             kotlinx.coroutines.runBlocking {
-                com.davidadrianrg.atril.data.local.SettingsDataStore(context)
+                com.davidadrianrg.atril.data.local.SettingsDataStore.get(context)
                     .settings.first()
             }.wifiOnlyDownloads
         }.getOrDefault(false)
@@ -176,7 +176,7 @@ class DownloadManager(private val context: Context) {
         val romId = progressData.getInt(DownloadWorker.KEY_ROM_ID, -1)
         val romName = progressData.getString(DownloadWorker.KEY_ROM_NAME)
             ?: outputData.getString(DownloadWorker.KEY_ROM_NAME)
-            ?: "Unknown"
+            ?: com.davidadrianrg.atril.core.i18n.tr("android.downloads.unknown_game")
         val fileName = progressData.getString(DownloadWorker.KEY_FILE_NAME)
             ?: outputData.getString(DownloadWorker.KEY_FILE_NAME)
             ?: ""

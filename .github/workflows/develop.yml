@@ -97,6 +97,39 @@ jobs:
           path: app/build/outputs/apk/release/Atril-develop-*-android.apk
           retention-days: 14
 
+  # Android lint on every develop push. Non-blocking for now (the existing
+  # baseline has not been triaged yet): the HTML/XML report is uploaded so
+  # findings are visible. Flip continue-on-error once the baseline is clean.
+  lint:
+    name: Android lint
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Lint
+        run: chmod +x gradlew && ./gradlew :app:lintDebug
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.*
+          retention-days: 14
+
   linux:
     name: Linux AppImage (${{ matrix.arch }})
     runs-on: ubuntu-latest
@@ -210,8 +243,12 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: List draft files
-        run: ls -lh dist
+      - name: List draft files and checksums
+        working-directory: dist
+        run: |
+          sha256sum Atril-* > SHA256SUMS.txt
+          ls -lh
+          cat SHA256SUMS.txt
 
       - name: Remove previous develop draft
         env:

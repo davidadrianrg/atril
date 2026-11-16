@@ -29,7 +29,7 @@ class SaveSyncWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val dataStore = SettingsDataStore(applicationContext)
+        val dataStore = SettingsDataStore.get(applicationContext)
         val database = RomSyncDatabase.getDatabase(applicationContext)
 
         // Guard de seguridad: si el usuario desactivó el sync de saves, el

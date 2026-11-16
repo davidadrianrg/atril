@@ -25,7 +25,7 @@ class AppContainer(private val appContext: Context) {
 
     private val database: RomSyncDatabase = RomSyncDatabase.getDatabase(appContext)
 
-    val settingsDataStore = SettingsDataStore(appContext)
+    val settingsDataStore = SettingsDataStore.get(appContext)
 
     val settingsRepository = SettingsRepository(settingsDataStore)
 

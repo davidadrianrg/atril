@@ -17,7 +17,7 @@ import java.util.Locale
 object DeviceReportCollector {
 
     fun collect(context: Context, rommConfigured: Boolean): String {
-        val settings = com.davidadrianrg.atril.data.local.SettingsDataStore(context)
+        val settings = com.davidadrianrg.atril.data.local.SettingsDataStore.get(context)
         val theme = settings.getThemeBlocking().ifBlank { "default" }
         val launcherBackground = settings.getLauncherBackgroundBlocking()
         val pm = context.packageManager
@@ -53,7 +53,9 @@ object DeviceReportCollector {
                 appendLine()
                 appendLine("### Last crash")
                 appendLine("```")
-                appendLine(crash.take(4000))
+                // Los mensajes de excepción pueden llevar el host de RomM,
+                // IPs de la LAN o rutas con nombres: se limpian antes.
+                appendLine(com.davidadrianrg.atril.core.report.ReportSanitizer.scrub(crash).take(4000))
                 appendLine("```")
             }
         }

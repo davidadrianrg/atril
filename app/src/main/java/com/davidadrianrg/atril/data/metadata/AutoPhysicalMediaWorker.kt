@@ -38,7 +38,7 @@ class AutoPhysicalMediaWorker(
         if (romId < 0) return@withContext Result.failure()
         val name = inputData.getString(KEY_ROM_NAME).orEmpty()
 
-        val store = SettingsDataStore(applicationContext)
+        val store = SettingsDataStore.get(applicationContext)
         val serverUrl = store.getServerUrlBlocking()
         val apiKey = store.getApiKeyBlocking()
         val container = (applicationContext as RomMSyncApplication).container

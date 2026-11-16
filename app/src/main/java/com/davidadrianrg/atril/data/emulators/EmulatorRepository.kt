@@ -121,14 +121,19 @@ class EmulatorRepository(
         null
     }
 
-    /** Última release utilizable (o null si el repo no tiene APKs). */
+    /**
+     * Última release utilizable, o null si el repo no tiene APKs. Los fallos de
+     * red y el límite anónimo de la API de GitHub se propagan como excepción
+     * ([GitHubRateLimitException] en el segundo caso): la UI tiene que poder
+     * distinguir «no hay release» de «no se pudo comprobar».
+     */
     suspend fun latestRelease(
         entry: EmulatorEntry,
         dualScreen: Boolean = false,
     ): SelectedRelease? = withContext(Dispatchers.IO) {
         if (!entry.isGitHub) return@withContext htmlResolver.resolve(entry)
         val url = "https://api.github.com/repos/${entry.owner}/${entry.repo}/releases?per_page=20"
-        val json = runCatching { getText(url) }.getOrNull() ?: return@withContext null
+        val json = getText(url)
         val releases = runCatching { releasesAdapter.fromJson(json) }.getOrNull() ?: return@withContext null
         ReleaseSelector.select(releases, entry.settings, deviceAbi(), dualScreen)
     }
@@ -138,7 +143,7 @@ class EmulatorRepository(
         onProgress: (Float) -> Unit,
     ): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "emulator-apks").apply { mkdirs() }
-        val target = File(dir, release.assetName)
+        val target = File(dir, safeAssetName(release.assetName))
         val request = Request.Builder().url(release.downloadUrl).build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("HTTP ${response.code}")
@@ -168,6 +173,11 @@ class EmulatorRepository(
             .header("User-Agent", "Atril")
             .build()
         client.newCall(request).execute().use { response ->
+            if ((response.code == 403 || response.code == 429) &&
+                response.header("X-RateLimit-Remaining") == "0"
+            ) {
+                throw GitHubRateLimitException()
+            }
             if (!response.isSuccessful) error("HTTP ${response.code}")
             return response.body?.string().orEmpty()
         }
@@ -188,5 +198,21 @@ class EmulatorRepository(
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .build()
+
+        /**
+         * El nombre del APK sale de la URL o del asset remoto: nunca debe poder
+         * salir del directorio de caché ni ser un nombre oculto/vacío.
+         */
+        internal fun safeAssetName(raw: String): String {
+            val cleaned = raw.substringAfterLast('/').substringAfterLast('\\')
+                .replace(Regex("""[^A-Za-z0-9._-]"""), "_")
+                .trimStart('.')
+            return cleaned.ifBlank { "emulator.apk" }
+        }
     }
 }
+
+/** La API anónima de GitHub (60 peticiones/hora) se ha agotado. */
+class GitHubRateLimitException : IllegalStateException(
+    com.davidadrianrg.atril.core.i18n.tr("emulators.rate_limited"),
+)

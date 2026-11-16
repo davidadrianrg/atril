@@ -136,8 +136,10 @@ class ShelfViewModel(
             if (local.isEmpty()) {
                 remote
             } else {
-                val labels = runCatching { platformDao.getAllPlatformsBlocking() }
-                    .getOrDefault(emptyList()).associate { it.slug to it.name }
+                // Sin RomM la tabla está vacía: el catálogo integrado pone nombre.
+                val labels = com.davidadrianrg.atril.core.localgames.LocalPlatformChoices.BUILTIN.toMap() +
+                    runCatching { platformDao.getAllPlatformsBlocking() }
+                        .getOrDefault(emptyList()).associate { it.slug to it.name }
                 remote + localShelfItems(local, labels, discChoices)
             }
         }.flowOn(kotlinx.coroutines.Dispatchers.IO)
@@ -347,7 +349,7 @@ class ShelfViewModel(
                 if (romRepository.deleteDownloadedRom(id)) any = true
             }
             if (!any) {
-                _messages.tryEmit("No se pudo borrar ${item.rom.name}")
+                _messages.tryEmit(tr("android.library.delete_failed", item.rom.name))
             } else {
                 physicalMediaRepository.remove((item.groupRomIds + item.rom.id).distinct())
             }

@@ -231,6 +231,13 @@ fun ConfigScreen(
                     keyboardOptions = KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri,
                     ),
+                    // HTTP en claro está permitido (RomM en la LAN), pero la API
+                    // key viaja sin cifrar: se avisa sin bloquear.
+                    supportingText = if (serverUrl.trim().startsWith("http://", ignoreCase = true)) {
+                        { Text(tr("settings.server.http_warning")) }
+                    } else {
+                        null
+                    },
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 if (!settings.isConfigured) {
@@ -991,8 +998,9 @@ fun ConfigScreen(
             ) {
                 val backup = remember {
                     com.davidadrianrg.atril.data.backup.BackupManager(
-                        context,
-                        com.davidadrianrg.atril.data.local.SettingsDataStore(context),
+                        context = context,
+                        settings = container.settingsDataStore,
+                        onServerChanged = { url, key -> container.configureApi(url, key) },
                     )
                 }
                 val backupScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -1003,22 +1011,39 @@ fun ConfigScreen(
                     androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json"),
                 ) { uri ->
                     if (uri != null) backupScope.launch {
-                        runCatching {
-                            val json = backup.export(includeSecrets)
-                            context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                        // Solo se anuncia «exportada» si de verdad se escribió.
+                        val written = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            runCatching {
+                                val json = backup.export(includeSecrets)
+                                val out = context.contentResolver.openOutputStream(uri)
+                                    ?: error("no output stream")
+                                out.use { it.write(json.toByteArray()) }
+                            }.isSuccess
                         }
-                        backupStatus = tr("backup.exported")
+                        backupStatus = tr(if (written) "backup.exported" else "backup.export_failed")
                     }
                 }
                 val openDoc = androidx.activity.compose.rememberLauncherForActivityResult(
                     androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
                 ) { uri ->
                     if (uri != null) backupScope.launch {
-                        val text = runCatching {
-                            context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                        }.getOrNull()
-                        val ok = text != null && backup.import(text)
-                        backupStatus = tr(if (ok) "backup.imported" else "backup.import_failed")
+                        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            val text = runCatching {
+                                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                            }.getOrNull()
+                            if (text == null) {
+                                com.davidadrianrg.atril.data.backup.BackupImportResult.INVALID
+                            } else {
+                                backup.import(text)
+                            }
+                        }
+                        backupStatus = tr(
+                            when (result) {
+                                com.davidadrianrg.atril.data.backup.BackupImportResult.OK -> "backup.imported"
+                                com.davidadrianrg.atril.data.backup.BackupImportResult.UNSUPPORTED_VERSION -> "backup.import_unsupported"
+                                com.davidadrianrg.atril.data.backup.BackupImportResult.INVALID -> "backup.import_failed"
+                            },
+                        )
                     }
                 }
 

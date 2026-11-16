@@ -26,7 +26,7 @@ class UpdateCheckWorker(
         UpdateNotificationManager.notifyIfAvailable(
             context = applicationContext,
             result = result,
-            settings = SettingsDataStore(applicationContext),
+            settings = SettingsDataStore.get(applicationContext),
         )
         return Result.success()
     }

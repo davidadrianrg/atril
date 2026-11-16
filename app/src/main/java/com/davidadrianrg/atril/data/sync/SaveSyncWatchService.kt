@@ -56,7 +56,7 @@ class SaveSyncWatchService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        settings = SettingsDataStore(this)
+        settings = SettingsDataStore.get(this)
         createChannel()
         // Android exige startForeground en los primeros 5 s tras startForegroundService.
         startForeground(NOTIFICATION_ID, buildNotification(0))

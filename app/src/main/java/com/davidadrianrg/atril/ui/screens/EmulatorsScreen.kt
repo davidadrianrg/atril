@@ -120,8 +120,13 @@ fun EmulatorsScreen() {
     var queue by remember { mutableStateOf<List<EmulatorEntry>>(emptyList()) }
     var pendingInstall by remember { mutableStateOf(false) }
 
+    // PackageManager fuera del hilo principal: con decenas de entradas se nota.
     fun refreshInstalled(list: List<EmulatorEntry>) {
-        installed = list.associate { it.id to repository.installedVersion(it) }
+        scope.launch {
+            installed = withContext(Dispatchers.IO) {
+                list.associate { it.id to repository.installedVersion(it) }
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -143,8 +148,9 @@ fun EmulatorsScreen() {
             .distinctBy { it.id }
     }
 
-    fun afterDownload(entry: EmulatorEntry, file: File) {
-        repository.learnPackageName(entry, file)
+    // Parsear un APK de decenas de MB no puede ir en el hilo principal.
+    suspend fun afterDownload(entry: EmulatorEntry, file: File) {
+        withContext(Dispatchers.IO) { repository.learnPackageName(entry, file) }
         refreshInstalled(entries.orEmpty())
     }
 
@@ -185,7 +191,11 @@ fun EmulatorsScreen() {
         progress = 0f
         scope.launch {
             try {
-                val release = repository.latestRelease(next, dualScreen = dual) ?: return@launch
+                val release = repository.latestRelease(next, dualScreen = dual)
+                if (release == null) {
+                    snackbar.showSnackbar(tr("emulators.no_release", next.name))
+                    return@launch
+                }
                 latest = latest + (next.id to release.version)
                 val file = repository.download(release) { progress = it }
                 afterDownload(next, file)
@@ -219,14 +229,37 @@ fun EmulatorsScreen() {
         checking = true
         scope.launch {
             try {
+                // Los fallos ya no se tragan: sin red o con el límite de GitHub
+                // agotado se dice, en vez de «actualizaciones comprobadas».
+                var failures = 0
+                var lastError: Throwable? = null
                 for (entry in entries.orEmpty()) {
-                    val version = repository.installedVersion(entry) ?: continue
-                    val release = repository.latestRelease(entry, dualScreen = dual) ?: continue
+                    val version = withContext(Dispatchers.IO) { repository.installedVersion(entry) } ?: continue
+                    val release = try {
+                        repository.latestRelease(entry, dualScreen = dual)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: com.davidadrianrg.atril.data.emulators.GitHubRateLimitException) {
+                        lastError = e
+                        failures++
+                        break
+                    } catch (e: Exception) {
+                        lastError = e
+                        failures++
+                        null
+                    } ?: continue
                     if (VersionCompare.isNewer(release.version, version)) {
                         latest = latest + (entry.id to release.version)
                     }
                 }
-                snackbar.showSnackbar(tr("emulators.updates_checked"))
+                val error = lastError
+                snackbar.showSnackbar(
+                    when {
+                        error is com.davidadrianrg.atril.data.emulators.GitHubRateLimitException -> error.message.orEmpty()
+                        error != null -> tr("emulators.updates_failed", failures, error.message ?: "")
+                        else -> tr("emulators.updates_checked")
+                    },
+                )
             } finally {
                 checking = false
             }
