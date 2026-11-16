@@ -968,10 +968,14 @@ internal fun InsertionOverlay(
     title: String,
     isOptical: Boolean,
     model: Any?,
-    progress: Float,
+    /**
+     * Lambda, no valor: así el progreso se lee aquí y cada frame recompone solo
+     * el overlay, no la pantalla entera que lo contiene (Play son ~900 líneas).
+     */
+    progress: () -> Float,
     onCancel: () -> Unit,
 ) {
-    val pose = com.davidadrianrg.atril.core.launch.InsertionMotion.pose(progress)
+    val pose = com.davidadrianrg.atril.core.launch.InsertionMotion.pose(progress())
     val appear = pose.appear
     val glow = (pose.glow + 0.5f * pose.impact).coerceAtMost(1f)
 
@@ -1186,6 +1190,6 @@ internal fun InsertionDialogLayer(state: InsertionState, onCancel: () -> Unit) {
             dismissOnClickOutside = false,
         ),
     ) {
-        InsertionOverlay(spec.title, spec.isOptical, spec.model, state.progress.value, onCancel)
+        InsertionOverlay(spec.title, spec.isOptical, spec.model, { state.progress.value }, onCancel)
     }
 }
