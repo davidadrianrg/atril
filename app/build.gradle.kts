@@ -41,6 +41,8 @@ android {
         // Sin URL, el botón abre una issue prellenada en GitHub.
         val reportUrl = (project.findProperty("atril.reportUrl") as String?)
             ?: System.getenv("ATRIL_REPORT_URL").orEmpty()
+            // Endpoint por defecto: worker de Cloudflare desplegado para Atril.
+            .ifBlank { "https://atril.davidadrianrg.workers.dev" }
         val reportKey = (project.findProperty("atril.reportKey") as String?)
             ?: System.getenv("ATRIL_REPORT_KEY").orEmpty()
         buildConfigField("String", "REPORT_URL", "\"$reportUrl\"")

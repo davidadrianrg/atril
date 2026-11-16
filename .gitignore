@@ -87,3 +87,6 @@ keystore.properties
 
 # Swarm run artifacts
 .swarm/
+
+# Wrangler local cache (contiene datos de la cuenta)
+.wrangler/
