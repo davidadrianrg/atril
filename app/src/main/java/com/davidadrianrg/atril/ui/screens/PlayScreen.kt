@@ -841,11 +841,34 @@ fun PlayScreen(
                 // Leyenda del mando en el flujo: nunca se solapa con el texto
                 // del juego (Android · Local, etc.).
                 if (visibleItems.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 6.dp),
-                        contentAlignment = Alignment.Center,
+                    // En horizontal la leyenda comparte fila con la línea de
+                    // información (UX1); en vertical la ficha va arriba.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp, bottom = 6.dp, start = if (landscape) 24.dp else 0.dp, end = if (landscape) 16.dp else 0.dp),
+                        horizontalArrangement = if (landscape) Arrangement.spacedBy(16.dp) else Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                    if (landscape) {
+                        val infoItem = current
+                        if (infoItem != null) {
+                            val lastPlayedAt = playStats.statsOf(infoItem).lastPlayedAt
+                            LauncherInfoStrip(
+                                title = infoItem.rom.name,
+                                metadata = infoItem.rom.metadataLine(infoItem.platformLabel),
+                                lastPlayed = lastPlayedAt?.let {
+                                    tr("game.info.last_played") + com.davidadrianrg.atril.core.library.GameMetadataLine.SEPARATOR +
+                                        com.davidadrianrg.atril.core.playstats.PlayTimeFormat.relativeDate(it, System.currentTimeMillis())
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
                     PadLegendBar(
+                modifier = if (landscape) Modifier.weight(1f, fill = false) else Modifier,
                 onPlay = { current?.let { play(it) } },
                 onSearch = { showSearch = true },
                 onMenu = { menuOpen = true },

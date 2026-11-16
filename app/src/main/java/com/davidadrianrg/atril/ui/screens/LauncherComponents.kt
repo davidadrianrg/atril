@@ -93,6 +93,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.library.GameMetadataLine
+import androidx.compose.ui.text.withStyle
 import com.davidadrianrg.atril.core.playstats.GamePlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStats
 import com.davidadrianrg.atril.core.playstats.PlayStatsLogic
@@ -619,6 +620,39 @@ internal fun LauncherCaption(
         }
         }
     }
+}
+
+/**
+ * Línea de información en horizontal (UX1): «título · metadatos · última
+ * partida» en una sola fila, a la izquierda de la leyenda del mando. El
+ * título va más marcado; el resto atenuado y se recorta con elipsis.
+ */
+@Composable
+internal fun LauncherInfoStrip(
+    title: String,
+    metadata: String?,
+    lastPlayed: String?,
+    modifier: Modifier = Modifier,
+) {
+    val rest = com.davidadrianrg.atril.core.library.LauncherInfoLine.parts(title, metadata, lastPlayed).drop(1)
+    val text = androidx.compose.ui.text.buildAnnotatedString {
+        withStyle(androidx.compose.ui.text.SpanStyle(color = LauncherCream, fontWeight = FontWeight.SemiBold)) {
+            append(title.trim())
+        }
+        if (rest.isNotEmpty()) {
+            withStyle(androidx.compose.ui.text.SpanStyle(color = LauncherCream.copy(alpha = 0.62f))) {
+                append(GameMetadataLine.SEPARATOR)
+                append(rest.joinToString(GameMetadataLine.SEPARATOR))
+            }
+        }
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
+    )
 }
 
 /**
