@@ -131,8 +131,10 @@ class ShelfViewModel(
             if (local.isEmpty()) {
                 remote
             } else {
-                val labels = runCatching { platformDao.getAllPlatformsBlocking() }
-                    .getOrDefault(emptyList()).associate { it.slug to it.name }
+                // Sin RomM la tabla está vacía: el catálogo integrado pone nombre.
+                val labels = com.davidadrianrg.atril.core.localgames.LocalPlatformChoices.BUILTIN.toMap() +
+                    runCatching { platformDao.getAllPlatformsBlocking() }
+                        .getOrDefault(emptyList()).associate { it.slug to it.name }
                 remote + localShelfItems(local, labels, discChoices)
             }
         }.flowOn(kotlinx.coroutines.Dispatchers.IO)

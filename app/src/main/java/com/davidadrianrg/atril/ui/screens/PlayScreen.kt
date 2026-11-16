@@ -197,9 +197,13 @@ fun PlayScreen(
     var scrapingId by remember { mutableStateOf<String?>(null) }
     var mediaPick by remember { mutableStateOf<ShelfItem?>(null) }
     var mediaPickKind by remember { mutableStateOf("cover") }
-    val knownPlatforms = remember { runCatching { container.platformDao.getAllPlatformsBlocking() }.getOrDefault(emptyList()) }
+    // Room no admite consultas en el hilo principal: se observa el Flow del DAO.
+    // Sin RomM la tabla está vacía y el catálogo integrado rellena la lista.
+    val knownPlatforms by container.platformDao.getAllPlatforms().collectAsState(initial = emptyList())
     val platformChoices = remember(knownPlatforms) {
-        knownPlatforms.map { it.slug to it.name }.distinctBy { it.first }.sortedBy { it.second.lowercase() }
+        com.davidadrianrg.atril.core.localgames.LocalPlatformChoices.build(
+            knownPlatforms.map { it.slug to it.name },
+        )
     }
     val pickGame = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
@@ -998,8 +1002,8 @@ fun PlayScreen(
         AddLocalGameDialog(
             path = path,
             platforms = platformChoices,
-            initialSlug = com.davidadrianrg.atril.core.localgames.LocalGamePaths
-                .guessPlatform(path, platformChoices.map { it.first }),
+            initialSlug = com.davidadrianrg.atril.core.localgames.LocalPlatformChoices
+                .guess(path, platformChoices.map { it.first }),
             onConfirm = { title, slug ->
                 pendingAddPath = null
                 viewModel.addLocalGame(title, slug, path)
