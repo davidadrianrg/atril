@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -76,7 +77,8 @@ internal object DesktopIssueReporter {
     private val key: String?
         get() = System.getenv("ATRIL_REPORT_KEY")?.takeIf { it.isNotBlank() }
 
-    val hasEndpoint: Boolean get() = endpoint != null
+    /** Como en Android: sin clave el worker rechaza la petición, mejor ir a GitHub. */
+    val hasEndpoint: Boolean get() = endpoint != null && key != null
 
     suspend fun send(message: String, diagnostics: String): Result<String> =
         withContext(Dispatchers.IO) {
@@ -206,7 +208,7 @@ internal fun DesktopReportDialog(onDismiss: () -> Unit) {
                 },
             ) {
                 if (sending) {
-                    CircularProgressIndicator(Modifier.padding(end = 8.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.padding(end = 8.dp).size(16.dp), strokeWidth = 2.dp)
                 }
                 Text(if (sending) tr("report.sending") else tr("report.send"))
             }
