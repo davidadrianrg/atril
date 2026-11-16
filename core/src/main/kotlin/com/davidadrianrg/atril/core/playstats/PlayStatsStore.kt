@@ -26,4 +26,7 @@ interface PlayStatsStore {
      * @throws IllegalArgumentException si [durationMs] es negativo (error de programación).
      */
     fun recordSession(romId: Int, endedAt: Long, durationMs: Long): PlayStats
+
+    /** Sustituye todo el contenido del almacén (copia de seguridad). */
+    fun replaceAll(stats: List<PlayStats>)
 }

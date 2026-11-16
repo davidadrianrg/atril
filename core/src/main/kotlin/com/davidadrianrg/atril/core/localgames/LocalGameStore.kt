@@ -51,6 +51,11 @@ class LocalGameStore(
     }
 
     @Synchronized
+    /** Sustituye toda la lista (copia de seguridad). */
+    fun restoreAll(list: List<LocalGame>) {
+        save(list)
+    }
+
     fun remove(id: String): Boolean {
         val list = load()
         if (list.none { it.id == id }) return false

@@ -185,6 +185,11 @@ class JsonPlayStatsStore(
         }
     }
 
+    @Synchronized
+    override fun replaceAll(stats: List<PlayStats>) {
+        save(stats.associateBy { it.romId })
+    }
+
     private companion object {
         /** Margen por delante del reloj para no descartar una partida recién guardada. */
         const val SANE_FUTURE_MARGIN_MS: Long = 86_400_000L

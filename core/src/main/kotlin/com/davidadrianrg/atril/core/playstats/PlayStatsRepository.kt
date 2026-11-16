@@ -41,6 +41,12 @@ class PlayStatsRepository(
     /** Agregado del grupo con las estadísticas actuales. */
     fun aggregate(groupIds: List<Int>): GamePlayStats = PlayStatsLogic.aggregate(groupIds, _stats.value)
 
+    /** Sustituye todas las estadísticas (copia de seguridad) y refresca. */
+    fun restoreAll(stats: List<PlayStats>) {
+        store.replaceAll(stats)
+        refresh()
+    }
+
     /** Los grupos jugados más recientemente (máximo [limit]). */
     fun recent(groups: List<List<Int>>, limit: Int = PlayStatsLogic.CONTINUE_LIMIT): List<GamePlayStats> =
         PlayStatsLogic.recent(groups, _stats.value, limit)

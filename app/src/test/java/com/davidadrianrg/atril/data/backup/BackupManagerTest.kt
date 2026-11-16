@@ -46,6 +46,8 @@ class BackupManagerTest {
         every { settings.language } returns flowOf("es")
         every { settings.settings } returns server
         every { settings.getApiKeyBlocking() } answers { apiKey.value }
+        coEvery { settings.exportPreferences() } returns emptyMap()
+        coEvery { settings.importPreferences(any()) } returns Unit
         every { settings.scraperCredentials } returns flowOf(ScraperCredentials("sgdb", "user", "pw"))
         coEvery { settings.setServerUrl(any()) } answers { server.value = server.value.copy(serverUrl = firstArg()) }
         coEvery { settings.setApiKey(any()) } answers {

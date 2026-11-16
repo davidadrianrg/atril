@@ -16,6 +16,10 @@ enum class BackupImportResult { OK, INVALID, UNSUPPORTED_VERSION }
 class BackupManager(
     private val context: Context,
     private val settings: SettingsDataStore = SettingsDataStore.get(context),
+    /** Para incluir favoritos y tiempo jugado en la copia (esquema 3). */
+    private val playStats: com.davidadrianrg.atril.core.playstats.PlayStatsRepository? = null,
+    /** Para incluir los juegos locales (esquema 3). */
+    private val localGames: com.davidadrianrg.atril.core.localgames.LocalGamesRepository? = null,
     /** Se llama tras importar credenciales para que el cliente HTTP use las nuevas. */
     private val onServerChanged: (serverUrl: String, apiKey: String) -> Unit = { _, _ -> },
     /**
@@ -27,7 +31,7 @@ class BackupManager(
 ) {
     companion object {
         /** Versión del esquema que escribe esta build; se aceptan las <= a ella. */
-        const val SCHEMA_VERSION = 2
+        const val SCHEMA_VERSION = 3
     }
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
@@ -44,6 +48,29 @@ class BackupManager(
             "launcherBlur" to settings.launcherBlur.first(),
             "language" to settings.language.first(),
             "settings" to settings.exportPreferences(),
+            "playStats" to playStats?.let { repo ->
+                repo.stats.value.values.map { st ->
+                    mapOf(
+                        "romId" to st.romId,
+                        "favorite" to st.favorite,
+                        "lastPlayedAt" to st.lastPlayedAt,
+                        "totalPlayedMs" to st.totalPlayedMs,
+                    )
+                }
+            },
+            "localGames" to localGames?.let { repo ->
+                repo.games.value.map { g ->
+                    mapOf(
+                        "id" to g.id,
+                        "title" to g.title,
+                        "platformSlug" to g.platformSlug,
+                        "path" to g.path,
+                        "summary" to g.summary,
+                        "scrapeSource" to g.scrapeSource,
+                        "addedAt" to g.addedAt,
+                    )
+                }
+            },
             "customEmulators" to custom.map {
                 mapOf(
                     "id" to it.id,

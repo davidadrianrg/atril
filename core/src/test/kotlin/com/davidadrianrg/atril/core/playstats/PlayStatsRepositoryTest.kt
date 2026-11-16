@@ -27,6 +27,11 @@ class PlayStatsRepositoryTest {
 
         override fun all(): List<PlayStats> = records.values.toList()
 
+        override fun replaceAll(stats: List<PlayStats>) {
+            records.clear()
+            stats.forEach { records[it.romId] = it }
+        }
+
         override fun get(romId: Int): PlayStats? = records[romId]
 
         override fun setFavorite(romId: Int, favorite: Boolean): PlayStats {
