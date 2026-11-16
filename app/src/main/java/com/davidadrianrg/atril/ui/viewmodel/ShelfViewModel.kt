@@ -30,7 +30,11 @@ import com.davidadrianrg.atril.launch.LaunchRequest
 import com.davidadrianrg.atril.launch.RomLaunchService
 import com.davidadrianrg.atril.core.i18n.tr
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -111,7 +115,8 @@ class ShelfViewModel(
     private val romFileImportService: RomFileImportService? = null,
 ) : ViewModel() {
 
-    private val dtoCache = mutableMapOf<Int, RomDto>()
+    /** Se escribe desde varias corrutinas de IO a la vez: tiene que ser concurrente. */
+    private val dtoCache = ConcurrentHashMap<Int, RomDto>()
 
     /** Juegos hidratados (Room + servidor), sin la capa de presentación. */
     private val _items = MutableStateFlow<List<ShelfItem>>(emptyList())
@@ -176,82 +181,107 @@ class ShelfViewModel(
                 settingsRepository.settings,
                 settingsRepository.retroArchBasePath,
             ) { downloaded, cfg, retroBase -> Triple(downloaded, cfg, retroBase) }
+                .distinctUntilChanged()
                 .collectLatest { (downloaded, cfg, retroBase) ->
                     if (downloaded.isEmpty()) {
                         _items.value = emptyList()
                         _loading.value = false
                         return@collectLatest
                     }
-                    _loading.value = true
 
-                    val platforms = runCatching { platformDao.getAllPlatformsBlocking() }
-                        .getOrDefault(emptyList())
-                        .associateBy { it.slug }
+                    val platforms = withContext(Dispatchers.IO) {
+                        runCatching { platformDao.getAllPlatformsBlocking() }
+                            .getOrDefault(emptyList())
+                            .associateBy { it.slug }
+                    }
                     val baseCoverUrl = cfg.serverUrl.trimEnd('/') + "/"
+
+                    // 1) Publicar YA lo que hay en Room (+ lo ya traído del
+                    //    servidor en esta sesión): Play nunca espera a la red
+                    //    para enseñar los juegos descargados.
+                    _items.value = buildItems(downloaded, platforms, HashMap(dtoCache), baseCoverUrl, retroBase)
+                    _loading.value = false
+
                     val api = if (cfg.serverUrl.isNotBlank() && cfg.apiKey.isNotBlank()) {
-                        NetworkModule.createApiService(cfg.serverUrl, cfg.apiKey)
+                        NetworkModule.createMetadataApiService(cfg.serverUrl, cfg.apiKey)
                     } else null
+                    if (api == null) return@collectLatest
                     val semaphore = Semaphore(4)
 
-                    // Hidratación por LISTADO de plataforma (la misma fuente que
-                    // usa la Biblioteca): así las carátulas coinciden siempre.
-                    // Luego, para ids que no aparezcan, se pide el detalle.
-                    val dtoById = mutableMapOf<Int, RomDto>()
-                    dtoCache.forEach { (id, dto) -> dtoById[id] = dto }
+                    // 2) Enriquecer en segundo plano. Hidratación por LISTADO de
+                    //    plataforma (la misma fuente que usa la Biblioteca): así
+                    //    las carátulas coinciden siempre. Luego, para ids que no
+                    //    aparezcan, se pide el detalle.
+                    val dtoById = ConcurrentHashMap<Int, RomDto>(dtoCache)
+                    val reachable = AtomicBoolean(false)
+                    val platformIds = downloaded
+                        .mapNotNull { platforms[it.platformSlug]?.id }
+                        .distinct()
+                    coroutineScope {
+                        platformIds.map { platformId ->
+                            async(Dispatchers.IO) {
+                                semaphore.withPermit {
+                                    var offset = 0
+                                    val pageSize = 500
+                                    while (true) {
+                                        val response = runCatching {
+                                            api.getRoms(
+                                                mapOf(
+                                                    "platform_ids" to platformId.toString(),
+                                                    "limit" to pageSize.toString(),
+                                                    "offset" to offset.toString(),
+                                                    "order_by" to "name",
+                                                    "order_dir" to "asc",
+                                                ),
+                                            )
+                                        }.getOrNull() ?: break
+                                        reachable.set(true)
+                                        response.items.forEach { dto ->
+                                            dtoById[dto.id] = dto
+                                            dtoCache[dto.id] = dto
+                                        }
+                                        if (response.items.size < pageSize) break
+                                        offset += pageSize
+                                        if (offset >= 10_000) break
+                                    }
+                                }
+                            }
+                        }.awaitAll()
+                    }
 
-                    if (api != null) {
-                        val platformIds = downloaded
-                            .mapNotNull { platforms[it.platformSlug]?.id }
-                            .distinct()
+                    // Si ningún listado respondió, el servidor no está al
+                    // alcance: no se pide el detalle juego a juego (serían N
+                    // timeouts más para nada).
+                    val missing = downloaded.map { it.romId }.filter { !dtoById.containsKey(it) }
+                    if (missing.isNotEmpty() && (reachable.get() || platformIds.isEmpty())) {
                         coroutineScope {
-                            platformIds.map { platformId ->
+                            missing.map { romId ->
                                 async(Dispatchers.IO) {
                                     semaphore.withPermit {
-                                        var offset = 0
-                                        val pageSize = 500
-                                        while (true) {
-                                            val response = runCatching {
-                                                api.getRoms(
-                                                    mapOf(
-                                                        "platform_ids" to platformId.toString(),
-                                                        "limit" to pageSize.toString(),
-                                                        "offset" to offset.toString(),
-                                                        "order_by" to "name",
-                                                        "order_dir" to "asc",
-                                                    ),
-                                                )
-                                            }.getOrNull() ?: break
-                                            response.items.forEach { dto ->
-                                                dtoById[dto.id] = dto
-                                                dtoCache[dto.id] = dto
-                                            }
-                                            if (response.items.size < pageSize) break
-                                            offset += pageSize
-                                            if (offset >= 10_000) break
+                                        val dto = runCatching { api.getRom(romId) }.getOrNull()
+                                        if (dto != null) {
+                                            dtoById[romId] = dto
+                                            dtoCache[romId] = dto
                                         }
                                     }
                                 }
                             }.awaitAll()
                         }
-
-                        val missing = downloaded.map { it.romId }.filter { it !in dtoById }
-                        if (missing.isNotEmpty()) {
-                            coroutineScope {
-                                missing.map { romId ->
-                                    async(Dispatchers.IO) {
-                                        semaphore.withPermit {
-                                            val dto = runCatching { api.getRom(romId) }.getOrNull()
-                                            if (dto != null) {
-                                                dtoById[romId] = dto
-                                                dtoCache[romId] = dto
-                                            }
-                                        }
-                                    }
-                                }.awaitAll()
-                            }
-                        }
                     }
 
+                    _items.value = buildItems(downloaded, platforms, dtoById, baseCoverUrl, retroBase)
+                }
+        }
+    }
+
+    /** Agrupa los descargados (multidisco) y los convierte en ítems de la estantería. */
+    private fun buildItems(
+        downloaded: List<DownloadedRomEntity>,
+        platforms: Map<String, com.davidadrianrg.atril.data.local.entity.PlatformEntity>,
+        dtoById: Map<Int, RomDto>,
+        baseCoverUrl: String,
+        retroBase: String,
+    ): List<ShelfItem> {
                     val romsById = downloaded.associate { entity ->
                         entity.romId to buildRom(entity, dtoById[entity.romId], baseCoverUrl)
                     }
@@ -268,7 +298,7 @@ class ShelfViewModel(
                     }
                     val downloadedIds = downloaded.map { it.romId }.toSet()
 
-                    val items = MultiDiscGrouper.group(discEntries).mapNotNull { group ->
+                    return MultiDiscGrouper.group(discEntries).mapNotNull { group ->
                         val repEntity = downloaded.firstOrNull { it.romId == group.representativeId }
                             ?: return@mapNotNull null
                         val repRom = romsById[group.representativeId] ?: return@mapNotNull null
@@ -299,11 +329,6 @@ class ShelfViewModel(
                             platformEmulatorId = platform?.emulatorId,
                         )
                     }.sortedBy { it.rom.name.lowercase() }
-
-                    _items.value = items
-                    _loading.value = false
-                }
-        }
     }
 
     fun setSavesPathOverride(romId: Int, path: String?) {

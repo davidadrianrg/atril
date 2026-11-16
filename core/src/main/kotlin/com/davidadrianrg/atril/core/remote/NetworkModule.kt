@@ -55,4 +55,26 @@ object NetworkModule {
         val retrofit = createRetrofit(baseUrl, client)
         return retrofit.create(RomMApiService::class.java)
     }
+
+    /**
+     * Cliente para leer metadatos en segundo plano (listados, detalle). Con el
+     * servidor inalcanzable —fuera de la LAN de casa— los 30 s de conexión
+     * del cliente general dejaban Play esperando minutos: aquí se falla rápido
+     * y se sigue con los datos locales.
+     */
+    fun createMetadataApiService(
+        baseUrl: String,
+        apiKey: String,
+        connectTimeoutSeconds: Long = METADATA_CONNECT_TIMEOUT_SECONDS,
+    ): RomMApiService {
+        val client = createOkHttpClient(apiKey).newBuilder()
+            .connectTimeout(connectTimeoutSeconds, TimeUnit.SECONDS)
+            .readTimeout(METADATA_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false)
+            .build()
+        return createRetrofit(baseUrl, client).create(RomMApiService::class.java)
+    }
+
+    const val METADATA_CONNECT_TIMEOUT_SECONDS = 4L
+    const val METADATA_READ_TIMEOUT_SECONDS = 30L
 }
