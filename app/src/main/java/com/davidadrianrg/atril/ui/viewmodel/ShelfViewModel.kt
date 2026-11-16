@@ -377,9 +377,9 @@ class ShelfViewModel(
         .currentFamily(item.rom.platformSlug, item.launchOverride, item.platformEmulatorId)
         ?.displayName
 
-    /** Id estable y NEGATIVO para un juego local: nunca choca con un id de RomM. */
+    /** Id estable, único y NEGATIVO para un juego local (persistido, ver LocalRomIds). */
     private fun com.davidadrianrg.atril.core.localgames.LocalGame.syntheticRomId(): Int =
-        -((id.hashCode().toLong() and 0x7FFFFFFF).toInt().coerceAtLeast(1))
+        com.davidadrianrg.atril.core.localgames.LocalRomIds.of(this)
 
     private fun com.davidadrianrg.atril.core.localgames.LocalGame.toShelfItem(
         platformLabel: String,
