@@ -231,6 +231,13 @@ fun ConfigScreen(
                     keyboardOptions = KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri,
                     ),
+                    // HTTP en claro está permitido (RomM en la LAN), pero la API
+                    // key viaja sin cifrar: se avisa sin bloquear.
+                    supportingText = if (serverUrl.trim().startsWith("http://", ignoreCase = true)) {
+                        { Text(tr("settings.server.http_warning")) }
+                    } else {
+                        null
+                    },
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 if (!settings.isConfigured) {

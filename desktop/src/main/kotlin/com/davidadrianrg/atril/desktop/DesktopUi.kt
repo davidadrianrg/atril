@@ -1927,6 +1927,12 @@ fun SettingsScreen(state: DesktopAppState) {
                 placeholder = { Text(tr("settings.server.url_placeholder")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                // Mismo aviso que en Android: HTTP funciona, pero la API key va en claro.
+                supportingText = if (serverUrl.value.trim().startsWith("http://", ignoreCase = true)) {
+                    { Text(tr("settings.server.http_warning")) }
+                } else {
+                    null
+                },
             )
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

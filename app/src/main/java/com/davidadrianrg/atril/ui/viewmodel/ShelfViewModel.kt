@@ -324,7 +324,7 @@ class ShelfViewModel(
                 if (romRepository.deleteDownloadedRom(id)) any = true
             }
             if (!any) {
-                _messages.tryEmit("No se pudo borrar ${item.rom.name}")
+                _messages.tryEmit(tr("android.library.delete_failed", item.rom.name))
             } else {
                 physicalMediaRepository.remove((item.groupRomIds + item.rom.id).distinct())
             }

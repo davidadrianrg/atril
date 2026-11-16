@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RomM suele vivir en la LAN de casa como http://192.168.x.x:8080. Desde
+  targetSdk 28 Android bloquea HTTP en claro por defecto y OkHttp fallaba con
+  «CLEARTEXT communication not permitted». La política es permitirlo (domain-config
+  no admite comodines de IP) y avisar en Ajustes > Conexión al usar http://.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
