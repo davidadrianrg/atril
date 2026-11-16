@@ -34,8 +34,8 @@ import coil.compose.AsyncImage
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.ui.input.focusRing
 import com.davidadrianrg.atril.core.localgames.ScraperCredentials
-import com.davidadrianrg.atril.data.media.MediaCandidate
-import com.davidadrianrg.atril.data.media.MediaCatalog
+import com.davidadrianrg.atril.core.media.MediaCandidate
+import com.davidadrianrg.atril.core.media.MediaCatalog
 
 /**
  * Selector con previsualización: busca en ScreenScraper y SteamGridDB y deja
@@ -55,7 +55,7 @@ fun MediaPickerDialog(
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(title, platformSlug) {
-        candidates = com.davidadrianrg.atril.data.media.MediaCatalog()
+        candidates = MediaCatalog()
             .search(title, platformSlug, creds)
             .filter { it.kind in kinds }
             .also { if (it.isEmpty()) error = tr("media.picker.empty") }
