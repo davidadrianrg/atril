@@ -56,6 +56,7 @@ import com.davidadrianrg.atril.RomMSyncApplication
 import com.davidadrianrg.atril.apps.InstalledApp
 import com.davidadrianrg.atril.apps.InstalledAppsRepository
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.ui.input.focusRing
 import com.davidadrianrg.atril.core.launch.LaunchTargetResolver
 import com.davidadrianrg.atril.ui.components.pageBackground
 import com.davidadrianrg.atril.ui.components.PageHeader
@@ -212,6 +213,7 @@ private fun AppTile(
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(18.dp))
+            .focusRing(RoundedCornerShape(18.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(vertical = 8.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

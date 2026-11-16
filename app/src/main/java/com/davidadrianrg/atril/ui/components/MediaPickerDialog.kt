@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.ui.input.focusRing
 import com.davidadrianrg.atril.core.localgames.ScraperCredentials
 import com.davidadrianrg.atril.data.media.MediaCandidate
 import com.davidadrianrg.atril.data.media.MediaCatalog
@@ -116,6 +117,7 @@ fun MediaPickerDialog(
                             Column(
                                 Modifier
                                     .clip(RoundedCornerShape(10.dp))
+                                    .focusRing(RoundedCornerShape(10.dp))
                                     .clickable { onSelect(candidate) },
                             ) {
                                 AsyncImage(

@@ -185,8 +185,10 @@ fun PlayScreen(
 
     var selectedRomId by remember { mutableStateOf<Int?>(null) }
     var pendingDelete by remember { mutableStateOf<ShelfItem?>(null) }
-    var platformFilter by remember { mutableStateOf<String?>(null) }
-    var quickFilter by remember { mutableStateOf<String?>(null) }
+    var platformFilter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    var quickFilter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    var lastRomId by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
+    val filterEffectFirst = remember { mutableStateOf(true) }
     var menuOpen by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
@@ -265,10 +267,21 @@ fun PlayScreen(
         }
         platformOk && quickOk
     }
-    val pagerState = rememberPagerState(pageCount = { visibleItems.size })
+    val initialPage = visibleItems.indexOfFirst { it.rom.id == lastRomId }
+        .coerceIn(0, (visibleItems.size - 1).coerceAtLeast(0))
+    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { visibleItems.size })
+    LaunchedEffect(pagerState.currentPage, visibleItems) {
+        visibleItems.getOrNull(pagerState.currentPage)?.let { lastRomId = it.rom.id }
+    }
     // Juego elegido desde «Seguir jugando»: se lleva el carrusel a su página.
     var pendingSelectId by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(platformFilter, quickFilter) {
+        // No reposicionar en la primera composición: al volver de otra pantalla
+        // se conserva el juego y el filtro (rememberSaveable).
+        if (filterEffectFirst.value) {
+            filterEffectFirst.value = false
+            return@LaunchedEffect
+        }
         // Un cambio de filtro vuelve al principio, salvo que la selección
         // venga de «Seguir jugando» (entonces manda esa página).
         if (pendingSelectId == null) pagerState.scrollToPage(0)
@@ -386,7 +399,7 @@ fun PlayScreen(
     // Start abre el buscador de juegos descargados.
     LaunchedEffect(Unit) {
         com.davidadrianrg.atril.ui.input.PadEvents.search.collect {
-            if (insertion == null && !menuOpen) showSearch = true
+            if (insertion == null && !menuOpen && selectedRomId == null && !showSearch) showSearch = true
         }
     }
     // L1/R1 cambian el filtro de plataforma.
@@ -396,18 +409,22 @@ fun PlayScreen(
     val platformsNow by androidx.compose.runtime.rememberUpdatedState(platformsInShelf)
     LaunchedEffect(Unit) {
         com.davidadrianrg.atril.ui.input.PadEvents.details.collect {
-            if (insertion == null && !menuOpen) currentNow?.let { selectedRomId = it.rom.id }
+            if (insertion == null && !menuOpen && selectedRomId == null && !showSearch) {
+                currentNow?.let { selectedRomId = it.rom.id }
+            }
         }
     }
     // X del mando: favorito del juego actual (nunca con la inserción en curso ni el menú abierto).
     LaunchedEffect(Unit) {
         com.davidadrianrg.atril.ui.input.PadEvents.favorite.collect {
-            if (insertion == null && !menuOpen) currentNow?.let { viewModel.toggleFavorite(it) }
+            if (insertion == null && !menuOpen && selectedRomId == null && !showSearch) {
+                currentNow?.let { viewModel.toggleFavorite(it) }
+            }
         }
     }
     LaunchedEffect(Unit) {
         com.davidadrianrg.atril.ui.input.PadEvents.page.collect { dir ->
-            if (insertion == null && !menuOpen && selectedRomId == null) {
+            if (insertion == null && !menuOpen && selectedRomId == null && !showSearch) {
                 platformFilter = com.davidadrianrg.atril.core.input.PlatformCycle.step(
                     platformFilter, platformsNow.map { it.first }, dir,
                 )
@@ -426,9 +443,11 @@ fun PlayScreen(
         .collectAsState(initial = com.davidadrianrg.atril.core.localgames.ScraperCredentials())
     val fanartStore = remember { com.davidadrianrg.atril.data.media.FanartStore(context) }
     val currentNowState by androidx.compose.runtime.rememberUpdatedState(current)
+    var bgRevision by remember { mutableStateOf(0) }
     val gameBgPath by androidx.compose.runtime.produceState<String?>(
         initialValue = null,
         currentNowState?.rom?.id,
+        bgRevision,
     ) {
         val id = currentNowState?.rom?.id
         value = if (id != null) {
@@ -447,6 +466,8 @@ fun PlayScreen(
     ) {
         val item = currentNowState
         value = if (launcherBg == "fanart" && item != null && scraperCreds.steamGridDbKey.isNotBlank()) {
+            // Espera a que el carrusel se detenga antes de golpear SteamGridDB.
+            kotlinx.coroutines.delay(400)
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 fanartStore.get(item.rom.id, item.rom.name, scraperCreds.steamGridDbKey)
             }
@@ -589,6 +610,28 @@ fun PlayScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) { CircularProgressIndicator(color = LauncherAmber) }
+
+                visibleItems.isEmpty() && (quickFilter != null || platformFilter != null) -> Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            tr(
+                                when (quickFilter) {
+                                    "favorites" -> "play.empty.favorites"
+                                    "recent" -> "play.empty.recent"
+                                    else -> "play.empty.platform"
+                                },
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LauncherCream.copy(alpha = 0.75f),
+                        )
+                        TextButton(onClick = { quickFilter = null; platformFilter = null }) {
+                            Text(tr("play.empty.clear_filter"))
+                        }
+                    }
+                }
 
                 visibleItems.isEmpty() -> EmptyLauncher(onOpenLibrary, onAddLocal = { pickGame.launch(arrayOf("*/*")) })
 
@@ -956,24 +999,26 @@ fun PlayScreen(
             onSelect = { candidate ->
                 mediaPick = null
                 scope.launch {
-                    val file = com.davidadrianrg.atril.data.media.MediaCache.saveTemp(context, candidate.url)
-                    when {
-                        mediaPickKind == "cover" && file != null && item.localGame != null -> {
+                    if (mediaPickKind == "background") {
+                        // Una sola descarga: el fichero elegido es el fondo.
+                        val saved = com.davidadrianrg.atril.data.media.MediaCache.save(
+                            context, candidate.url, "game_backgrounds", "${item.rom.id}.jpg",
+                        )
+                        if (saved != null) {
+                            viewModel.setGameBackground(item.rom.id, saved)
+                            bgRevision++
+                            notify(tr("media.background.saved"))
+                        } else {
+                            notify(tr("media.background.failed"))
+                        }
+                    } else {
+                        val file = com.davidadrianrg.atril.data.media.MediaCache.saveTemp(context, candidate.url)
+                        if (file != null && item.localGame != null) {
                             file.inputStream().use { viewModel.setLocalCover(item.localGame!!.id, it) }
                             notify(tr("local.scrape.done", candidate.provider))
+                        } else {
+                            notify(tr("media.background.failed"))
                         }
-                        mediaPickKind == "background" && file != null -> {
-                            val saved = com.davidadrianrg.atril.data.media.MediaCache.save(
-                                context, candidate.url, "game_backgrounds", "${item.rom.id}.jpg",
-                            )
-                            if (saved != null) {
-                                viewModel.setGameBackground(item.rom.id, saved)
-                                notify(tr("media.background.saved"))
-                            } else {
-                                notify(tr("media.background.failed"))
-                            }
-                        }
-                        else -> notify(tr("media.background.failed"))
                     }
                 }
             },
@@ -1155,7 +1200,8 @@ private fun RoundIconButton(
         onClick = onClick,
         modifier = Modifier
             .clip(CircleShape)
-            .background(LauncherCream.copy(alpha = 0.08f)),
+            .background(LauncherCream.copy(alpha = 0.08f))
+            .focusRing(CircleShape),
     ) {
         Icon(icon, contentDescription = description, tint = LauncherCream)
     }

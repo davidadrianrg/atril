@@ -48,6 +48,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -680,8 +681,8 @@ internal fun PadLegendBar(
         PadLegendChip("B", tr("pad.legend.back"), onBack)
         PadLegendChip("X", tr("pad.legend.favorite"), onFavorite)
         PadLegendChip("Y", tr("pad.legend.details"), onDetails)
-        PadLegendChip("▶", tr("pad.legend.search"), onSearch)
-        PadLegendChip("≡", tr("pad.legend.menu"), onMenu)
+        PadLegendChip("Start", tr("pad.legend.search"), onSearch)
+        PadLegendChip("Select", tr("pad.legend.menu"), onMenu)
     }
 }
 
@@ -712,7 +713,8 @@ private fun PadLegendChip(glyph: String, label: String, onClick: (() -> Unit)? =
     ) {
         Box(
             Modifier
-                .size(18.dp)
+                .heightIn(min = 18.dp)
+                .widthIn(min = 18.dp)
                 .clip(CircleShape)
                 .background(scheme.primary.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center,
@@ -743,6 +745,7 @@ internal fun LauncherPill(label: String, selected: Boolean, onClick: () -> Unit)
             .clip(RoundedCornerShape(50))
             .background(if (selected) LauncherAmber else Color(0x22F2E6D2))
             .border(1.dp, if (selected) Color.Transparent else LauncherCream.copy(alpha = 0.14f), RoundedCornerShape(50))
+            .focusRing(RoundedCornerShape(50))
             .clickable(role = Role.Tab, onClick = onClick)
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,

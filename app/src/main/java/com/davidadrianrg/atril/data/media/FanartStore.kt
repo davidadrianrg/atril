@@ -24,14 +24,24 @@ class FanartStore(
         .build(),
 ) {
     private val dir = File(context.cacheDir, "fanart").apply { mkdirs() }
+    /** Juegos sin resultado: no repetir dos llamadas a SteamGridDB en cada pasada. */
+    private val failed = java.util.Collections.synchronizedSet(mutableSetOf<Int>())
 
     suspend fun get(romId: Int, title: String, apiKey: String): String? =
         withContext(Dispatchers.IO) {
             val file = File(dir, "$romId.jpg")
             if (file.isFile && file.length() > 0) return@withContext file.absolutePath
             if (apiKey.isBlank()) return@withContext null
-            val url = backgroundUrl(title, apiKey) ?: return@withContext null
-            download(url, file) ?: return@withContext null
+            if (romId in failed) return@withContext null
+            val url = backgroundUrl(title, apiKey)
+            if (url == null) {
+                failed.add(romId)
+                return@withContext null
+            }
+            if (!download(url, file)) {
+                failed.add(romId)
+                return@withContext null
+            }
             file.absolutePath
         }
 
