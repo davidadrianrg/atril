@@ -25,6 +25,8 @@ import com.davidadrianrg.atril.ui.navigation.RomMSyncApp
 import com.davidadrianrg.atril.ui.theme.RomMSyncTheme
 import com.davidadrianrg.atril.util.LocaleController
 import com.davidadrianrg.atril.util.hasNotificationPermission
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 @android.annotation.SuppressLint("RestrictedApi")
@@ -161,7 +163,12 @@ class MainActivity : ComponentActivity() {
      */
     override fun onResume() {
         super.onResume()
-        (applicationContext as RomMSyncApplication).container.playStats.endSession()
+        val container = (applicationContext as RomMSyncApplication).container
+        container.playStats.endSession()
+        // Vigilancia de saves pausada por Android (M2): en primer plano se puede reanudar.
+        lifecycleScope.launch {
+            runCatching { container.saveSyncManager.resumeWatchIfNeeded(container.settingsDataStore) }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
