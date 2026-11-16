@@ -108,6 +108,9 @@ import com.davidadrianrg.atril.core.remote.dto.RomDto
 import com.davidadrianrg.atril.core.sync.platform.SaveHandlerRegistry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
 
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
@@ -2331,6 +2334,64 @@ fun SettingsScreen(state: DesktopAppState) {
                     closeToTray = it
                     DesktopConfig.closeToTray = it
                 })
+            }
+        }
+
+        // ── Copia de seguridad (mismo formato que Android) ──
+        SettingsSection(icon = AppIcons.Folder, title = tr("backup.title")) {
+            val backupScope = rememberCoroutineScope()
+            var includeSecrets by remember { mutableStateOf(false) }
+            var backupStatus by remember { mutableStateOf<String?>(null) }
+            val backup = remember {
+                DesktopSettingsBackup(onServerChanged = {
+                    serverUrl.value = DesktopConfig.serverUrl
+                    apiKey.value = DesktopConfig.apiKey
+                    hasCredentials = configHasCredentials()
+                    if (hasCredentials) state.connect(DesktopConfig.serverUrl, DesktopConfig.apiKey, silent = true)
+                })
+            }
+            Text(
+                tr("backup.hint_desktop"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("backup.include_secrets"), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Switch(checked = includeSecrets, onCheckedChange = { includeSecrets = it })
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    backupScope.launch {
+                        val file = pickBackupFile(save = true) ?: return@launch
+                        val written = withContext(Dispatchers.IO) {
+                            runCatching { file.writeText(backup.export(includeSecrets)) }.isSuccess
+                        }
+                        backupStatus = tr(if (written) "backup.exported" else "backup.export_failed")
+                    }
+                }) { Text(tr("backup.export")) }
+                OutlinedButton(onClick = {
+                    backupScope.launch {
+                        val file = pickBackupFile(save = false) ?: return@launch
+                        val result = withContext(Dispatchers.IO) {
+                            runCatching { backup.import(file.readText()) }.getOrDefault(DesktopBackupResult.INVALID)
+                        }
+                        if (result == DesktopBackupResult.OK) {
+                            // Tema e idioma se aplican al momento, como al elegirlos a mano.
+                            state.setTheme(com.davidadrianrg.atril.core.theme.AppTheme.fromId(DesktopConfig.themeId))
+                            state.setLanguage(DesktopConfig.languageTag)
+                        }
+                        backupStatus = tr(
+                            when (result) {
+                                DesktopBackupResult.OK -> "backup.imported"
+                                DesktopBackupResult.UNSUPPORTED_VERSION -> "backup.import_unsupported"
+                                DesktopBackupResult.INVALID -> "backup.import_failed"
+                            },
+                        )
+                    }
+                }) { Text(tr("backup.import")) }
+            }
+            backupStatus?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
         }
         }

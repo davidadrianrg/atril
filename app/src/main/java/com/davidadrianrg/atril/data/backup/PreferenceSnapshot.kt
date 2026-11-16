@@ -24,6 +24,31 @@ internal object PreferenceSnapshot {
         "save_sync_watch_enabled",
     )
 
+    /**
+     * Preferencias con el mismo nombre en escritorio (`java.util.prefs`, todo
+     * texto) y su etiqueta de tipo en DataStore. Espejo de
+     * `DesktopSettingsBackup.SHARED_WITH_ANDROID`.
+     */
+    private val SHARED_WITH_DESKTOP = mapOf(
+        "max_concurrent_downloads" to "i",
+        "conflict_policy" to "s",
+        "auto_physical_media" to "b",
+        "media_download_enabled" to "b",
+        "esde_export_enabled" to "b",
+        "save_sync_enabled" to "s",
+        com.davidadrianrg.atril.core.library.LibraryPreferenceKeys.VIEW_MODE to "s",
+        com.davidadrianrg.atril.core.library.LibraryPreferenceKeys.SORT to "s",
+        com.davidadrianrg.atril.core.library.LibraryPreferenceKeys.SOURCE to "s",
+        com.davidadrianrg.atril.core.library.LibraryPreferenceKeys.CARD_SIZE to "s",
+        com.davidadrianrg.atril.core.library.LibraryPreferenceKeys.COVER_STYLE to "s",
+    )
+
+    /** `desktopSettings` de una copia de escritorio, etiquetado para [decode]. */
+    fun fromDesktop(raw: Map<*, *>): Map<String, String> =
+        SHARED_WITH_DESKTOP.mapNotNull { (key, tag) ->
+            (raw[key] as? String)?.let { key to "$tag:$it" }
+        }.toMap()
+
     fun isBackedUp(name: String): Boolean = name !in BLOCKED && !name.startsWith("scraper_")
 
     /** Valores de DataStore (nombre de clave -> valor) a su forma etiquetada. */

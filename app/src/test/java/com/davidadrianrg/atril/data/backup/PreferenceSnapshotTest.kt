@@ -72,6 +72,30 @@ class PreferenceSnapshotTest {
     }
 
     @Test
+    fun `a desktop backup contributes only the shared preferences, typed`() {
+        val tagged = PreferenceSnapshot.fromDesktop(
+            mapOf(
+                "max_concurrent_downloads" to "4",
+                "save_sync_enabled" to "false",
+                "auto_physical_media" to "true",
+                "library_view_mode" to "grid",
+                "roms_root" to "/home/me/ROMs",
+                "close_to_tray" to "true",
+            ),
+        )
+
+        assertEquals(
+            mapOf<String, Any>(
+                "max_concurrent_downloads" to 4,
+                "save_sync_enabled" to "false",
+                "auto_physical_media" to true,
+                "library_view_mode" to "grid",
+            ),
+            PreferenceSnapshot.decode(tagged),
+        )
+    }
+
+    @Test
     fun `isBackedUp keeps library and emulator preferences`() {
         assertTrue(PreferenceSnapshot.isBackedUp("library_view_mode"))
         assertTrue(PreferenceSnapshot.isBackedUp("installed_app_links"))

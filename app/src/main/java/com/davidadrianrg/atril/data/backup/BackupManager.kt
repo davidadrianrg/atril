@@ -79,7 +79,10 @@ class BackupManager(
         // Snapshot genérico (versión 2+): ajustes de sync, descargas, biblioteca,
         // overrides de emulador/core, vínculos y fondos por juego. Una copia v1
         // no lo trae y conserva los ajustes actuales.
-        val snapshot = data["settings"] as? Map<*, *>
+        // Una copia de escritorio trae `desktopSettings` (texto plano): se
+        // aplican solo las preferencias comunes, con el tipo de DataStore.
+        val snapshot = (data["settings"] as? Map<*, *>)
+            ?: (data["desktopSettings"] as? Map<*, *>)?.let(PreferenceSnapshot::fromDesktop)
         snapshot?.let { settings.importPreferences(it) }
         (data["theme"] as? String)?.let { settings.setTheme(it) }
         (data["launcherBackground"] as? String)?.let { settings.setLauncherBackground(it) }
