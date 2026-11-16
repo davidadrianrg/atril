@@ -27,6 +27,10 @@ interface PlayStatsStore {
      */
     fun recordSession(romId: Int, endedAt: Long, durationMs: Long): PlayStats
 
-    /** Sustituye todo el contenido del almacén (copia de seguridad). */
-    fun replaceAll(stats: List<PlayStats>)
+    /**
+     * Restaura una copia de seguridad fusionándola con lo que hay (ver
+     * [com.davidadrianrg.atril.core.backup.LibraryBackup.mergePlayStats]):
+     * nunca se pierde tiempo jugado ni favoritos posteriores a la copia.
+     */
+    fun restore(stats: List<PlayStats>)
 }

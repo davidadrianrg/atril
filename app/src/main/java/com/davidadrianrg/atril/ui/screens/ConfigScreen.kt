@@ -1012,6 +1012,8 @@ fun ConfigScreen(
                     com.davidadrianrg.atril.data.backup.BackupManager(
                         context = context,
                         settings = container.settingsDataStore,
+                        playStats = container.playStats,
+                        localGames = container.localGamesRepository,
                         onServerChanged = { url, key -> container.configureApi(url, key) },
                         onPreferencesRestored = {
                             container.saveSyncManager.applyPeriodicSyncFromSettings(replace = true)

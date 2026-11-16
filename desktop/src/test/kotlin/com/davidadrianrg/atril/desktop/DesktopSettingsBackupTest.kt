@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 class DesktopSettingsBackupTest {
@@ -38,14 +39,15 @@ class DesktopSettingsBackupTest {
             "close_to_tray" to "true",
             "launcher_background" to "fanart",
             "game_backgrounds" to "1=/home/me/.config/atril/game_backgrounds/1.jpg",
+            "cover_overrides" to "1=/home/me/.config/atril/covers/1.jpg",
         ),
     )
 
     @Test
-    fun `export without secrets keeps preferences and drops credentials and device state`() {
+    fun `export without secrets keeps preferences and drops credentials and device state`() = runBlocking {
         val json = parse(DesktopSettingsBackup(source).export(includeSecrets = false))
 
-        assertEquals(2, (json["version"] as Number).toInt())
+        assertEquals(3, (json["version"] as Number).toInt())
         assertEquals("amoled", json["theme"])
         @Suppress("UNCHECKED_CAST")
         val settings = json["desktopSettings"] as Map<String, String>
@@ -54,7 +56,7 @@ class DesktopSettingsBackupTest {
         assertEquals("fanart", json["launcherBackground"])
         listOf(
             "server_url", "api_key", "client_device_id", "device_id", "last_sync_at",
-            "scraper_ss_password", "game_backgrounds",
+            "scraper_ss_password", "game_backgrounds", "cover_overrides",
         )
             .forEach { assertFalse(it, settings.containsKey(it)) }
         assertFalse(json.containsKey("apiKey"))
@@ -62,7 +64,7 @@ class DesktopSettingsBackupTest {
     }
 
     @Test
-    fun `round trip with secrets restores everything and reconnects`() {
+    fun `round trip with secrets restores everything and reconnects`() = runBlocking {
         val json = DesktopSettingsBackup(source).export(includeSecrets = true)
         val target = MapPrefs(linkedMapOf("client_device_id" to "atril-desktop-2"))
         var reconnects = 0
@@ -80,7 +82,7 @@ class DesktopSettingsBackupTest {
     }
 
     @Test
-    fun `an android backup only brings shared preferences and server`() {
+    fun `an android backup only brings shared preferences and server`() = runBlocking {
         val android = """
             {"version":2,"theme":"crimson","language":"en","serverUrl":"http://host/","apiKey":"k",
              "settings":{"max_concurrent_downloads":"i:4","library_view_mode":"s:grid",
@@ -101,7 +103,7 @@ class DesktopSettingsBackupTest {
     }
 
     @Test
-    fun `crafted desktop settings cannot inject credentials or device ids`() {
+    fun `crafted desktop settings cannot inject credentials or device ids`() = runBlocking {
         val target = MapPrefs()
         DesktopSettingsBackup(target).import(
             """{"version":2,"desktopSettings":{"api_key":"x","device_id":"9","theme":"y","n":3}}""",
@@ -110,12 +112,60 @@ class DesktopSettingsBackupTest {
     }
 
     @Test
-    fun `rejects foreign json and newer schemas`() {
+    fun `rejects foreign json and newer schemas`() = runBlocking {
         val target = MapPrefs()
         val backup = DesktopSettingsBackup(target)
         assertEquals(DesktopBackupResult.INVALID, backup.import("nope"))
         assertEquals(DesktopBackupResult.INVALID, backup.import("""{"theme":"x"}"""))
         assertEquals(DesktopBackupResult.UNSUPPORTED_VERSION, backup.import("""{"version":99,"theme":"x"}"""))
         assertTrue(target.map.isEmpty())
+    }
+
+    @get:org.junit.Rule
+    val tmp = org.junit.rules.TemporaryFolder()
+
+    private fun library(name: String) = Pair(
+        com.davidadrianrg.atril.core.playstats.PlayStatsRepository(
+            com.davidadrianrg.atril.core.playstats.JsonPlayStatsStore(tmp.root.resolve("$name-stats.json")),
+        ),
+        com.davidadrianrg.atril.core.localgames.LocalGamesRepository(
+            store = com.davidadrianrg.atril.core.localgames.LocalGameStore(tmp.root.resolve("$name-local.json")),
+            coversDir = tmp.root.resolve("$name-covers"),
+            credentials = { com.davidadrianrg.atril.core.localgames.ScraperCredentials() },
+        ),
+    )
+
+    @Test
+    fun `desktop round trip merges play stats and local games keeping their ids`() = runBlocking {
+        val (srcStats, srcLocal) = library("src")
+        val game = srcLocal.add("Doom", "dos", "/games/doom.exe")
+        val localId = game.romId!!
+        srcStats.setFavorite(listOf(10, localId), true)
+        val json = DesktopSettingsBackup(MapPrefs(), srcStats, srcLocal).export(includeSecrets = false)
+
+        val (dstStats, dstLocal) = library("dst")
+        dstStats.setFavorite(listOf(20), true)
+        assertEquals(DesktopBackupResult.OK, DesktopSettingsBackup(MapPrefs(), dstStats, dstLocal).import(json))
+
+        assertEquals(listOf(game.id), dstLocal.games.value.map { it.id })
+        assertEquals(localId, dstLocal.games.value.single().romId)
+        assertEquals(setOf(10, 20, localId), dstStats.stats.value.filterValues { it.favorite }.keys)
+    }
+
+    @Test
+    fun `an android v3 backup brings romm play stats but not android local games`() = runBlocking {
+        val android = """
+            {"version":3,"platform":"android",
+             "playStats":[{"romId":5,"favorite":true,"lastPlayedAt":1700000000000,"totalPlayedMs":60000},
+                          {"romId":-77,"favorite":true}],
+             "localGames":[{"id":"a","romId":-77,"title":"X","platformSlug":"gba","path":"content://x"}]}
+        """.trimIndent()
+        val (stats, local) = library("android")
+
+        assertEquals(DesktopBackupResult.OK, DesktopSettingsBackup(MapPrefs(), stats, local).import(android))
+
+        assertEquals(setOf(5), stats.stats.value.keys)
+        assertEquals(60000L, stats.stats.value.getValue(5).totalPlayedMs)
+        assertTrue(local.games.value.isEmpty())
     }
 }

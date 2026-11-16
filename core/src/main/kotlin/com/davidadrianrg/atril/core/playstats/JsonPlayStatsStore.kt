@@ -186,8 +186,9 @@ class JsonPlayStatsStore(
     }
 
     @Synchronized
-    override fun replaceAll(stats: List<PlayStats>) {
-        save(stats.associateBy { it.romId })
+    override fun restore(stats: List<PlayStats>) {
+        val merged = com.davidadrianrg.atril.core.backup.LibraryBackup.mergePlayStats(load().values, stats)
+        save(merged.associateBy { it.romId })
     }
 
     private companion object {

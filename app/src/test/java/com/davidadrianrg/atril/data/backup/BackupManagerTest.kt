@@ -181,6 +181,47 @@ class BackupManagerTest {
         assertEquals(0, restored)
     }
 
+    private fun library(name: String) = Pair(
+        com.davidadrianrg.atril.core.playstats.PlayStatsRepository(
+            com.davidadrianrg.atril.core.playstats.JsonPlayStatsStore(File(tmp.root, "$name-stats.json")),
+        ),
+        com.davidadrianrg.atril.core.localgames.LocalGamesRepository(
+            store = com.davidadrianrg.atril.core.localgames.LocalGameStore(File(tmp.root, "$name-local.json")),
+            coversDir = File(tmp.root, "$name-covers"),
+            credentials = { ScraperCredentials() },
+        ),
+    )
+
+    @Test
+    fun `schema 3 round-trips play stats and local games and merges with current data`() = runBlocking {
+        val (srcStats, srcLocal) = library("src")
+        val game = srcLocal.add("Doom", "dos", "/storage/emulated/0/doom.zip")
+        srcStats.setFavorite(listOf(10, game.romId!!), true)
+        val json = BackupManager(context, settings, srcStats, srcLocal).export(includeSecrets = false)
+        assertEquals("android", parse(json)["platform"])
+
+        val (dstStats, dstLocal) = library("dst")
+        dstStats.setFavorite(listOf(20), true)
+        assertEquals(BackupImportResult.OK, BackupManager(context, settings, dstStats, dstLocal).import(json))
+
+        assertEquals(game.romId, dstLocal.games.value.single().romId)
+        assertEquals(setOf(10, 20, game.romId), dstStats.stats.value.filterValues { it.favorite }.keys)
+    }
+
+    @Test
+    fun `a desktop backup does not bring desktop local games or their stats`() = runBlocking {
+        val (stats, local) = library("dst")
+        val json = """
+            {"version":3,"platform":"desktop","playStats":[{"romId":5,"favorite":true},{"romId":-9,"favorite":true}],
+             "localGames":[{"id":"a","romId":-9,"title":"X","platformSlug":"dos","path":"/home/me/x.exe"}]}
+        """.trimIndent()
+
+        assertEquals(BackupImportResult.OK, BackupManager(context, settings, stats, local).import(json))
+
+        assertEquals(setOf(5), stats.stats.value.keys)
+        assertTrue(local.games.value.isEmpty())
+    }
+
     @Test
     fun `rejects foreign json, missing version and newer schemas without touching settings`() = runBlocking {
         val m = manager()

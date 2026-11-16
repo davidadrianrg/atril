@@ -50,12 +50,20 @@ class LocalGameStore(
         return updated
     }
 
+    /**
+     * Restaura una copia de seguridad: añade los juegos que no existen (por
+     * id) y conserva los actuales con sus carátulas. Devuelve cuántos añadió.
+     */
     @Synchronized
-    /** Sustituye toda la lista (copia de seguridad). */
-    fun restoreAll(list: List<LocalGame>) {
-        save(list)
+    fun restore(list: List<LocalGame>): Int {
+        val current = load()
+        val merged = com.davidadrianrg.atril.core.backup.LibraryBackup.mergeLocalGames(current, list)
+        if (merged.size == current.size) return 0
+        save(LocalRomIds.assign(merged))
+        return merged.size - current.size
     }
 
+    @Synchronized
     fun remove(id: String): Boolean {
         val list = load()
         if (list.none { it.id == id }) return false

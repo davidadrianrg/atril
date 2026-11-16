@@ -41,9 +41,10 @@ class PlayStatsRepository(
     /** Agregado del grupo con las estadísticas actuales. */
     fun aggregate(groupIds: List<Int>): GamePlayStats = PlayStatsLogic.aggregate(groupIds, _stats.value)
 
-    /** Sustituye todas las estadísticas (copia de seguridad) y refresca. */
-    fun restoreAll(stats: List<PlayStats>) {
-        store.replaceAll(stats)
+    /** Fusiona las estadísticas de una copia de seguridad y refresca. */
+    fun restore(stats: List<PlayStats>) {
+        if (stats.isEmpty()) return
+        store.restore(stats)
         refresh()
     }
 

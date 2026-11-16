@@ -1,6 +1,9 @@
 package com.davidadrianrg.atril.desktop
 
+import com.davidadrianrg.atril.core.backup.LibraryBackup
 import com.davidadrianrg.atril.core.library.LibraryPreferenceKeys
+import com.davidadrianrg.atril.core.localgames.LocalGamesRepository
+import com.davidadrianrg.atril.core.playstats.PlayStatsRepository
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import java.util.prefs.Preferences
@@ -53,17 +56,22 @@ class JavaPrefsAccess(
  */
 class DesktopSettingsBackup(
     private val prefs: PrefsAccess = JavaPrefsAccess(),
+    /** Favoritos y tiempo jugado (esquema 3); null = no se copian. */
+    private val playStats: PlayStatsRepository? = null,
+    /** Juegos locales (esquema 3); null = no se copian. */
+    private val localGames: LocalGamesRepository? = null,
     /** Se llama si la importación cambió servidor o clave, para reconectar. */
     private val onServerChanged: () -> Unit = {},
 ) {
     companion object {
-        const val SCHEMA_VERSION = 2
+        /** Mismo número que Android: ambas aceptan las copias de la otra. */
+        const val SCHEMA_VERSION = 3
 
         private val BLOCKED = setOf(
             "server_url", "api_key", "client_device_id", "device_id",
             "last_sync_at", "last_sync_summary", "skipped_version",
             // Rutas a imágenes de este equipo: la copia no lleva los ficheros.
-            "game_backgrounds",
+            "game_backgrounds", "cover_overrides",
         )
 
         /** Claves con el mismo nombre y tipo en Android (DataStore) y aquí. */
@@ -85,13 +93,15 @@ class DesktopSettingsBackup(
     fun export(includeSecrets: Boolean): String {
         val payload = linkedMapOf<String, Any?>(
             "version" to SCHEMA_VERSION,
-            "platform" to "desktop",
+            "platform" to LibraryBackup.PLATFORM_DESKTOP,
             "theme" to prefs.get("theme").orEmpty(),
             "language" to prefs.get("language").orEmpty(),
             // Mismo campo que la copia de Android.
             "launcherBackground" to (prefs.get("launcher_background") ?: "blur"),
             "desktopSettings" to prefs.keys().filter(::isBackedUp).sorted()
                 .mapNotNull { key -> prefs.get(key)?.let { key to it } }.toMap(),
+            "playStats" to playStats?.let { LibraryBackup.encodePlayStats(it.stats.value.values) },
+            "localGames" to localGames?.let { LibraryBackup.encodeLocalGames(it.games.value) },
         )
         if (includeSecrets) {
             payload["serverUrl"] = prefs.get("server_url").orEmpty()
@@ -105,7 +115,7 @@ class DesktopSettingsBackup(
         return adapter.toJson(payload)
     }
 
-    fun import(json: String): DesktopBackupResult {
+    suspend fun import(json: String): DesktopBackupResult {
         val data = runCatching { adapter.fromJson(json) }.getOrNull() ?: return DesktopBackupResult.INVALID
         val version = (data["version"] as? Number)?.toInt() ?: return DesktopBackupResult.INVALID
         if (version > SCHEMA_VERSION) return DesktopBackupResult.UNSUPPORTED_VERSION
@@ -145,6 +155,16 @@ class DesktopSettingsBackup(
             prefs.put("scraper_ss_user", (s["ssUser"] as? String).orEmpty().trim())
             prefs.put("scraper_ss_password", (s["ssPassword"] as? String).orEmpty().trim())
         }
+        // Esquema 3: fusiona la biblioteca local; los juegos locales (rutas de
+        // otro equipo) y sus estadísticas solo desde otra copia de escritorio.
+        val sameDevice = LibraryBackup.restoresLocalGames(
+            data["platform"] as? String,
+            LibraryBackup.PLATFORM_DESKTOP,
+        )
+        if (sameDevice) localGames?.restore(LibraryBackup.decodeLocalGames(data["localGames"]))
+        playStats?.restore(
+            LibraryBackup.restorablePlayStats(LibraryBackup.decodePlayStats(data["playStats"]), sameDevice),
+        )
         if (url != null || key != null) onServerChanged()
         return DesktopBackupResult.OK
     }

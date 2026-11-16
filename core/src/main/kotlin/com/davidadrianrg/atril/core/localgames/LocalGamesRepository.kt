@@ -29,10 +29,9 @@ class LocalGamesRepository(
         store.add(title, platformSlug, path).also { refresh() }
     }
 
-    /** Sustituye la lista de juegos locales (copia de seguridad) y refresca. */
-    suspend fun restoreAll(list: List<LocalGame>) = withContext(Dispatchers.IO) {
-        store.restoreAll(list)
-        refresh()
+    /** Añade los juegos de una copia de seguridad que no existan y refresca. */
+    suspend fun restore(list: List<LocalGame>): Int = withContext(Dispatchers.IO) {
+        store.restore(list).also { refresh() }
     }
 
     suspend fun rename(id: String, title: String) = withContext(Dispatchers.IO) {

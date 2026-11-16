@@ -2371,7 +2371,7 @@ fun SettingsScreen(state: DesktopAppState) {
             var includeSecrets by remember { mutableStateOf(false) }
             var backupStatus by remember { mutableStateOf<String?>(null) }
             val backup = remember {
-                DesktopSettingsBackup(onServerChanged = {
+                DesktopSettingsBackup(playStats = state.playStats, localGames = state.localGames, onServerChanged = {
                     serverUrl.value = DesktopConfig.serverUrl
                     apiKey.value = DesktopConfig.apiKey
                     hasCredentials = configHasCredentials()

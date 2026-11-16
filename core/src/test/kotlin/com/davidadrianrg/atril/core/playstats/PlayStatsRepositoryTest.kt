@@ -27,9 +27,10 @@ class PlayStatsRepositoryTest {
 
         override fun all(): List<PlayStats> = records.values.toList()
 
-        override fun replaceAll(stats: List<PlayStats>) {
+        override fun restore(stats: List<PlayStats>) {
+            val merged = com.davidadrianrg.atril.core.backup.LibraryBackup.mergePlayStats(records.values, stats)
             records.clear()
-            stats.forEach { records[it.romId] = it }
+            merged.forEach { records[it.romId] = it }
         }
 
         override fun get(romId: Int): PlayStats? = records[romId]

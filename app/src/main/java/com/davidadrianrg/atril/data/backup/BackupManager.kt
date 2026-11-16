@@ -1,6 +1,7 @@
 package com.davidadrianrg.atril.data.backup
 
 import android.content.Context
+import com.davidadrianrg.atril.core.backup.LibraryBackup
 import com.davidadrianrg.atril.data.emulators.CustomEmulatorStore
 import com.davidadrianrg.atril.data.local.SettingsDataStore
 import com.squareup.moshi.Moshi
@@ -43,34 +44,15 @@ class BackupManager(
         val custom = CustomEmulatorStore(File(context.filesDir, "custom_emulators.json")).all()
         val payload = linkedMapOf<String, Any?>(
             "version" to SCHEMA_VERSION,
+            // Decide si los juegos locales (rutas de este equipo) se restauran.
+            "platform" to LibraryBackup.PLATFORM_ANDROID,
             "theme" to settings.theme.first(),
             "launcherBackground" to settings.launcherBackground.first(),
             "launcherBlur" to settings.launcherBlur.first(),
             "language" to settings.language.first(),
             "settings" to settings.exportPreferences(),
-            "playStats" to playStats?.let { repo ->
-                repo.stats.value.values.map { st ->
-                    mapOf(
-                        "romId" to st.romId,
-                        "favorite" to st.favorite,
-                        "lastPlayedAt" to st.lastPlayedAt,
-                        "totalPlayedMs" to st.totalPlayedMs,
-                    )
-                }
-            },
-            "localGames" to localGames?.let { repo ->
-                repo.games.value.map { g ->
-                    mapOf(
-                        "id" to g.id,
-                        "title" to g.title,
-                        "platformSlug" to g.platformSlug,
-                        "path" to g.path,
-                        "summary" to g.summary,
-                        "scrapeSource" to g.scrapeSource,
-                        "addedAt" to g.addedAt,
-                    )
-                }
-            },
+            "playStats" to playStats?.let { LibraryBackup.encodePlayStats(it.stats.value.values) },
+            "localGames" to localGames?.let { LibraryBackup.encodeLocalGames(it.games.value) },
             "customEmulators" to custom.map {
                 mapOf(
                     "id" to it.id,
@@ -151,6 +133,16 @@ class BackupManager(
                 }
             }
         }
+        // Esquema 3: biblioteca local. Fusiona (no borra lo posterior a la copia);
+        // los juegos locales y sus estadísticas solo desde otra copia de Android.
+        val sameDevice = LibraryBackup.restoresLocalGames(
+            data["platform"] as? String,
+            LibraryBackup.PLATFORM_ANDROID,
+        )
+        if (sameDevice) localGames?.restore(LibraryBackup.decodeLocalGames(data["localGames"]))
+        playStats?.restore(
+            LibraryBackup.restorablePlayStats(LibraryBackup.decodePlayStats(data["playStats"]), sameDevice),
+        )
         if (snapshot != null) onPreferencesRestored()
         BackupImportResult.OK
     }.getOrDefault(BackupImportResult.INVALID)
