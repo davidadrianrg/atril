@@ -213,6 +213,7 @@ fun DesktopPlayScreen(
     var quickFilter by remember { mutableStateOf<String?>(null) }
     var showSearch by remember { mutableStateOf(false) }
     var backgroundFor by remember { mutableStateOf<LauncherEntry?>(null) }
+    var coverFor by remember { mutableStateOf<LauncherEntry?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val backgroundMode by DesktopBackgrounds.mode.collectAsState()
@@ -605,6 +606,7 @@ fun DesktopPlayScreen(
                                     onDetails = { state.openGame(entry.card) },
                                     onTogglePhysical = { state.togglePhysicalMedia(entry.card.rep.id) },
                                     onPickBackground = { backgroundFor = entry },
+                                    onPickCover = { coverFor = entry },
                                     modifier = Modifier
                                         .weight(0.9f)
                                         .fillMaxHeight()
@@ -623,6 +625,7 @@ fun DesktopPlayScreen(
                                 onDetails = { state.openGame(entry.card) },
                                 onTogglePhysical = { state.togglePhysicalMedia(entry.card.rep.id) },
                                 onPickBackground = { backgroundFor = entry },
+                                onPickCover = { coverFor = entry },
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
@@ -658,6 +661,19 @@ fun DesktopPlayScreen(
                     backgroundFor = null
                     runCatching { rootFocus.requestFocus() }
                 },
+            )
+        }
+
+        coverFor?.let { entry ->
+            BackgroundPickerDialog(
+                romId = entry.card.rep.id,
+                title = entry.card.rep.name,
+                platformSlug = entry.card.rep.platformSlug.orEmpty(),
+                onDismiss = {
+                    coverFor = null
+                    runCatching { rootFocus.requestFocus() }
+                },
+                target = DesktopMediaTarget.COVER,
             )
         }
 
@@ -1297,6 +1313,7 @@ private fun PlayCaption(
     onDetails: () -> Unit,
     onTogglePhysical: () -> Unit,
     onPickBackground: () -> Unit,
+    onPickCover: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val manual = state.isManualDownloaded(entry.card)
@@ -1383,6 +1400,11 @@ private fun PlayCaption(
                 Icon(AppIcons.Image, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(tr("launcher.media.background"))
+            }
+            OutlinedButton(onClick = onPickCover) {
+                Icon(AppIcons.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(tr("launcher.cover.search"))
             }
         }
         if (physicalAvailable) {

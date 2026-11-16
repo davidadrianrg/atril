@@ -106,6 +106,11 @@ internal data class LauncherDetailControls(
     val onUnlinkApp: () -> Unit,
     /** Abre el selector de media para elegir el fondo del juego. */
     val onPickBackground: () -> Unit,
+    /** Carátula personalizada; null = usar la de RomM. */
+    val coverOverride: String?,
+    val onPickCoverMedia: () -> Unit,
+    val onPickCoverFile: () -> Unit,
+    val onClearCover: () -> Unit,
 )
 
 /** Estado de una petición de scrapeo de medio físico a RomM. */
@@ -167,6 +172,27 @@ internal fun rememberLauncherDetailControls(
     val pickerCreds by container.settingsRepository.scraperCredentials
         .collectAsState(initial = com.davidadrianrg.atril.core.localgames.ScraperCredentials())
     val scope = rememberCoroutineScope()
+    var coverMediaPick by remember { mutableStateOf(false) }
+    var coverOverride by remember(rom.id) {
+        mutableStateOf(container.coverOverrides.get(rom.id))
+    }
+    val coverFilePick = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) scope.launch {
+            val dir = java.io.File(context.filesDir, "covers").apply { mkdirs() }
+            val target = java.io.File(dir, "${rom.id}.jpg")
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    target.outputStream().use { input.copyTo(it) }
+                }
+            }
+            if (target.isFile) {
+                container.coverOverrides.set(rom.id, target.absolutePath)
+                coverOverride = target.absolutePath
+            }
+        }
+    }
     var scrape by remember(rom.id) { mutableStateOf<ScrapeUi?>(null) }
     // URL conseguida tras un scrapeo: la lista de roms en memoria no se refresca sola.
     var scrapedUrl by remember(rom.id) { mutableStateOf<String?>(null) }
@@ -237,6 +263,13 @@ internal fun rememberLauncherDetailControls(
         },
         linkedApp = linkedApp,
         onPickBackground = { backgroundPick = true },
+        coverOverride = coverOverride,
+        onPickCoverMedia = { coverMediaPick = true },
+        onPickCoverFile = { coverFilePick.launch("image/*") },
+        onClearCover = {
+            container.coverOverrides.set(rom.id, null)
+            coverOverride = null
+        },
         onLinkApp = { pkg ->
             scope.launch { container.settingsRepository.setInstalledLink(rom.id, pkg) }
             linkedApp = pkg
@@ -262,6 +295,27 @@ internal fun rememberLauncherDetailControls(
                     }
                 },
                 onDismiss = { backgroundPick = false },
+            )
+        }
+        if (coverMediaPick) {
+            com.davidadrianrg.atril.ui.components.MediaPickerDialog(
+                title = rom.name,
+                platformSlug = rom.platformSlug,
+                creds = pickerCreds,
+                kinds = setOf("cover"),
+                onSelect = { candidate ->
+                    coverMediaPick = false
+                    scope.launch {
+                        val saved = com.davidadrianrg.atril.data.media.MediaCache.save(
+                            context, candidate.url, "covers", "${rom.id}.jpg",
+                        )
+                        if (saved != null) {
+                            container.coverOverrides.set(rom.id, saved)
+                            coverOverride = saved
+                        }
+                    }
+                },
+                onDismiss = { coverMediaPick = false },
             )
         }
     }
@@ -444,6 +498,30 @@ private fun AppLinkSection(controls: LauncherDetailControls) {
     Spacer(Modifier.height(4.dp))
     OutlinedButton(onClick = controls.onPickBackground, modifier = Modifier.fillMaxWidth()) {
         Text(tr("launcher.media.background"))
+    }
+    Spacer(Modifier.height(12.dp))
+    Text(
+        tr("launcher.cover.title"),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+    )
+    if (controls.coverOverride != null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                tr("launcher.cover.custom"),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = controls.onClearCover) { Text(tr("launcher.cover.clear")) }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = controls.onPickCoverMedia, modifier = Modifier.weight(1f)) {
+            Text(tr("launcher.cover.search"))
+        }
+        OutlinedButton(onClick = controls.onPickCoverFile, modifier = Modifier.weight(1f)) {
+            Text(tr("launcher.cover.pick"))
+        }
     }
     if (picking) {
         InstalledAppPickerDialog(

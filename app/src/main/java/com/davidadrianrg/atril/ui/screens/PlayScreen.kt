@@ -166,6 +166,7 @@ fun PlayScreen(
                     romLaunchService = container.romLaunchService,
                     romFileImportService = container.romFileImportService,
                     offlineCache = container.offlineShelfCache,
+                    coverOverrides = container.coverOverrides,
                 )
             }
         }

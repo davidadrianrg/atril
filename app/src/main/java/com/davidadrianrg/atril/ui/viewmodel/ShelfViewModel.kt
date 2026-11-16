@@ -25,6 +25,7 @@ import com.davidadrianrg.atril.data.repository.RomRepository
 import com.davidadrianrg.atril.data.repository.SettingsRepository
 import com.davidadrianrg.atril.domain.model.IgdbMetadata
 import com.davidadrianrg.atril.domain.model.Rom
+import com.davidadrianrg.atril.domain.model.withCoverOverride
 import com.davidadrianrg.atril.domain.model.RomFile
 import com.davidadrianrg.atril.launch.EmulatorLauncher
 import com.davidadrianrg.atril.launch.GameLaunchPlan
@@ -119,6 +120,7 @@ class ShelfViewModel(
     private val romFileImportService: RomFileImportService? = null,
     /** Metadatos y carátulas persistidos: Play completo sin red (F1). */
     private val offlineCache: OfflineShelfCache? = null,
+    private val coverOverrides: com.davidadrianrg.atril.core.library.CoverOverrides? = null,
     /** Cliente de metadatos (timeout corto); inyectable para tests sin red. */
     private val metadataApi: (serverUrl: String, apiKey: String) -> RomMApiService =
         { url, key -> NetworkModule.createMetadataApiService(url, key) },
@@ -325,11 +327,13 @@ class ShelfViewModel(
         baseCoverUrl: String,
     ): Map<Int, Rom> = downloaded.associate { entity ->
         val dto = dtoById[entity.romId]
-        entity.romId to if (dto != null) {
+        val base = if (dto != null) {
             buildRom(entity, dto, baseCoverUrl)
         } else {
             OfflineShelfCache.offlineRom(entity, cached[entity.romId])
         }
+        val override = coverOverrides?.get(entity.romId)
+        entity.romId to base.withCoverOverride(override)
     }
 
     /** Agrupa los descargados (multidisco) y los convierte en ítems de la estantería. */

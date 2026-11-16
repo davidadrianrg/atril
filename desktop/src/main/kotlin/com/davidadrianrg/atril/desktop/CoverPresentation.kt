@@ -16,6 +16,8 @@ import com.davidadrianrg.atril.core.remote.dto.RomDto
 
 /** Cover URL for [style], with the documented fallback chain. */
 internal fun coverUrlFor(rep: RomDto, serverUrl: String, style: CoverStyle): String? {
+    // La carátula elegida por el usuario va primero (file://).
+    DesktopCovers.cover(rep.id)?.let { return "file://$it" }
     val coverUrlLarge = resolveMediaUrl(rep.urlCover, rep.pathCoverLarge, serverUrl)
     val coverUrlSmall = resolveMediaUrl(rep.urlCover, rep.pathCoverSmall, serverUrl)
     val physicalMediaUrl = PhysicalMedia.resourceUrl(serverUrl, rep.physicalMediaPath)

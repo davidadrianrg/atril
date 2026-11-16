@@ -18,6 +18,51 @@ import okhttp3.OkHttpClient
  * `~/.config/atril/game_backgrounds/<romId>.<ext>`) y fanart de SteamGridDB
  * cacheado en `~/.cache/atril/fanart/<romId>.jpg`.
  */
+object DesktopCovers {
+    private val client = OkHttpClient()
+    private val coversDir get() = File(DesktopConfig.configDir, "covers").apply { mkdirs() }
+
+    private val _covers = MutableStateFlow(
+        com.davidadrianrg.atril.core.media.LauncherBackdrop.decodeGameBackgrounds(DesktopConfig.coverOverrides),
+    )
+    val covers: StateFlow<Map<Int, String>> = _covers.asStateFlow()
+
+    fun cover(romId: Int): String? = _covers.value[romId]
+
+    suspend fun setFromUrl(romId: Int, url: String): Boolean = withContext(Dispatchers.IO) {
+        val target = File(coversDir, "$romId.jpg")
+        val saved = ImageFileDownloader.download(client, url, target).getOrNull() ?: return@withContext false
+        store(romId, saved.absolutePath)
+        true
+    }
+
+    suspend fun setFromFile(romId: Int, source: File): Boolean = withContext(Dispatchers.IO) {
+        if (!source.isFile || !ImageFileDownloader.looksLikeImage(source)) return@withContext false
+        val ext = source.extension.lowercase().takeIf { it in setOf("jpg", "jpeg", "png", "webp", "bmp") } ?: "jpg"
+        _covers.value[romId]?.let { File(it).takeIf { f -> f.parentFile == coversDir }?.delete() }
+        val target = File(coversDir, "$romId.$ext")
+        val ok = runCatching { source.copyTo(target, overwrite = true) }.isSuccess
+        if (ok) store(romId, target.absolutePath)
+        ok
+    }
+
+    fun clear(romId: Int) {
+        _covers.value[romId]?.let { path ->
+            File(path).takeIf { it.parentFile == coversDir }?.delete()
+        }
+        store(romId, null)
+    }
+
+    private fun store(romId: Int, path: String?) {
+        DesktopConfig.coverOverrides =
+            com.davidadrianrg.atril.core.media.LauncherBackdrop.withGameBackground(
+                DesktopConfig.coverOverrides, romId, path,
+            )
+        _covers.value =
+            com.davidadrianrg.atril.core.media.LauncherBackdrop.decodeGameBackgrounds(DesktopConfig.coverOverrides)
+    }
+}
+
 object DesktopBackgrounds {
 
     private val client = OkHttpClient.Builder()
@@ -95,7 +140,11 @@ object DesktopBackgrounds {
         BackdropCache.clear()
     }
 
-    /** Ruta del fanart del juego, descargándolo la primera vez; null si no hay. */
+    /**
+ * Carátulas elegidas a mano por el usuario (esquema igual que los fondos).
+ * La carátula personalizada tiene prioridad sobre la de RomM y el caché.
+ */
+/** Ruta del fanart del juego, descargándolo la primera vez; null si no hay. */
     suspend fun fanart(romId: Int, title: String, apiKey: String): String? = withContext(Dispatchers.IO) {
         val file = File(fanartDir, "$romId.jpg")
         if (file.isFile && file.length() > 0) return@withContext file.absolutePath

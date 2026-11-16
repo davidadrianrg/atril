@@ -46,15 +46,19 @@ import kotlinx.coroutines.withContext
  * SteamGridDB/ScreenScraper con previsualización, un fichero local o quitar
  * el que haya.
  */
+internal enum class DesktopMediaTarget { BACKGROUND, COVER }
+
 @Composable
 internal fun BackgroundPickerDialog(
     romId: Int,
     title: String,
     platformSlug: String,
     onDismiss: () -> Unit,
+    target: DesktopMediaTarget = DesktopMediaTarget.BACKGROUND,
 ) {
     val scope = rememberCoroutineScope()
-    val current by DesktopBackgrounds.games.collectAsState()
+    val current by (if (target == DesktopMediaTarget.COVER) DesktopCovers.covers else DesktopBackgrounds.games)
+        .collectAsState()
     var candidates by remember { mutableStateOf<List<MediaCandidate>?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -63,7 +67,7 @@ internal fun BackgroundPickerDialog(
         candidates = withContext(Dispatchers.IO) {
             runCatching {
                 MediaCatalog().search(title, platformSlug, DesktopConfig.scraperCredentials())
-                    .filter { it.kind == "background" }
+                    .filter { it.kind == if (target == DesktopMediaTarget.COVER) "cover" else "background" }
             }.getOrDefault(emptyList())
         }
     }
@@ -105,15 +109,30 @@ internal fun BackgroundPickerDialog(
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .aspectRatio(16f / 9f)
+                                    .aspectRatio(if (target == DesktopMediaTarget.COVER) 0.7f else 16f / 9f)
                                     .focusHighlight(RoundedCornerShape(10.dp))
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .clickable { apply { DesktopBackgrounds.setFromUrl(romId, candidate.url) } },
+                                    .clickable {
+                                        apply {
+                                            if (target == DesktopMediaTarget.COVER) {
+                                                DesktopCovers.setFromUrl(romId, candidate.url)
+                                            } else {
+                                                DesktopBackgrounds.setFromUrl(romId, candidate.url)
+                                            }
+                                        }
+                                    },
                                 contentAlignment = Alignment.BottomStart,
                             ) {
                                 bitmap?.let {
-                                    Image(it, contentDescription = candidate.provider, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                                    Image(
+                                        it,
+                                        contentDescription = candidate.provider,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxWidth().aspectRatio(
+                                            if (target == DesktopMediaTarget.COVER) 0.7f else 16f / 9f,
+                                        ),
+                                    )
                                 }
                                 Text(
                                     candidate.provider,
@@ -134,14 +153,22 @@ internal fun BackgroundPickerDialog(
             Row {
                 TextButton(enabled = !busy, onClick = {
                     scope.launch {
-                        val file = pickLocalGameFile(tr("launcher.media.background")) ?: return@launch
-                        apply { DesktopBackgrounds.setFromFile(romId, java.io.File(file)) }
+                        val file = pickLocalGameFile(tr("launcher.cover.pick")) ?: return@launch
+                        apply {
+                            if (target == DesktopMediaTarget.COVER) {
+                                DesktopCovers.setFromFile(romId, java.io.File(file))
+                            } else {
+                                DesktopBackgrounds.setFromFile(romId, java.io.File(file))
+                            }
+                        }
                     }
-                }) { Text(tr("media.background.from_file")) }
-                if (current[romId] != null) {
-                    TextButton(enabled = !busy, onClick = { DesktopBackgrounds.clear(romId); onDismiss() }) {
-                        Text(tr("media.background.clear"))
-                    }
+                }) { Text(if (target == DesktopMediaTarget.COVER) tr("launcher.cover.pick") else tr("media.background.from_file")) }
+                val currentPath = current[romId]
+                if (currentPath != null) {
+                    TextButton(enabled = !busy, onClick = {
+                        if (target == DesktopMediaTarget.COVER) DesktopCovers.clear(romId) else DesktopBackgrounds.clear(romId)
+                        onDismiss()
+                    }) { Text(if (target == DesktopMediaTarget.COVER) tr("launcher.cover.clear") else tr("media.background.clear")) }
                 }
             }
         },

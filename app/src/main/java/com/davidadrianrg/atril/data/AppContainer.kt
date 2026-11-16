@@ -53,6 +53,9 @@ class AppContainer(private val appContext: Context) {
     )
 
     /** Juegos añadidos a mano (fuera de RomM) y su scrapeo de carátulas. */
+    val coverOverrides = com.davidadrianrg.atril.core.library.CoverOverrides(
+        java.io.File(appContext.filesDir, "cover_overrides.json"),
+    )
     val localGamesRepository = com.davidadrianrg.atril.core.localgames.LocalGamesRepository(
         store = com.davidadrianrg.atril.core.localgames.LocalGameStore(java.io.File(appContext.filesDir, "local_games.json")),
         coversDir = java.io.File(appContext.filesDir, "local-covers"),
