@@ -186,7 +186,7 @@ fun EmulatorsScreen() {
                 latest = latest + (entry.id to release.version)
                 val file = repository.download(
                     release,
-                    expectedPackage = repository.packageNameOf(entry).takeIf { it.contains('.') },
+                    expectedPackage = withContext(Dispatchers.IO) { repository.expectedPackageOf(entry) },
                 ) { progress = it }
                 afterDownload(entry, file)
                 when (val result = container.apkInstallHelper.launchInstaller(file)) {
@@ -220,7 +220,7 @@ fun EmulatorsScreen() {
                 latest = latest + (next.id to release.version)
                 val file = repository.download(
                     release,
-                    expectedPackage = repository.packageNameOf(next).takeIf { it.contains('.') },
+                    expectedPackage = withContext(Dispatchers.IO) { repository.expectedPackageOf(next) },
                 ) { progress = it }
                 afterDownload(next, file)
                 pendingInstall = true
