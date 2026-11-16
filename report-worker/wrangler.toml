@@ -1,4 +1,4 @@
-name = "atril-reports"
+name = "atril"
 main = "src/index.js"
 compatibility_date = "2026-01-01"
 
@@ -6,6 +6,6 @@ compatibility_date = "2026-01-01"
 GITHUB_REPO = "davidadrianrg/atril"
 
 # Opcional: limita a 5 reportes/hora por IP.
-# [[kv_namespaces]]
-# binding = "RATE"
-# id = "<id-del-namespace>"
+[[kv_namespaces]]
+binding = "RATE"
+id = "d4af0cb0c8df4f4aa2958794826561c1"
