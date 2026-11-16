@@ -68,11 +68,10 @@ class PlaySessionTracker(
         const val MIN_SESSION_MS: Long = 5000L
 
         /**
-         * Duración máxima atribuible a una sesión: 8 h. Cubre partidas largas
-         * sin inflar el tiempo jugado cuando Atril no vuelve a primer plano
-         * (dispositivo dormido con el emulador delante, proceso muerto y app
-         * reabierta días después).
+         * Duración máxima atribuible a una sesión: 3 h. Evita inflar el tiempo
+         * jugado cuando Atril no vuelve a primer plano (dispositivo dormido con
+         * el emulador delante, proceso muerto y app reabierta días después).
          */
-        const val MAX_SESSION_MS: Long = 8L * 60 * 60 * 1000
+        const val MAX_SESSION_MS: Long = 3L * 60 * 60 * 1000
     }
 }
