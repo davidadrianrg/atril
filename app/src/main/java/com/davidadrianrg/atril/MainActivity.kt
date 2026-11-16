@@ -26,6 +26,7 @@ import com.davidadrianrg.atril.ui.theme.RomMSyncTheme
 import com.davidadrianrg.atril.util.LocaleController
 import com.davidadrianrg.atril.util.hasNotificationPermission
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -181,6 +182,8 @@ class MainActivity : ComponentActivity() {
         }
         LocaleController.apply(languageTag)
 
+        holdSplashUntilSettingsLoad()
+
         val openUpdates = intent?.getBooleanExtra(UpdateNotificationManager.EXTRA_OPEN_UPDATES, false) == true
         val openEmulators = intent?.getBooleanExtra(
             com.davidadrianrg.atril.emulators.EmulatorUpdateWorker.EXTRA_OPEN_EMULATORS,
@@ -212,5 +215,32 @@ class MainActivity : ComponentActivity() {
         ) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    /**
+     * M5: la splash del sistema sigue en pantalla hasta la primera emisión de
+     * los ajustes (o [StartupGate.MAX_SPLASH_MS]), en vez de pintar un frame
+     * vacío mientras `RomMSyncApp` espera para elegir destino. Es la técnica
+     * de la documentación de SplashScreen: cancelar el dibujado en `onPreDraw`.
+     */
+    private fun holdSplashUntilSettingsLoad() {
+        val ready = java.util.concurrent.atomic.AtomicBoolean(false)
+        val settings = (applicationContext as RomMSyncApplication).container.settingsRepository.settings
+        lifecycleScope.launch {
+            kotlinx.coroutines.withTimeoutOrNull(
+                com.davidadrianrg.atril.ui.navigation.StartupGate.MAX_SPLASH_MS,
+            ) { settings.first() }
+            ready.set(true)
+        }
+        val content = findViewById<android.view.View>(android.R.id.content)
+        content.viewTreeObserver.addOnPreDrawListener(
+            object : android.view.ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    if (!ready.get()) return false
+                    content.viewTreeObserver.removeOnPreDrawListener(this)
+                    return true
+                }
+            },
+        )
     }
 }
