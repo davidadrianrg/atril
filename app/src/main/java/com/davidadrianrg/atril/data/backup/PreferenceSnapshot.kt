@@ -12,7 +12,8 @@ package com.davidadrianrg.atril.data.backup
  * - identificadores y estado propio de este dispositivo (ids de sync, última
  *   sincronización, avisos de actualización ya mostrados);
  * - la vigilancia de saves, que arranca un servicio en primer plano y debe
- *   activarse a mano en cada dispositivo.
+ *   activarse a mano en cada dispositivo;
+ * - los fondos elegidos por juego (rutas a ficheros locales).
  */
 internal object PreferenceSnapshot {
 
@@ -22,6 +23,9 @@ internal object PreferenceSnapshot {
         "last_sync_timestamp", "last_sync_summary", "last_sync_conflicts_json",
         "last_sync_failed_json", "skipped_version", "last_notified_update_version",
         "save_sync_watch_enabled",
+        // Rutas a imágenes guardadas en este dispositivo: la copia no lleva
+        // los ficheros y el fondo quedaría vacío en vez de usar la captura.
+        "game_backgrounds",
     )
 
     /**

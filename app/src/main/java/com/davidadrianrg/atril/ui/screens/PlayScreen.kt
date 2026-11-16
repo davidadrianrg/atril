@@ -475,7 +475,9 @@ fun PlayScreen(
         val id = currentNowState?.rom?.id
         value = if (id != null) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                // Un fichero borrado no deja el fondo vacío: cae a fanart/captura.
                 container.settingsRepository.getGameBackgroundBlocking(id)
+                    ?.takeIf { it.startsWith("http") || java.io.File(it).isFile }
             }
         } else {
             null
@@ -520,15 +522,13 @@ fun PlayScreen(
         // Fondo cinematográfico: primera captura del juego, si la hay. Es
         // decorativo y va detrás de todo (sin foco ni toques).
         CinematicHero(
-            url = when {
-                launcherBg == "solid" -> null
-                // Imagen elegida a mano tiene prioridad sobre cualquier otra.
-                gameBgPath != null -> gameBgPath
-                // Fanart si está descargado; si aún no, se muestra la captura
-                // del juego mientras se descarga en segundo plano.
-                launcherBg == "fanart" -> fanartPath ?: current?.rom?.heroBackdropUrl()
-                else -> current?.rom?.heroBackdropUrl()
-            },
+            // Regla común con escritorio: fondo elegido > fanart > captura.
+            url = com.davidadrianrg.atril.core.media.LauncherBackdrop.choose(
+                mode = launcherBg,
+                gameBackground = gameBgPath,
+                fanart = fanartPath,
+                screenshot = current?.rom?.heroBackdropUrl(),
+            ),
             blurRadius = launcherBlur.dp,
             modifier = Modifier.fillMaxSize(),
         )

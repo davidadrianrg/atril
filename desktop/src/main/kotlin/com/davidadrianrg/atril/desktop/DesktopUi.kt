@@ -1887,6 +1887,29 @@ fun SettingsScreen(state: DesktopAppState) {
         }
 
         // ── Temas ──
+        // ── Fondo del launcher (mismos modos que Android) ──
+        SettingsSection(icon = AppIcons.Image, title = tr("config.launcher_bg.title")) {
+            val bgMode by DesktopBackgrounds.mode.collectAsState()
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    com.davidadrianrg.atril.core.media.LauncherBackdrop.BLUR to "config.launcher_bg.blur",
+                    com.davidadrianrg.atril.core.media.LauncherBackdrop.SOLID to "config.launcher_bg.solid",
+                    com.davidadrianrg.atril.core.media.LauncherBackdrop.FANART to "config.launcher_bg.fanart",
+                ).forEach { (mode, label) ->
+                    androidx.compose.material3.FilterChip(
+                        selected = bgMode == mode,
+                        onClick = { DesktopBackgrounds.setMode(mode) },
+                        label = { Text(tr(label)) },
+                    )
+                }
+            }
+            Text(
+                tr("config.launcher_bg.hint"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         SettingsSection(icon = AppIcons.Star, title = tr("config.theme.title")) {
             val current by state.theme.collectAsState()
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2379,6 +2402,7 @@ fun SettingsScreen(state: DesktopAppState) {
                             // Tema e idioma se aplican al momento, como al elegirlos a mano.
                             state.setTheme(com.davidadrianrg.atril.core.theme.AppTheme.fromId(DesktopConfig.themeId))
                             state.setLanguage(DesktopConfig.languageTag)
+                            DesktopBackgrounds.reload()
                         }
                         backupStatus = tr(
                             when (result) {
@@ -2399,7 +2423,7 @@ fun SettingsScreen(state: DesktopAppState) {
         if (settingsCat == SettingsCategory.ABOUT) {
         // ── Controles (mando / teclado) ──
         SettingsSection(icon = AppIcons.Gamepad, title = tr("controls.title")) {
-            listOf("controls.dpad", "controls.select", "controls.details", "controls.shoulders", "controls.back", "controls.menu").forEach { k ->
+            listOf("controls.dpad", "controls.select", "controls.details", "controls.search", "controls.favorite", "controls.shoulders", "controls.back", "controls.menu").forEach { k ->
                 Text(tr(k), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp))
             }
             Text(

@@ -38,6 +38,7 @@ class PreferenceSnapshotTest {
                 "sync_device_id" to 7,
                 "last_sync_timestamp" to 1L,
                 "save_sync_watch_enabled" to true,
+                "game_backgrounds" to "1=/data/bg/1.jpg",
                 "theme" to "amoled",
             ),
         )

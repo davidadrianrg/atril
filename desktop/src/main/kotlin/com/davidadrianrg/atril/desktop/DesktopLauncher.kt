@@ -79,6 +79,7 @@ import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import com.davidadrianrg.atril.core.playstats.PlayQuickFilter
+import com.davidadrianrg.atril.core.media.LauncherBackdrop
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -211,8 +212,11 @@ fun DesktopPlayScreen(
     // Favoritos / Recientes, igual que en Android (lógica compartida en :core).
     var quickFilter by remember { mutableStateOf<String?>(null) }
     var showSearch by remember { mutableStateOf(false) }
+    var backgroundFor by remember { mutableStateOf<LauncherEntry?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val backgroundMode by DesktopBackgrounds.mode.collectAsState()
+    val gameBackgrounds by DesktopBackgrounds.games.collectAsState()
     var launchJob by remember { mutableStateOf<Job?>(null) }
     var insertion by remember { mutableStateOf<Insertion?>(null) }
     val insertProgress = remember { Animatable(0f) }
@@ -374,9 +378,30 @@ fun DesktopPlayScreen(
                 }
             },
     ) {
-        // Fondo cinematográfico: primera captura del juego actual, detrás de todo.
+        // Fondo cinematográfico (regla común con Android): fondo elegido para
+        // el juego > fanart de SteamGridDB > primera captura; `solid` = degradado.
+        val currentId = current?.card?.rep?.id
+        val fanartPath by androidx.compose.runtime.produceState<String?>(null, currentId, backgroundMode) {
+            val entry = current
+            value = if (backgroundMode == LauncherBackdrop.FANART && entry != null) {
+                // Espera a que el carrusel se detenga antes de golpear SteamGridDB.
+                kotlinx.coroutines.delay(400)
+                DesktopBackgrounds.fanart(
+                    entry.card.rep.id,
+                    entry.card.rep.name,
+                    DesktopConfig.scraperCredentials().steamGridDbKey,
+                )
+            } else {
+                null
+            }
+        }
         CinematicBackdrop(
-            url = current?.let { heroBackdropUrl(it.card.rep, state.config.serverUrl) },
+            url = LauncherBackdrop.choose(
+                mode = backgroundMode,
+                gameBackground = DesktopBackgrounds.asImageUrl(currentId?.let { gameBackgrounds[it] }),
+                fanart = DesktopBackgrounds.asImageUrl(fanartPath),
+                screenshot = current?.let { heroBackdropUrl(it.card.rep, state.config.serverUrl) },
+            ),
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -579,6 +604,7 @@ fun DesktopPlayScreen(
                                     onPlay = { play(entry) },
                                     onDetails = { state.openGame(entry.card) },
                                     onTogglePhysical = { state.togglePhysicalMedia(entry.card.rep.id) },
+                                    onPickBackground = { backgroundFor = entry },
                                     modifier = Modifier
                                         .weight(0.9f)
                                         .fillMaxHeight()
@@ -596,6 +622,7 @@ fun DesktopPlayScreen(
                                 onPlay = { play(entry) },
                                 onDetails = { state.openGame(entry.card) },
                                 onTogglePhysical = { state.togglePhysicalMedia(entry.card.rep.id) },
+                                onPickBackground = { backgroundFor = entry },
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
@@ -619,6 +646,18 @@ fun DesktopPlayScreen(
                     .guess(path, choices.map { it.first }),
                 onConfirm = { title, slug -> pendingAddPath = null; state.addLocalGame(title, slug, path) },
                 onDismiss = { pendingAddPath = null },
+            )
+        }
+
+        backgroundFor?.let { entry ->
+            BackgroundPickerDialog(
+                romId = entry.card.rep.id,
+                title = entry.card.rep.name,
+                platformSlug = entry.card.rep.platformSlug.orEmpty(),
+                onDismiss = {
+                    backgroundFor = null
+                    runCatching { rootFocus.requestFocus() }
+                },
             )
         }
 
@@ -1257,6 +1296,7 @@ private fun PlayCaption(
     onPlay: () -> Unit,
     onDetails: () -> Unit,
     onTogglePhysical: () -> Unit,
+    onPickBackground: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val manual = state.isManualDownloaded(entry.card)
@@ -1338,6 +1378,11 @@ private fun PlayCaption(
                 Icon(AppIcons.Image, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(tr("launcher.details"))
+            }
+            OutlinedButton(onClick = onPickBackground) {
+                Icon(AppIcons.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(tr("launcher.media.background"))
             }
         }
         if (physicalAvailable) {

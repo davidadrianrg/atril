@@ -36,6 +36,8 @@ class DesktopSettingsBackupTest {
             "roms_root" to "/home/me/ROMs",
             "max_concurrent_downloads" to "3",
             "close_to_tray" to "true",
+            "launcher_background" to "fanart",
+            "game_backgrounds" to "1=/home/me/.config/atril/game_backgrounds/1.jpg",
         ),
     )
 
@@ -49,7 +51,11 @@ class DesktopSettingsBackupTest {
         val settings = json["desktopSettings"] as Map<String, String>
         assertEquals("/home/me/ROMs", settings["roms_root"])
         assertEquals("3", settings["max_concurrent_downloads"])
-        listOf("server_url", "api_key", "client_device_id", "device_id", "last_sync_at", "scraper_ss_password")
+        assertEquals("fanart", json["launcherBackground"])
+        listOf(
+            "server_url", "api_key", "client_device_id", "device_id", "last_sync_at",
+            "scraper_ss_password", "game_backgrounds",
+        )
             .forEach { assertFalse(it, settings.containsKey(it)) }
         assertFalse(json.containsKey("apiKey"))
         assertFalse(json.containsKey("serverUrl"))

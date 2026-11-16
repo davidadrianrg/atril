@@ -62,6 +62,8 @@ class DesktopSettingsBackup(
         private val BLOCKED = setOf(
             "server_url", "api_key", "client_device_id", "device_id",
             "last_sync_at", "last_sync_summary", "skipped_version",
+            // Rutas a imágenes de este equipo: la copia no lleva los ficheros.
+            "game_backgrounds",
         )
 
         /** Claves con el mismo nombre y tipo en Android (DataStore) y aquí. */
@@ -86,6 +88,8 @@ class DesktopSettingsBackup(
             "platform" to "desktop",
             "theme" to prefs.get("theme").orEmpty(),
             "language" to prefs.get("language").orEmpty(),
+            // Mismo campo que la copia de Android.
+            "launcherBackground" to (prefs.get("launcher_background") ?: "blur"),
             "desktopSettings" to prefs.keys().filter(::isBackedUp).sorted()
                 .mapNotNull { key -> prefs.get(key)?.let { key to it } }.toMap(),
         )
@@ -128,6 +132,9 @@ class DesktopSettingsBackup(
         }
         (data["theme"] as? String)?.let { prefs.put("theme", it) }
         (data["language"] as? String)?.let { prefs.put("language", it) }
+        (data["launcherBackground"] as? String)
+            ?.takeIf { it in com.davidadrianrg.atril.core.media.LauncherBackdrop.MODES }
+            ?.let { prefs.put("launcher_background", it) }
 
         val url = (data["serverUrl"] as? String)?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() }
         val key = (data["apiKey"] as? String)?.trim()?.takeIf { it.isNotBlank() }

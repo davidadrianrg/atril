@@ -209,6 +209,16 @@ object DesktopConfig {
         get() = prefs.get("physical_media_ids", "")
         set(v) = prefs.put("physical_media_ids", v)
 
+    /** Fondo del launcher: `blur` | `solid` | `fanart` (igual que Android). */
+    var launcherBackground: String
+        get() = com.davidadrianrg.atril.core.media.LauncherBackdrop.normalizeMode(prefs.get("launcher_background", null))
+        set(v) = prefs.put("launcher_background", com.davidadrianrg.atril.core.media.LauncherBackdrop.normalizeMode(v))
+
+    /** Fondo elegido por juego, `romId=ruta;...` (mismo formato que Android). */
+    var gameBackgrounds: String
+        get() = prefs.get("game_backgrounds", "")
+        set(v) = prefs.put("game_backgrounds", v)
+
     /** Versión de la app desktop (para el comprobador de actualizaciones). */
     const val appVersion: String = "0.9.2"
 }
