@@ -105,6 +105,10 @@ class SyncCoordinator(
         val pathWarnings = mutableListOf<String>()
 
         for (rom in downloadedRoms) {
+            // Borrado a mitad de sync: la ficha ya no está en Room, se salta
+            // sin intentos ni errores (el usuario eliminó el juego a propósito).
+            if (romDao.getDownloadedRom(rom.romId) == null) continue
+
             val config = platformConfigs[rom.platformSlug]
             val handler = SaveHandlerRegistry.getHandler(
                 platformSlug = rom.platformSlug,
@@ -196,6 +200,11 @@ class SyncCoordinator(
         val conflicts = mutableListOf<com.davidadrianrg.atril.core.remote.dto.SyncOperation>()
 
         for (op in negotiateResponse.operations) {
+            // Juego borrado mientras el sync estaba en vuelo (o con operaciones
+            // pendientes en el servidor): deja de interesar → sin fallo ni
+            // conflicto, la vigilancia del save sync lo deja fuera.
+            if (romDao.getDownloadedRom(op.romId) == null) continue
+
             when (op.action) {
                 "upload" -> {
                     val save = localSavesMap[op.romId]?.find { it.fileName == op.fileName }
