@@ -101,6 +101,8 @@ import com.davidadrianrg.atril.util.rememberNotificationPermissionState
 fun ConfigScreen(
     onOpenPlatforms: () -> Unit = {},
     initialCategory: SettingsCategory = SettingsCategory.CONNECTION,
+    /** Cambio de categoría pedido desde fuera (notificación con la app abierta). */
+    categoryRequest: com.davidadrianrg.atril.ui.navigation.ConfigCategoryRequest? = null,
 ) {
     val context = LocalContext.current
     val container = (context.applicationContext as RomMSyncApplication).container
@@ -134,6 +136,16 @@ fun ConfigScreen(
     var apiKeyVisible by remember { mutableStateOf(false) }
     var showManualToken by remember { mutableStateOf(false) }
     var settingsCat by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialCategory) }
+    // Cada petición se aplica una sola vez: al volver a Ajustes más tarde se
+    // conserva la categoría que el usuario eligiera después.
+    var appliedCategoryRequest by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0L) }
+    LaunchedEffect(categoryRequest) {
+        val request = categoryRequest ?: return@LaunchedEffect
+        if (request.id != appliedCategoryRequest) {
+            settingsCat = request.category
+            appliedCategoryRequest = request.id
+        }
+    }
     var showQrDialog by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
     val qrState by viewModel.qrLogin.collectAsState()

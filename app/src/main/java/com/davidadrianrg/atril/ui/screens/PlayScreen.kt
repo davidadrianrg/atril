@@ -413,6 +413,16 @@ fun PlayScreen(
     LaunchedEffect(Unit) {
         com.davidadrianrg.atril.ui.input.PadEvents.menu.collect { if (insertion == null) menuOpen = !menuOpen }
     }
+    // Home del sistema (Atril como launcher): volver al carrusel limpio.
+    LaunchedEffect(Unit) {
+        com.davidadrianrg.atril.ui.input.PadEvents.home.collect {
+            menuOpen = false
+            showSearch = false
+            selectedRomId = null
+            mediaPick = null
+            pendingDelete = null
+        }
+    }
     // Start abre el buscador de juegos descargados.
     LaunchedEffect(Unit) {
         com.davidadrianrg.atril.ui.input.PadEvents.search.collect {

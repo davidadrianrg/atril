@@ -126,6 +126,30 @@ class MainActivity : ComponentActivity() {
         return super.onGenericMotionEvent(event)
     }
 
+    /**
+     * Petición de navegación pendiente que llega con un intent nuevo (Home,
+     * notificación) estando la actividad viva (`singleTask`). La UI la
+     * consume y la pone a null, así una recomposición completa (cambio de
+     * idioma) no la repite.
+     */
+    private val pendingNavRequest = androidx.compose.runtime.mutableStateOf<com.davidadrianrg.atril.ui.navigation.NavRequestEvent?>(null)
+    private var navRequestSeq = 0L
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val request = com.davidadrianrg.atril.ui.navigation.AppIntentRouter.route(
+            action = intent.action,
+            categories = intent.categories,
+            openUpdates = intent.getBooleanExtra(UpdateNotificationManager.EXTRA_OPEN_UPDATES, false),
+            openEmulators = intent.getBooleanExtra(
+                com.davidadrianrg.atril.emulators.EmulatorUpdateWorker.EXTRA_OPEN_EMULATORS,
+                false,
+            ),
+        ) ?: return
+        pendingNavRequest.value = com.davidadrianrg.atril.ui.navigation.NavRequestEvent(request, ++navRequestSeq)
+    }
+
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { /* La app seguirá funcionando aunque se deniegue. */ }
@@ -161,7 +185,14 @@ class MainActivity : ComponentActivity() {
             key(revision) {
                 val themeId by remember { SettingsDataStore.get(applicationContext).theme }.collectAsState(initial = "")
                 RomMSyncTheme(theme = com.davidadrianrg.atril.core.theme.AppTheme.fromId(themeId)) {
-                    RomMSyncApp(startInUpdates = openUpdates, startInEmulators = openEmulators)
+                    RomMSyncApp(
+                        startInUpdates = openUpdates,
+                        startInEmulators = openEmulators,
+                        navRequest = pendingNavRequest.value,
+                        onNavRequestHandled = { handled ->
+                            if (pendingNavRequest.value?.id == handled) pendingNavRequest.value = null
+                        },
+                    )
                     com.davidadrianrg.atril.ui.components.CrashReportDialog()
                 }
             }
