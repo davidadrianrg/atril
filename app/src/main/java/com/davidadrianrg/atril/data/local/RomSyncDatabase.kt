@@ -8,9 +8,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 import com.davidadrianrg.atril.data.local.dao.PlatformDao
 import com.davidadrianrg.atril.data.local.dao.RomDao
+import com.davidadrianrg.atril.data.local.dao.RomMetadataCacheDao
 import com.davidadrianrg.atril.data.local.dao.RomPresentationDao
 import com.davidadrianrg.atril.data.local.entity.DownloadedRomEntity
 import com.davidadrianrg.atril.data.local.entity.PlatformEntity
+import com.davidadrianrg.atril.data.local.entity.RomMetadataCacheEntity
 import com.davidadrianrg.atril.data.local.entity.RomPresentationEntity
 
 @Database(
@@ -18,8 +20,9 @@ import com.davidadrianrg.atril.data.local.entity.RomPresentationEntity
         PlatformEntity::class,
         DownloadedRomEntity::class,
         RomPresentationEntity::class,
+        RomMetadataCacheEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class RomSyncDatabase : RoomDatabase() {
@@ -27,6 +30,7 @@ abstract class RomSyncDatabase : RoomDatabase() {
     abstract fun platformDao(): PlatformDao
     abstract fun romDao(): RomDao
     abstract fun romPresentationDao(): RomPresentationDao
+    abstract fun romMetadataCacheDao(): RomMetadataCacheDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -101,6 +105,38 @@ abstract class RomSyncDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 8 → 9: caché offline de metadatos y carátula de los juegos
+         * descargados (F1). Tabla nueva: no toca datos existentes; se rellena
+         * la próxima vez que Play alcance el servidor.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `rom_metadata_cache` (" +
+                        "`romId` INTEGER NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`platformSlug` TEXT NOT NULL, " +
+                        "`summary` TEXT, " +
+                        "`genres` TEXT NOT NULL, " +
+                        "`releaseDate` INTEGER, " +
+                        "`rating` REAL, " +
+                        "`igdbId` INTEGER, " +
+                        "`fileNames` TEXT NOT NULL, " +
+                        "`coverSource` TEXT, " +
+                        "`coverPath` TEXT, " +
+                        "`updatedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`romId`))",
+                )
+            }
+        }
+
+        /** Todas las migraciones, en orden (también las usa el test de migración). */
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+            MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+        )
+
         @Volatile
         private var INSTANCE: RomSyncDatabase? = null
 
@@ -111,7 +147,7 @@ abstract class RomSyncDatabase : RoomDatabase() {
                     RomSyncDatabase::class.java,
                     "romsync.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(*ALL_MIGRATIONS)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                     .also { INSTANCE = it }

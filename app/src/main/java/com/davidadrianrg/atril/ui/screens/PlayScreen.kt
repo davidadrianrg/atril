@@ -165,6 +165,7 @@ fun PlayScreen(
                     preLaunchSaveSync = container.preLaunchSaveSync,
                     romLaunchService = container.romLaunchService,
                     romFileImportService = container.romFileImportService,
+                    offlineCache = container.offlineShelfCache,
                 )
             }
         }
