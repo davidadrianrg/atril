@@ -107,6 +107,9 @@ jobs:
 
       # ── Build both debug and release ──────────────────────────────────
       - name: Build Release APK
+        env:
+          ATRIL_REPORT_URL: ${{ secrets.ATRIL_REPORT_URL }}
+          ATRIL_REPORT_KEY: ${{ secrets.ATRIL_REPORT_KEY }}
         run: ./gradlew assembleRelease
 
       # Gradle always generates app-release.apk; we rename it to the same pattern
