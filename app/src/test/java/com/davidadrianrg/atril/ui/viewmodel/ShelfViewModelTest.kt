@@ -158,7 +158,13 @@ class ShelfViewModelTest {
         val cover = seedCache(1, "Chrono Trigger")
         val vm = viewModel()
 
-        val items = await { vm.items.first { it.size == 2 } }
+        // La primera emisión puede llegar antes de que el caché se aplique:
+        // esperar a que el juego caché ya tenga nombre y carátula.
+        val items = await {
+            vm.items.first { list ->
+                list.size == 2 && list.firstOrNull { it.rom.id == 1 }?.rom?.name == "Chrono Trigger"
+            }
+        }
 
         val chrono = items.single { it.rom.id == 1 }
         assertEquals("Chrono Trigger", chrono.rom.name)
