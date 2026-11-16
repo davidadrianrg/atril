@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.ui.input
 
+import com.davidadrianrg.atril.core.input.PadAction
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 /** Gamepad intents that screens subscribe to (Start/Menu opens the launcher menu). */
@@ -13,4 +14,15 @@ object PadEvents {
     val page = MutableSharedFlow<Int>(extraBufferCapacity = 1)
     /** X: marca o desmarca como favorito el juego actual (Play). */
     val favorite = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /**
+     * true mientras el menú del launcher está abierto: el D-pad y la A del
+     * mando se enrutan a [menuNav] en lugar del foco de Compose, que no
+     * siempre entra en el overlay.
+     */
+    @Volatile
+    var menuOpen: Boolean = false
+
+    /** Up/Down/Select dentro del menú abierto. */
+    val menuNav = MutableSharedFlow<PadAction>(extraBufferCapacity = 4)
 }

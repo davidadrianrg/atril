@@ -41,13 +41,30 @@ class MainActivity : ComponentActivity() {
         val fromPad = event.source and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
             event.source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
         if (!fromPad) return super.dispatchKeyEvent(event)
-        when (PadKeyMap.fromAndroidKeyCode(event.keyCode)) {
-            PadAction.SELECT ->
+        val padAction = PadKeyMap.fromAndroidKeyCode(event.keyCode)
+        when (padAction) {
+            // Con el menú abierto el D-pad navega el menú, no el carrusel.
+            PadAction.UP, PadAction.DOWN, PadAction.LEFT, PadAction.RIGHT -> {
+                if (PadEvents.menuOpen) {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                        padAction?.let { PadEvents.menuNav.tryEmit(it) }
+                    }
+                    return true
+                }
+            }
+            PadAction.SELECT -> {
+                if (PadEvents.menuOpen) {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                        PadEvents.menuNav.tryEmit(PadAction.SELECT)
+                    }
+                    return true
+                }
                 if (event.keyCode == KeyEvent.KEYCODE_BUTTON_A) {
                     return super.dispatchKeyEvent(
                         KeyEvent(event.downTime, event.eventTime, event.action, KeyEvent.KEYCODE_DPAD_CENTER, event.repeatCount),
                     )
                 }
+            }
             PadAction.BACK -> {
                 if (event.action == KeyEvent.ACTION_UP) onBackPressedDispatcher.onBackPressed()
                 return true

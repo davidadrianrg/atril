@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import com.davidadrianrg.atril.ui.input.focusRing
 import androidx.compose.foundation.layout.Box
@@ -660,10 +661,13 @@ internal fun PadLegendBar(
     onBack: (() -> Unit)? = null,
     onFavorite: (() -> Unit)? = null,
     onDetails: (() -> Unit)? = null,
+    onSearch: (() -> Unit)? = null,
+    onMenu: (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     Row(
         modifier = modifier
+            .horizontalScroll(rememberScrollState())
             .clip(RoundedCornerShape(50))
             // La barra sigue al tema: clara en Crimson Light, oscura en el resto.
             .background(scheme.surfaceContainerHigh.copy(alpha = 0.95f))
@@ -676,6 +680,8 @@ internal fun PadLegendBar(
         PadLegendChip("B", tr("pad.legend.back"), onBack)
         PadLegendChip("X", tr("pad.legend.favorite"), onFavorite)
         PadLegendChip("Y", tr("pad.legend.details"), onDetails)
+        PadLegendChip("Start", tr("pad.legend.search"), onSearch)
+        PadLegendChip("Select", tr("pad.legend.menu"), onMenu)
     }
 }
 
@@ -767,21 +773,38 @@ internal fun LauncherMenuOverlay(
 ) {
     // Al abrir con el mando, el foco debe entrar en el menú; si no, el D-pad
     // sigue moviendo el carrusel que hay detrás.
-    val firstItemFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    var menuFocused by remember { mutableStateOf(false) }
+    // Navegación con mando SIN depender del foco de Compose: el overlay suele
+    // quedar fuera del árbol de foco y requestFocus no entra. MainActivity
+    // enruta D-pad/A a PadEvents.menuNav mientras el menú está abierto.
+    var focusedIndex by remember { mutableStateOf(-1) }
+    val visibleNow = androidx.compose.runtime.rememberUpdatedState(visible)
+    val itemsNow = androidx.compose.runtime.rememberUpdatedState(items)
+    val navigateNow = androidx.compose.runtime.rememberUpdatedState(onNavigate)
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.davidadrianrg.atril.ui.input.PadEvents.menuNav.collect { action ->
+            if (!visibleNow.value) return@collect
+            when (action) {
+                com.davidadrianrg.atril.core.input.PadAction.UP ->
+                    focusedIndex = (if (focusedIndex < 0) 0 else focusedIndex - 1).coerceAtLeast(0)
+                com.davidadrianrg.atril.core.input.PadAction.DOWN ->
+                    focusedIndex = (if (focusedIndex < 0) 0 else focusedIndex + 1)
+                        .coerceAtMost(itemsNow.value.lastIndex)
+                com.davidadrianrg.atril.core.input.PadAction.SELECT ->
+                    itemsNow.value.getOrNull(focusedIndex)?.let { navigateNow.value(it) }
+                else -> Unit
+            }
+        }
+    }
     androidx.compose.runtime.LaunchedEffect(visible) {
-        if (!visible) {
-            menuFocused = false
-            return@LaunchedEffect
+        com.davidadrianrg.atril.ui.input.PadEvents.menuOpen = visible
+        focusedIndex = if (visible) {
+            items.indexOfFirst { it.route == currentRoute }.takeIf { it >= 0 } ?: 0
+        } else {
+            -1
         }
-        // La animación de entrada dura ~280 ms; pedir el foco antes de que la
-        // fila esté medida no hace nada. Se reintenta hasta que entre.
-        kotlinx.coroutines.delay(300)
-        repeat(10) {
-            if (menuFocused) return@LaunchedEffect
-            runCatching { firstItemFocus.requestFocus() }
-            kotlinx.coroutines.delay(150)
-        }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { com.davidadrianrg.atril.ui.input.PadEvents.menuOpen = false }
     }
     AnimatedVisibility(visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(180))) {
         Box(
@@ -863,25 +886,24 @@ internal fun LauncherMenuOverlay(
                 Spacer(Modifier.height(12.dp))
                 items.forEachIndexed { index, screen ->
                     val selected = screen.route == currentRoute
+                    val padHighlighted = visible && index == focusedIndex
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .heightIn(min = 58.dp)
-                            .then(
-                                if (index == 0) {
-                                    Modifier
-                                        .focusRequester(firstItemFocus)
-                                        .focusable()
-                                        .onFocusChanged { state -> if (state.isFocused) menuFocused = true }
-                                } else {
-                                    Modifier.focusable()
-                                },
-                            )
                             .focusRing()
                             .clip(RoundedCornerShape(16.dp))
                             .background(
                                 if (selected) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
+                                else if (padHighlighted) LauncherCream.copy(alpha = 0.10f)
                                 else Color.Transparent,
+                            )
+                            .then(
+                                if (padHighlighted) {
+                                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
+                                } else {
+                                    Modifier
+                                },
                             )
                             .clickable(role = Role.Button) { onNavigate(screen) }
                             .padding(horizontal = 10.dp, vertical = 6.dp),

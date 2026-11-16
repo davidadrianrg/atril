@@ -244,6 +244,18 @@ fun PlayScreen(
             platformFilter = null
         }
     }
+    val filterListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(platformFilter, quickFilter, platformsInShelf) {
+        if (platformsInShelf.size > 1) {
+            val index = when {
+                quickFilter == "favorites" -> 0
+                quickFilter == "recent" -> 1
+                platformFilter == null -> 2
+                else -> 3 + platformsInShelf.indexOfFirst { it.first == platformFilter }
+            }.coerceIn(0, 2 + platformsInShelf.size)
+            filterListState.animateScrollToItem(index)
+        }
+    }
     val visibleItems = items.filter { item ->
         val platformOk = platformFilter == null || item.rom.platformSlug == platformFilter
         val quickOk = when (quickFilter) {
@@ -494,6 +506,7 @@ fun PlayScreen(
                 filters = {
                     if (platformsInShelf.size > 1) {
                         LazyRow(
+                            state = filterListState,
                             contentPadding = PaddingValues(horizontal = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth(),
@@ -746,13 +759,13 @@ fun PlayScreen(
                 // del juego (Android · Local, etc.).
                 if (visibleItems.isNotEmpty()) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 6.dp, bottom = 6.dp, end = 16.dp),
-                        contentAlignment = Alignment.BottomEnd,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 6.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
                     PadLegendBar(
                 onPlay = { current?.let { play(it) } },
+                onSearch = { showSearch = true },
+                onMenu = { menuOpen = true },
                 onBack = {
                     when {
                         insertion != null -> launchJob?.cancel()
@@ -1081,7 +1094,7 @@ private fun LauncherHeader(
             RoundIconButton(Icons.Filled.Menu, tr("launcher.menu.open"), onOpenMenu)
             Spacer(Modifier.width(10.dp))
         }
-        Column(Modifier.weight(1f)) {
+        Column {
             AppMark()
             Text(
                 tr("nav.play"),
@@ -1091,7 +1104,7 @@ private fun LauncherHeader(
             )
         }
         if (filters != null) {
-            Box(Modifier.weight(2f), contentAlignment = Alignment.CenterStart) { filters() }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { filters() }
             Spacer(Modifier.width(8.dp))
         }
         if (count > 0) {
