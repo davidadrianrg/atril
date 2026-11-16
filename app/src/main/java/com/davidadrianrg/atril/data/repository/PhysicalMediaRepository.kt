@@ -1,11 +1,11 @@
 package com.davidadrianrg.atril.data.repository
 
 import com.davidadrianrg.atril.core.library.PhysicalMedia
+import com.davidadrianrg.atril.core.media.ImageFileDownloader
 import com.davidadrianrg.atril.core.remote.NetworkModule
 import com.davidadrianrg.atril.data.local.dao.RomPresentationDao
 import com.davidadrianrg.atril.data.local.entity.RomPresentationEntity
 import java.io.File
-import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.Request
 
 /** Cómo se muestra un juego en el launcher. */
 enum class LauncherDisplayMode(val id: String) {
@@ -80,33 +79,8 @@ class PhysicalMediaRepository(
      */
     suspend fun download(romId: Int, url: String, apiKey: String): Result<File> = withContext(Dispatchers.IO) {
         runCatching {
-            cacheDir.mkdirs()
             val target = File(cacheDir, "$romId.${PhysicalMedia.cacheExtension(url)}")
-            val part = File(cacheDir, "${target.name}.part")
-            val client = NetworkModule.createOkHttpClient(apiKey)
-            client.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
-                if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-                val body = response.body ?: throw IOException("empty body")
-                val type = body.contentType()
-                if (type != null && type.type != "image") throw IOException("not an image ($type)")
-                if (body.contentLength() > MAX_BYTES) throw IOException("image too large")
-                part.outputStream().use { out ->
-                    body.byteStream().use { input ->
-                        val buffer = ByteArray(16 * 1024)
-                        var total = 0L
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            total += read
-                            if (total > MAX_BYTES) throw IOException("image too large")
-                            out.write(buffer, 0, read)
-                        }
-                    }
-                }
-            }
-            if (part.length() == 0L) throw IOException("empty image")
-            target.delete()
-            if (!part.renameTo(target)) throw IOException("rename failed")
+            ImageFileDownloader.download(NetworkModule.createOkHttpClient(apiKey), url, target).getOrThrow()
 
             val current = dao.get(romId) ?: RomPresentationEntity(romId = romId)
             current.physicalMediaPath?.let { old -> if (old != target.absolutePath) File(old).delete() }
@@ -119,9 +93,6 @@ class PhysicalMediaRepository(
                 ),
             )
             target
-        }.onFailure {
-            cacheDir.listFiles { f -> f.name.startsWith("$romId.") && f.name.endsWith(".part") }
-                ?.forEach { it.delete() }
         }
     }
 
@@ -133,7 +104,4 @@ class PhysicalMediaRepository(
         }
     }
 
-    private companion object {
-        const val MAX_BYTES = 20L * 1024 * 1024
-    }
 }
