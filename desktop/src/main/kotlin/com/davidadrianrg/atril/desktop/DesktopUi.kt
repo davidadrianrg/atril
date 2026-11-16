@@ -1794,6 +1794,7 @@ fun SettingsScreen(state: DesktopAppState) {
     var showApiKey by remember { mutableStateOf(false) }
     var showManualToken by remember { mutableStateOf(false) }
     var settingsCat by remember { mutableStateOf(SettingsCategory.CONNECTION) }
+    var showReport by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
     val qrState by state.qrLogin.collectAsState()
     // DesktopConfig no es estado de Compose: se refresca a mano tras conectar/desconectar.
@@ -1807,6 +1808,10 @@ fun SettingsScreen(state: DesktopAppState) {
 
         SettingsCategoryBar(settingsCat) { settingsCat = it }
         Spacer(Modifier.height(12.dp))
+        if (showReport) {
+            DesktopReportDialog(onDismiss = { showReport = false })
+        }
+
         if (showQr) {
             QrLoginDialog(
                 qrState,
@@ -2421,6 +2426,13 @@ fun SettingsScreen(state: DesktopAppState) {
         }
 
         if (settingsCat == SettingsCategory.ABOUT) {
+        // ── Reporte de problema ──
+        SettingsSection(icon = AppIcons.Info, title = tr("report.open")) {
+            OutlinedButton(onClick = { showReport = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(tr("report.send"))
+            }
+        }
+
         // ── Controles (mando / teclado) ──
         SettingsSection(icon = AppIcons.Gamepad, title = tr("controls.title")) {
             listOf("controls.dpad", "controls.select", "controls.details", "controls.search", "controls.favorite", "controls.shoulders", "controls.back", "controls.menu").forEach { k ->

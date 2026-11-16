@@ -29,23 +29,8 @@ object IssueReporter {
     val hasEndpoint: Boolean get() = BuildConfig.REPORT_URL.isNotBlank() && BuildConfig.REPORT_KEY.isNotBlank()
 
     /** URL de GitHub con el reporte ya escrito (fallback sin backend). */
-    fun prefilledIssueUrl(message: String, diagnostics: String): String {
-        val body = buildString {
-            appendLine(message.trim())
-            if (diagnostics.isNotBlank()) {
-                appendLine()
-                appendLine("---")
-                appendLine(diagnostics.trim())
-            }
-        }.take(7000)
-        return Uri.parse("https://github.com/$REPO/issues/new")
-            .buildUpon()
-            .appendQueryParameter("title", "[Report] " + message.trim().lineSequence().first().take(80))
-            .appendQueryParameter("body", body)
-            .appendQueryParameter("labels", "user-report")
-            .build()
-            .toString()
-    }
+    fun prefilledIssueUrl(message: String, diagnostics: String): String =
+        com.davidadrianrg.atril.core.report.GitHubIssueUrl.prefilled(message, diagnostics)
 
     /**
      * Envía el reporte al worker configurado. Devuelve la URL de la issue
