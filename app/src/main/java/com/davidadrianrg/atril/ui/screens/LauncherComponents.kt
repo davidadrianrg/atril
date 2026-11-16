@@ -83,6 +83,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -775,7 +776,8 @@ private fun PadLegendChip(glyph: String, label: String, onClick: (() -> Unit)? =
 internal fun LauncherPill(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
-            .heightIn(min = 36.dp)
+            .heightIn(min = 44.dp)
+            .semantics { this.selected = selected }
             .clip(RoundedCornerShape(50))
             .background(if (selected) LauncherAmber else Color(0x22F2E6D2))
             .border(1.dp, if (selected) Color.Transparent else LauncherCream.copy(alpha = 0.14f), RoundedCornerShape(50))

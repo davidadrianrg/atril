@@ -782,7 +782,7 @@ fun PlayScreen(
                                         .align(Alignment.CenterStart)
                                         .fillMaxHeight()
                                         .fillMaxWidth(0.16f)
-                                        .clickable {
+                                        .clickable(onClickLabel = tr("common.previous")) {
                                             scope.launch {
                                                 pagerState.animateScrollToPage(pagerState.currentPage - 1)
                                             }
@@ -795,7 +795,7 @@ fun PlayScreen(
                                         .align(Alignment.CenterEnd)
                                         .fillMaxHeight()
                                         .fillMaxWidth(0.16f)
-                                        .clickable {
+                                        .clickable(onClickLabel = tr("common.next")) {
                                             scope.launch {
                                                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
                                             }
@@ -1354,22 +1354,6 @@ private fun LauncherArrow(
         )
     }
 }
-
-/** Desvanece los bordes laterales del contenido (máscara DstIn sobre capa offscreen). */
-private fun Modifier.fadeEdges(): Modifier = this
-    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-    .drawWithContent {
-        drawContent()
-        drawRect(
-            brush = Brush.horizontalGradient(
-                0f to Color.Transparent,
-                0.045f to Color.Black,
-                0.955f to Color.Black,
-                1f to Color.Transparent,
-            ),
-            blendMode = BlendMode.DstIn,
-        )
-    }
 
 /** Buscador de juegos descargados (Start en el mando). */
 @Composable
