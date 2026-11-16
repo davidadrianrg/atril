@@ -266,12 +266,7 @@ fun PlayScreen(
     }
     val visibleItems = items.filter { item ->
         val platformOk = platformFilter == null || item.rom.platformSlug == platformFilter
-        val quickOk = when (quickFilter) {
-            "favorites" -> playStats.statsOf(item).favorite
-            "recent" -> playStats.statsOf(item).lastPlayedAt != null
-            else -> true
-        }
-        platformOk && quickOk
+        platformOk && com.davidadrianrg.atril.core.playstats.PlayQuickFilter.matches(quickFilter, playStats.statsOf(item))
     }
     val initialPage = visibleItems.indexOfFirst { it.rom.id == lastRomId }
         .coerceIn(0, (visibleItems.size - 1).coerceAtLeast(0))
@@ -648,13 +643,7 @@ fun PlayScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            tr(
-                                when (quickFilter) {
-                                    "favorites" -> "play.empty.favorites"
-                                    "recent" -> "play.empty.recent"
-                                    else -> "play.empty.platform"
-                                },
-                            ),
+                            tr(com.davidadrianrg.atril.core.playstats.PlayQuickFilter.emptyMessageKey(quickFilter)),
                             style = MaterialTheme.typography.bodyMedium,
                             color = LauncherCream.copy(alpha = 0.75f),
                         )
@@ -1369,7 +1358,7 @@ private fun GameSearchDialog(
         runCatching { focus.requestFocus() }
     }
     val results = remember(items, query) {
-        items.filter { query.isBlank() || it.rom.name.contains(query, ignoreCase = true) }
+        com.davidadrianrg.atril.core.playstats.PlayQuickFilter.search(items, query) { it.rom.name }
     }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         androidx.compose.material3.Surface(

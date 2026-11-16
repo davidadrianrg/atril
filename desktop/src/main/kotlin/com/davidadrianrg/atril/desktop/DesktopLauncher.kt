@@ -73,7 +73,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import com.davidadrianrg.atril.core.playstats.PlayQuickFilter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -203,6 +208,9 @@ fun DesktopPlayScreen(
     var pendingAddPath by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var platformFilter by remember { mutableStateOf<String?>(null) }
+    // Favoritos / Recientes, igual que en Android (lógica compartida en :core).
+    var quickFilter by remember { mutableStateOf<String?>(null) }
+    var showSearch by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var launchJob by remember { mutableStateOf<Job?>(null) }
@@ -262,7 +270,8 @@ fun DesktopPlayScreen(
         }
     }
     val visible = entries.filter { entry ->
-        platformFilter == null || (entry.card.rep.platformSlug ?: "unknown") == platformFilter
+        (platformFilter == null || (entry.card.rep.platformSlug ?: "unknown") == platformFilter) &&
+            PlayQuickFilter.matches(quickFilter, PlayStatsLogic.aggregate(entry.groupIds(), playStats))
     }
     val pagerState = rememberPagerState(pageCount = { visible.size })
     LaunchedEffect(visible.size) {
@@ -321,6 +330,16 @@ fun DesktopPlayScreen(
                 if (ev.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
                 val busy = insertion != null
                 when (ev.key) {
+                    // Buscador: Ctrl+F, F3 o Start del mando.
+                    androidx.compose.ui.input.key.Key.F3 ->
+                        if (busy || menuOpen) false else { showSearch = true; true }
+                    // F (o X del mando): favorito del juego actual; Ctrl+F busca.
+                    androidx.compose.ui.input.key.Key.F -> when {
+                        busy || menuOpen -> false
+                        ev.isCtrlPressed -> { showSearch = true; true }
+                        ev.isAltPressed || ev.isMetaPressed -> false
+                        else -> current?.let { state.toggleFavorite(it.card); true } ?: false
+                    }
                     androidx.compose.ui.input.key.Key.Escape -> when {
                         busy -> { launchJob?.cancel(); true }
                         menuOpen -> { menuOpen = false; true }
@@ -394,6 +413,16 @@ fun DesktopPlayScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     PlayPill(
+                        label = tr("play.filter.favorites"),
+                        selected = quickFilter == PlayQuickFilter.FAVORITES,
+                        onClick = { quickFilter = PlayQuickFilter.toggle(quickFilter, PlayQuickFilter.FAVORITES) },
+                    )
+                    PlayPill(
+                        label = tr("play.filter.recent"),
+                        selected = quickFilter == PlayQuickFilter.RECENT,
+                        onClick = { quickFilter = PlayQuickFilter.toggle(quickFilter, PlayQuickFilter.RECENT) },
+                    )
+                    PlayPill(
                         label = tr("shelf.filter.all"),
                         selected = platformFilter == null,
                         onClick = { platformFilter = null },
@@ -416,7 +445,10 @@ fun DesktopPlayScreen(
                 onSelect = { entry ->
                     pendingSelectId = entry.card.rep.id
                     // Si el filtro de plataforma lo deja fuera, se quita para poder centrarlo.
-                    if (visible.none { it.card.rep.id == entry.card.rep.id }) platformFilter = null
+                    if (visible.none { it.card.rep.id == entry.card.rep.id }) {
+                        platformFilter = null
+                        quickFilter = null
+                    }
                 },
             )
 
@@ -425,6 +457,25 @@ fun DesktopPlayScreen(
                     Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) { CircularProgressIndicator(color = PlayAmber) }
+
+                // Hay juegos pero el filtro los oculta todos: se explica y se
+                // ofrece quitarlo (con la estantería vacía manda EmptyLauncher).
+                entries.isNotEmpty() && visible.isEmpty() &&
+                    (quickFilter != null || platformFilter != null) -> Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            tr(PlayQuickFilter.emptyMessageKey(quickFilter)),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = PlayCream.copy(alpha = 0.75f),
+                        )
+                        androidx.compose.material3.TextButton(
+                            onClick = { quickFilter = null; platformFilter = null },
+                        ) { Text(tr("play.empty.clear_filter"), color = PlayAmber) }
+                    }
+                }
 
                 visible.isEmpty() -> EmptyLauncher(onOpenLibrary, onAddLocal = { scope.launch { pickLocalGameFile()?.let { pendingAddPath = it } } })
 
@@ -568,6 +619,25 @@ fun DesktopPlayScreen(
                     .guess(path, choices.map { it.first }),
                 onConfirm = { title, slug -> pendingAddPath = null; state.addLocalGame(title, slug, path) },
                 onDismiss = { pendingAddPath = null },
+            )
+        }
+
+        if (showSearch) {
+            PlaySearchDialog(
+                entries = entries,
+                onSelect = { entry ->
+                    showSearch = false
+                    // Si un filtro lo oculta, se quita para poder centrarlo.
+                    if (visible.none { it.card.rep.id == entry.card.rep.id }) {
+                        platformFilter = null
+                        quickFilter = null
+                    }
+                    pendingSelectId = entry.card.rep.id
+                },
+                onDismiss = {
+                    showSearch = false
+                    runCatching { rootFocus.requestFocus() }
+                },
             )
         }
 
@@ -944,11 +1014,99 @@ private fun ContinuePlayingStrip(
     }
 }
 
+/** Todos los ids del juego (discos + representante) para sus estadísticas. */
+private fun LauncherEntry.groupIds(): List<Int> = card.groupRoms.map { it.id } + card.rep.id
+
+/**
+ * Buscador de juegos del launcher (Ctrl+F, F3 o Start del mando), como el de
+ * Android. Enter elige el primer resultado; ↓ baja a la lista.
+ */
+@Composable
+private fun PlaySearchDialog(
+    entries: List<LauncherEntry>,
+    onSelect: (LauncherEntry) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val results = remember(entries, query) { PlayQuickFilter.search(entries, query) { it.card.rep.name } }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text(tr("common.close")) }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text(tr("play.search.hint")) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focus)
+                        .onKeyEvent { ev ->
+                            val enter = ev.key == androidx.compose.ui.input.key.Key.Enter ||
+                                ev.key == androidx.compose.ui.input.key.Key.NumPadEnter
+                            if (ev.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && enter) {
+                                results.firstOrNull()?.let(onSelect)
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                )
+                if (results.isEmpty()) {
+                    Text(
+                        tr("play.search.empty"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        Modifier.heightIn(max = 380.dp).widthIn(min = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        items(results.size, key = { results[it].card.rep.id }) { index ->
+                            val entry = results[index]
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusHighlight(RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { onSelect(entry) }
+                                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    entry.card.rep.name,
+                                    Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    entry.platformLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    )
+}
+
 @Composable
 private fun PlayPill(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
-            .heightIn(min = 36.dp)
+            .heightIn(min = 44.dp)
+            .semantics { this.selected = selected }
             .focusHighlight(RoundedCornerShape(50))
             .clip(RoundedCornerShape(50))
             .background(if (selected) PlayAmber else Color(0x22F2E6D2))
@@ -957,7 +1115,7 @@ private fun PlayPill(label: String, selected: Boolean, onClick: () -> Unit) {
                 if (selected) Color.Transparent else PlayCream.copy(alpha = 0.14f),
                 RoundedCornerShape(50),
             )
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Tab, onClick = onClick)
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
