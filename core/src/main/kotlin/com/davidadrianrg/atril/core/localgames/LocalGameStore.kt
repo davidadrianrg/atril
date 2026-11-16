@@ -35,8 +35,9 @@ class LocalGameStore(
             path = path,
             addedAt = clock(),
         )
-        save(load() + game)
-        return game
+        val list = LocalRomIds.assign(load() + game)
+        save(list)
+        return list.first { it.id == game.id }
     }
 
     /** Aplica [change] al juego [id]; devuelve el resultado o null si no existe. */
@@ -44,7 +45,7 @@ class LocalGameStore(
     fun update(id: String, change: (LocalGame) -> LocalGame): LocalGame? {
         val list = load()
         val current = list.firstOrNull { it.id == id } ?: return null
-        val updated = change(current).copy(id = current.id)
+        val updated = change(current).copy(id = current.id, romId = current.romId)
         save(list.map { if (it.id == id) updated else it })
         return updated
     }
@@ -67,8 +68,14 @@ class LocalGameStore(
         } else {
             emptyList()
         }
-        cache = loaded
-        return loaded
+        // Ficheros antiguos sin romId (o con duplicados): se asignan una vez y
+        // se guardan, para que el id no dependa de ningún cálculo posterior.
+        val withIds = LocalRomIds.assign(loaded)
+        if (withIds !== loaded) {
+            runCatching { save(withIds) }
+        }
+        cache = withIds
+        return withIds
     }
 
     private fun save(list: List<LocalGame>) {

@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.ui.screens
 
+import com.davidadrianrg.atril.core.sync.SaveWatchState
 import com.davidadrianrg.atril.ui.components.Panel
 import com.davidadrianrg.atril.ui.components.pageBackground
 import androidx.compose.foundation.layout.Arrangement
@@ -118,6 +119,8 @@ fun SyncScreen() {
     val retroArchBasePath by viewModel.retroArchBasePath.collectAsState()
     val syncInterval by viewModel.syncIntervalMinutes.collectAsState()
     val watchEnabled by viewModel.watchEnabled.collectAsState()
+    val watchState by com.davidadrianrg.atril.data.sync.SaveWatchStatus.state.collectAsState()
+    val lastSystemPauseAt by com.davidadrianrg.atril.data.sync.SaveWatchStatus.lastSystemPauseAt.collectAsState()
     val localSaves by viewModel.localSaves.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val pathWarnings by viewModel.pathWarnings.collectAsState()
@@ -340,6 +343,33 @@ fun SyncScreen() {
                                     viewModel.setWatchEnabled(enabled)
                                 }
                             },
+                        )
+                    }
+                    // Estado real (M2/F11): Android 15 la para tras 6 h al día;
+                    // antes se apagaba en silencio.
+                    SaveWatchState.statusKey(watchEnabled, watchState)?.let { (key, arg) ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            if (arg != null) tr(key, arg) else tr(key),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (watchState is SaveWatchState.Paused) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                        )
+                    }
+                    val pausedAt = lastSystemPauseAt
+                    if (watchEnabled && watchState !is SaveWatchState.Paused && pausedAt != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            tr(
+                                "android.sync.watch.status.last_pause",
+                                java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+                                    .format(java.util.Date(pausedAt)),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Spacer(modifier = Modifier.height(6.dp))

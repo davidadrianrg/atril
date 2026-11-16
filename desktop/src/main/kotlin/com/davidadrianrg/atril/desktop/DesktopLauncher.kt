@@ -120,9 +120,9 @@ private data class LauncherEntry(
     val displayPlatform: String get() = if (local != null) "$platformLabel · ${tr("local.badge")}" else platformLabel
 }
 
-/** Id sintético y NEGATIVO para un juego local: nunca choca con un id de RomM. */
+/** Id estable, único y NEGATIVO para un juego local (persistido, ver LocalRomIds). */
 internal fun com.davidadrianrg.atril.core.localgames.LocalGame.syntheticRomId(): Int =
-    -((id.hashCode().toLong() and 0x7FFFFFFF).toInt().coerceAtLeast(1))
+    com.davidadrianrg.atril.core.localgames.LocalRomIds.of(this)
 
 private fun com.davidadrianrg.atril.core.localgames.LocalGame.toRomDto(): RomDto = RomDto(
     id = syntheticRomId(),

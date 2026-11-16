@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import com.davidadrianrg.atril.MainActivity
 import com.davidadrianrg.atril.R
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.core.sync.SaveWatchState
 import com.davidadrianrg.atril.core.sync.WatchScope
 import com.davidadrianrg.atril.core.sync.platform.SaveHandlerRegistry
 import com.davidadrianrg.atril.data.local.RomSyncDatabase
@@ -53,13 +54,28 @@ class SaveSyncWatchService : Service() {
     private val saveSyncManager by lazy { SaveSyncManager(applicationContext) }
     @Volatile private var syncBusy = false
     @Volatile private var suppressEventsUntil = 0L
+    /** Android rechazó `startForeground`: el servicio se para sin vigilar nada. */
+    private var foregroundDenied = false
 
     override fun onCreate() {
         super.onCreate()
         settings = SettingsDataStore.get(this)
         createChannel()
+        SaveWatchStatus.update(SaveWatchState.Starting)
         // Android exige startForeground en los primeros 5 s tras startForegroundService.
-        startForeground(NOTIFICATION_ID, buildNotification(0))
+        // En Android 14+ puede denegarse (segundo plano, cupo diario agotado):
+        // antes eso tumbaba el proceso; ahora queda como pausa explicada en Sync.
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification(0))
+        } catch (e: Exception) {
+            android.util.Log.w("SaveSyncWatch", "Foreground start not allowed", e)
+            SaveWatchStatus.update(
+                SaveWatchState.Paused(SaveWatchState.PauseReason.START_NOT_ALLOWED, System.currentTimeMillis()),
+            )
+            foregroundDenied = true
+            stopSelf()
+            return
+        }
 
         // Evita bucles: los ficheros que escribe el propio sync no deben
         // disparar otro sync. Mientras hay trabajo se ignoran eventos y se
@@ -94,7 +110,7 @@ class SaveSyncWatchService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!settings.getSaveSyncWatchEnabledBlocking()) {
+        if (foregroundDenied || !settings.getSaveSyncWatchEnabledBlocking()) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -106,13 +122,21 @@ class SaveSyncWatchService : Service() {
         observers.values.forEach { runCatching { it.stopWatching() } }
         observers.clear()
         scope.cancel()
+        SaveWatchStatus.onServiceDestroyed()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    /** Android 15 limita las FGS dataSync a 6 h/día; al llegar, paramos limpiamente. */
+    /**
+     * Android 15 limita las FGS dataSync a 6 h/día; al llegar, paramos
+     * limpiamente y la pantalla Sync lo explica. Se reanuda al abrir Atril
+     * (MainActivity.onResume), que es cuando el sistema repone el cupo.
+     */
     override fun onTimeout(startId: Int) {
+        SaveWatchStatus.update(
+            SaveWatchState.Paused(SaveWatchState.PauseReason.SYSTEM_TIME_LIMIT, System.currentTimeMillis()),
+        )
         stopSelf()
     }
 
@@ -239,6 +263,7 @@ class SaveSyncWatchService : Service() {
     }
 
     private fun updateNotification(folders: Int) {
+        SaveWatchStatus.update(SaveWatchState.Watching(folders))
         if (folders == lastFolderCount) return
         lastFolderCount = folders
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -292,9 +317,21 @@ class SaveSyncWatchService : Service() {
             ".tmp", ".part", ".lock", ".log", ".crdownload", ".download", ".bak",
         )
 
+        /**
+         * Arranca la vigilancia. Desde segundo plano (arranque del sistema,
+         * proceso abierto por un worker) Android 12+ puede rechazarlo: queda
+         * registrado en [SaveWatchStatus] para explicarlo en Sync.
+         */
         fun start(context: Context) {
             val intent = Intent(context, SaveSyncWatchService::class.java)
-            ContextCompat.startForegroundService(context, intent)
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: Exception) {
+                SaveWatchStatus.update(
+                    SaveWatchState.Paused(SaveWatchState.PauseReason.START_NOT_ALLOWED, System.currentTimeMillis()),
+                )
+                throw e
+            }
         }
 
         fun stop(context: Context) {

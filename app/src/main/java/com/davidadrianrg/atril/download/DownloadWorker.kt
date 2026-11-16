@@ -18,6 +18,7 @@ import com.davidadrianrg.atril.data.local.entity.DownloadedRomEntity
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.core.remote.NetworkModule
 import com.davidadrianrg.atril.core.remote.RomMApiService
+import com.davidadrianrg.atril.core.download.PartialDownload
 import com.davidadrianrg.atril.core.download.PathMapper
 import com.davidadrianrg.atril.core.download.ZipStreamExtractor
 import kotlinx.coroutines.CancellationException
@@ -35,12 +36,13 @@ import java.util.Locale
  * WorkManager CoroutineWorker that downloads a single ROM from the RomM server.
  *
  * Handles two streaming modes:
- * 1. **Normal download** (Content-Length > 0): streams bytes directly to disk
- *    with progress reporting. Supports auto-resume via HTTP `Range` header —
- *    if a partial file from a previous interrupted run already exists on disk,
- *    the worker asks the server for the remaining bytes (HTTP 206) and
- *    appends them. If the server returns 200 (no range support / file changed)
- *    the worker re-downloads from scratch.
+ * 1. **Normal download** (Content-Length > 0): streams bytes to `<file>.part`
+ *    with progress reporting and renames it atomically to the final name only
+ *    after the hash check ([PartialDownload]). Supports auto-resume via HTTP
+ *    `Range` header — if a partial from a previous interrupted run exists, the
+ *    worker asks the server for the remaining bytes (HTTP 206) and appends
+ *    them. If the server returns 200 (no range support / file changed) the
+ *    worker re-downloads from scratch.
  * 2. **mod_zip stream** (Content-Length = -1): RomM dynamically zips multi-file
  *    ROMs on the fly. The worker switches to indeterminate progress and extracts
  *    the zip stream directly into the platform folder. No hash verification is
@@ -77,6 +79,7 @@ class DownloadWorker(
         // El valor hostil no se devuelve en el fallo: solo un mensaje clasificado.
         val platformDirName = PathMapper.platformDirName(platformSlug)
             ?: return@withContext Result.failure(workDataOf(
+                KEY_ROM_ID to romId,
                 KEY_ROM_NAME to romName,
                 KEY_FILE_NAME to fileName,
                 KEY_ERROR_MESSAGE to tr("library.invalid_platform"),
@@ -109,12 +112,7 @@ class DownloadWorker(
         val targetFileForSpace = PathMapper.getRomFile(romsRootPath, platformDirName, fileName)
         val spaceCheck = hasEnoughSpace(targetFileForSpace.parentFile, neededBytes = -1L)
         if (spaceCheck == SpaceCheck.NO_STORAGE) {
-            return@withContext Result.failure(workDataOf(
-                KEY_ROM_NAME to romName,
-                KEY_FILE_NAME to fileName,
-                KEY_PLATFORM_SLUG to platformSlug,
-                KEY_ERROR_MESSAGE to tr("android.downloads.error_no_space"),
-            ))
+            return@withContext failure(tr("android.downloads.error_no_space"))
         }
 
         // Build API client for this download
@@ -147,72 +145,56 @@ class DownloadWorker(
             // Cancelación del usuario: borrar el parcial. Otras paradas (red,
             // restricciones) lo conservan para reanudar.
             if (!streamCompleted && DownloadCancelRegistry.consumeUserCancel(romId, workStartedAtMs)) {
-                deletePartialFile(PathMapper.getRomFile(romsRootPath, platformDirName, fileName))
+                deletePartialFile(
+                    PartialDownload.partFileFor(PathMapper.getRomFile(romsRootPath, platformDirName, fileName)),
+                )
             }
             throw e
         } catch (e: HttpException) {
             when (e.code()) {
                 401, 403 -> {
                     Log.w(TAG, "Auth error downloading '$romName': HTTP ${e.code()} — API key inválida")
-                    Result.failure(workDataOf(
-                        KEY_ROM_NAME to romName,
-                        KEY_FILE_NAME to fileName,
-                        KEY_PLATFORM_SLUG to platformSlug,
-                        KEY_ERROR_MESSAGE to tr("android.downloads.error_auth", e.code()),
-                    ))
+                    failure(tr("android.downloads.error_auth", e.code()))
                 }
                 404 -> {
                     Log.w(TAG, "ROM not found on server: '$romName' (HTTP 404)")
-                    Result.failure(workDataOf(
-                        KEY_ROM_NAME to romName,
-                        KEY_FILE_NAME to fileName,
-                        KEY_PLATFORM_SLUG to platformSlug,
-                        KEY_ERROR_MESSAGE to tr("android.downloads.error_not_found"),
-                    ))
+                    failure(tr("android.downloads.error_not_found"))
                 }
                 in 500..599 -> {
                     Log.w(TAG, "Server error HTTP ${e.code()} for '$romName', attempt $runAttemptCount")
-                    if (runAttemptCount < 3) Result.retry() else Result.failure(workDataOf(
-                        KEY_ROM_NAME to romName,
-                        KEY_FILE_NAME to fileName,
-                        KEY_PLATFORM_SLUG to platformSlug,
-                        KEY_ERROR_MESSAGE to tr("android.downloads.error_server", e.code()),
-                    ))
+                    if (runAttemptCount < 3) Result.retry() else failure(tr("android.downloads.error_server", e.code()))
                 }
                 else -> {
                     Log.w(TAG, "HTTP ${e.code()} for '$romName', attempt $runAttemptCount")
-                    if (runAttemptCount < 3) Result.retry() else Result.failure(workDataOf(
-                        KEY_ROM_NAME to romName,
-                        KEY_FILE_NAME to fileName,
-                        KEY_PLATFORM_SLUG to platformSlug,
-                        KEY_ERROR_MESSAGE to tr("download.http_error", e.code()),
-                    ))
+                    if (runAttemptCount < 3) Result.retry() else failure(tr("download.http_error", e.code()))
                 }
             }
         } catch (e: IOException) {
             Log.w(TAG, "IO error downloading '$romName', attempt $runAttemptCount", e)
-            if (runAttemptCount < 10) Result.retry() else Result.failure(workDataOf(
-                KEY_ROM_NAME to romName,
-                KEY_FILE_NAME to fileName,
-                KEY_PLATFORM_SLUG to platformSlug,
-                KEY_ERROR_MESSAGE to tr(
-                    "android.downloads.error_network",
-                    e.message ?: tr("android.downloads.connection_interrupted"),
-                ),
-            ))
+            if (runAttemptCount < 10) {
+                Result.retry()
+            } else {
+                failure(
+                    tr("android.downloads.error_network", e.message ?: tr("android.downloads.connection_interrupted")),
+                )
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Unexpected error downloading '$romName'", e)
-            Result.failure(workDataOf(
-                KEY_ROM_NAME to romName,
-                KEY_FILE_NAME to fileName,
-                KEY_PLATFORM_SLUG to platformSlug,
-                KEY_ERROR_MESSAGE to tr(
-                    "android.downloads.error_unexpected",
-                    e.message ?: tr("android.downloads.unknown_reason"),
-                ),
-            ))
+            failure(tr("android.downloads.error_unexpected", e.message ?: tr("android.downloads.unknown_reason")))
         }
     }
+
+    /**
+     * Identidad completa de la descarga (sale de [inputData]). Va en el
+     * progreso, el éxito y el fallo: una vez terminado el trabajo
+     * `WorkInfo.progress` está vacío, y sin esto «Reintentar» encolaba
+     * `romId = -1` (fallo inmediato), sin hash ni id de plataforma.
+     */
+    private fun identity(): Array<Pair<String, Any?>> = identityOf(inputData)
+
+    /** Fallo definitivo con la identidad completa y un mensaje para la UI. */
+    private fun failure(message: String): Result =
+        Result.failure(workDataOf(*identity(), KEY_ERROR_MESSAGE to message))
 
     /**
      * Performs the actual HTTP download with auto-resume support.
@@ -249,8 +231,11 @@ class DownloadWorker(
     ): Result {
         val targetFile = PathMapper.getRomFile(romsRootPath, platformDirName, fileName)
 
-        // Offset de reanudación: tamaño del parcial si existe y es plausible
-        val partialBytes = if (targetFile.exists()) targetFile.length() else 0L
+        // Offset de reanudación: los bytes viven en `<fichero>.part` (o, en
+        // parciales de versiones anteriores, en el nombre final). El ROM solo
+        // recibe su nombre definitivo tras completar y verificar.
+        val resumePoint = PartialDownload.resumePoint(targetFile)
+        val partialBytes = resumePoint.bytes
         val rangeHeader = if (partialBytes > 0L) "bytes=$partialBytes-" else null
 
         val response = apiService.downloadRom(romId, fileName, rangeHeader)
@@ -265,12 +250,7 @@ class DownloadWorker(
                 when (hasEnoughSpace(targetFile.parentFile, neededBytes = missing)) {
                     SpaceCheck.NO_STORAGE -> {
                         runCatching { response.body()?.close() }
-                        return Result.failure(workDataOf(
-                            KEY_ROM_NAME to romName,
-                            KEY_FILE_NAME to fileName,
-                            KEY_PLATFORM_SLUG to platformSlug,
-                            KEY_ERROR_MESSAGE to tr("android.downloads.error_insufficient_space", formatBytes(missing)),
-                        ))
+                        return failure(tr("android.downloads.error_insufficient_space", formatBytes(missing)))
                     }
                     SpaceCheck.LOW_SPACE -> {
                         Log.w(TAG, "Low storage downloading '$romName' (needs ${formatBytes(missing)}) — proceeding")
@@ -290,12 +270,15 @@ class DownloadWorker(
         // al 100% sin reeler el fichero desde la microSD (en una ROM de 4 GB a
         // ~30 MB/s de lectura esa relectura eran 1-2 min "colgados" al 100%).
         var incrementalDigest: java.security.MessageDigest? = null
-        var incrementalBytes = 0L
+        // Fichero con todos los bytes antes de publicarlo con el nombre final:
+        // normalmente el `.part`; el propio destino si era un heredado completo.
+        var completedFile: File = resumePoint.file
 
         return try {
             when {
                 response.code() == 416 -> {
                     // El local ya tiene todos los bytes que el servidor ofrece
+                    if (partialBytes <= 0L) throw IOException(tr("download.http_error", 416))
                     Log.i(TAG, "Server says 416 — local file already complete ($partialBytes bytes)")
                 }
                 contentLength <= 0L && response.code() == 200 -> {
@@ -305,6 +288,8 @@ class DownloadWorker(
                         response.body()!!,
                         PathMapper.getPlatformDir(romsRootPath, platformDirName),
                     )
+                    // Un parcial de fichero único ya no sirve: el servidor lo sirve como zip.
+                    PartialDownload.discard(targetFile)
                     wasZipStream = true
                 }
                 else -> {
@@ -323,10 +308,11 @@ class DownloadWorker(
                         val algo = detectHashAlgorithm(expectedHash)
                         if (algo != null) {
                             incrementalDigest = java.security.MessageDigest.getInstance(algo)
-                            incrementalBytes = 0L
                         }
                     }
-                    streamToDisk(body, targetFile, totalBytes, offset,
+                    val partFile = PartialDownload.prepareAppend(resumePoint, targetFile, resume = isPartialResponse)
+                    completedFile = partFile
+                    streamToDisk(body, partFile, totalBytes, offset,
                         romId, romName, fileName, platformSlug,
                         digest = incrementalDigest)
                     streamCompleted = true
@@ -359,22 +345,17 @@ class DownloadWorker(
                             progress = 100, indeterminate = true,
                             romId = romId, romName = romName,
                             fileName = fileName, platformSlug = platformSlug,
-                            downloadedBytes = targetFile.length(), totalBytes = 0L,
+                            downloadedBytes = completedFile.length(), totalBytes = 0L,
                             progressText = tr("android.downloads.verifying_integrity"),
                         )
                         withContext(Dispatchers.IO) {
-                            computeFileHash(targetFile, hashAlgo)
+                            computeFileHash(completedFile, hashAlgo)
                         }
                     }
                     if (!localHash.equals(expectedHash, ignoreCase = true)) {
                         Log.e(TAG, "Hash mismatch for '$romName': expected=$expectedHash got=$localHash — deleting corrupt file")
-                        targetFile.delete()
-                        verificationFailure = Result.failure(workDataOf(
-                            KEY_ROM_NAME to romName,
-                            KEY_FILE_NAME to fileName,
-                            KEY_PLATFORM_SLUG to platformSlug,
-                            KEY_ERROR_MESSAGE to tr("android.downloads.error_corrupt"),
-                        ))
+                        completedFile.delete()
+                        verificationFailure = failure(tr("android.downloads.error_corrupt"))
                     } else {
                         Log.i(TAG, "Hash OK for '$romName' ($hashAlgo)")
                     }
@@ -387,12 +368,24 @@ class DownloadWorker(
                 verificationFailure
             } else {
 
+            // Completo y verificado: ahora sí recibe su nombre definitivo
+            // (renombrado atómico; sustituye una versión anterior del ROM).
+            if (!wasZipStream) PartialDownload.commit(completedFile, targetFile)
+
             // Persist download record in Room so UI shows the checkmark.
             // En re-descargas la fila ya existe: conservar la config de sync
             // por juego (ruta de saves / exclusión), que REPLACE borraría.
-            val platformId = inputData.getInt(KEY_PLATFORM_ID, 0)
             val db = RomSyncDatabase.getDatabase(applicationContext)
             val existing = db.romDao().getDownloadedRom(romId)
+            // Un reintento de una tarea antigua puede no traer el id: se
+            // recupera de la fila previa o de la plataforma por slug, para que
+            // la fila no quede con platformId = 0 (RomDao no la encontraría).
+            val platformId = inputData.getInt(KEY_PLATFORM_ID, 0).takeIf { it > 0 }
+                ?: existing?.platformId?.takeIf { it > 0 }
+                ?: runCatching {
+                    db.platformDao().getAllPlatformsBlocking().firstOrNull { it.slug == platformSlug }?.id
+                }.getOrNull()
+                ?: 0
             db.romDao().insertDownloadedRom(
                 DownloadedRomEntity(
                     romId = romId,
@@ -426,8 +419,7 @@ class DownloadWorker(
             }
 
             Result.success(workDataOf(
-                KEY_ROM_ID to romId, KEY_ROM_NAME to romName,
-                KEY_FILE_NAME to fileName, KEY_PLATFORM_SLUG to platformSlug,
+                *identity(),
                 KEY_LOCAL_PATH to targetFile.absolutePath,
             ))
             }
@@ -462,6 +454,7 @@ class DownloadWorker(
         progressText: String? = null,
     ) {
         setProgress(workDataOf(
+            *identity(),
             KEY_PROGRESS to progress,
             KEY_INDETERMINATE to indeterminate,
             KEY_PROGRESS_TEXT to progressText,
@@ -469,7 +462,6 @@ class DownloadWorker(
             KEY_ROM_NAME to romName,
             KEY_FILE_NAME to fileName,
             KEY_PLATFORM_SLUG to platformSlug,
-            KEY_ROMS_ROOT_PATH to inputData.getString(KEY_ROMS_ROOT_PATH),
             KEY_DOWNLOADED_BYTES to downloadedBytes,
             KEY_TOTAL_BYTES to totalBytes,
             KEY_SPEED_BPS to speedBps,
@@ -776,6 +768,21 @@ class DownloadWorker(
         const val KEY_FILE_HASH = "file_hash"
 
         const val BUFFER_SIZE = 64 * 1024 // 64KB
+
+        /**
+         * Claves que identifican la descarga y permiten reconstruirla al
+         * reintentar. El hash y el id de plataforma son opcionales: se omiten
+         * si la petición original no los traía.
+         */
+        internal fun identityOf(input: Data): Array<Pair<String, Any?>> = buildList<Pair<String, Any?>> {
+            add(KEY_ROM_ID to input.getInt(KEY_ROM_ID, -1))
+            add(KEY_ROM_NAME to input.getString(KEY_ROM_NAME))
+            add(KEY_FILE_NAME to input.getString(KEY_FILE_NAME))
+            add(KEY_PLATFORM_SLUG to input.getString(KEY_PLATFORM_SLUG))
+            add(KEY_PLATFORM_ID to input.getInt(KEY_PLATFORM_ID, 0))
+            input.getString(KEY_FILE_HASH)?.let { add(KEY_FILE_HASH to it) }
+            input.getString(KEY_ROMS_ROOT_PATH)?.let { add(KEY_ROMS_ROOT_PATH to it) }
+        }.toTypedArray()
 
         // ── Concurrency limiter ──────────────────────────────────────────────
         //

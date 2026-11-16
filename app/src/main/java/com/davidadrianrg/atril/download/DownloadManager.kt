@@ -3,13 +3,14 @@ package com.davidadrianrg.atril.download
 import android.content.Context
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import androidx.work.workDataOf
+import com.davidadrianrg.atril.data.local.SettingsDataStore
 import com.davidadrianrg.atril.domain.model.DownloadTask
 import com.davidadrianrg.atril.domain.model.Rom
 import kotlinx.coroutines.flow.Flow
@@ -28,46 +29,32 @@ import java.util.concurrent.TimeUnit
  * WorkManager will run them in parallel, but only `maxConcurrentDownloads`
  * workers will actually transfer bytes at any given time. See
  * [DownloadWorker.syncConcurrencyLimit] for the implementation.
+ *
+ * Encolar nunca bloquea: «Descargar faltantes» con cientos de juegos hacía un
+ * `runBlocking` sobre DataStore por ROM en el hilo principal (riesgo de ANR).
+ * Ahora quien ya tiene los ajustes pasa `wifiOnly` y el resto usa las
+ * variantes `suspend`, que leen el ajuste una sola vez.
  */
 class DownloadManager(private val context: Context) {
 
     private val workManager = WorkManager.getInstance(context)
 
+    /** Ajuste «solo Wi-Fi» leído sin bloquear. */
+    private suspend fun wifiOnly(): Boolean = runCatching {
+        SettingsDataStore.get(context).settings.first().wifiOnlyDownloads
+    }.getOrDefault(false)
+
+    /** Encola un ROM con el ajuste de red ya conocido. No bloquea. */
     fun enqueueDownload(
         rom: Rom,
         serverUrl: String,
         romsRootPath: String? = null,
+        wifiOnly: Boolean,
     ): String {
-        val inputData = Data.Builder()
-            .putInt(DownloadWorker.KEY_ROM_ID, rom.id)
-            .putString(DownloadWorker.KEY_ROM_NAME, rom.name)
-            .putString(DownloadWorker.KEY_FILE_NAME, rom.fileName)
-            .putInt(DownloadWorker.KEY_PLATFORM_ID, rom.platformId)
-            .putString(DownloadWorker.KEY_PLATFORM_SLUG, rom.platformSlug)
-            .putString(DownloadWorker.KEY_SERVER_URL, serverUrl)
-            .putString(DownloadWorker.KEY_FILE_HASH, rom.files.firstOrNull()?.hash)
-            .putString(DownloadWorker.KEY_ROMS_ROOT_PATH, romsRootPath)
-            .build()
-
-        // "Solo WiFi": UNMETERED evita datos móviles; saves siempre CONNECTED
-        val wifiOnly = runCatching {
-            kotlinx.coroutines.runBlocking {
-                com.davidadrianrg.atril.data.local.SettingsDataStore.get(context)
-                    .settings.first()
-            }.wifiOnlyDownloads
-        }.getOrDefault(false)
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
-            .build()
-
-        val request = OneTimeWorkRequestBuilder<DownloadWorker>()
-            .setInputData(inputData)
-            .setConstraints(constraints)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-            .addTag(TAG_DOWNLOAD)
-            .addTag(workTagForRom(rom.id))
-            .build()
-
+        val request = buildRequest(
+            DownloadRequestSpec.of(rom, serverUrl, romsRootPath),
+            wifiOnly,
+        )
         // UniqueWork + KEEP: encolar dos veces el mismo ROM (doble tap,
         // "Descargar faltantes" repetido, re-entrar en la pantalla) nunca
         // duplica la descarga — si ya hay trabajo vivo para ese ROM se ignora.
@@ -76,6 +63,12 @@ class DownloadManager(private val context: Context) {
         // "reiniciarse todas las descargas".
         workManager.enqueueUniqueWork(workTagForRom(rom.id), ExistingWorkPolicy.KEEP, request)
         return request.id.toString()
+    }
+
+    /** Encola varios ROMs leyendo «solo Wi-Fi» una única vez. */
+    suspend fun enqueueDownloads(roms: List<Rom>, serverUrl: String, romsRootPath: String? = null) {
+        val wifiOnly = wifiOnly()
+        roms.forEach { enqueueDownload(it, serverUrl, romsRootPath, wifiOnly) }
     }
 
     /**
@@ -112,101 +105,148 @@ class DownloadManager(private val context: Context) {
     }
 
     /**
-     * Re-enqueues a failed download as a new work request.
-     * The worker reads server config from SettingsDataStore, so only rom metadata is needed.
+     * Re-encola una descarga fallida con su identidad completa: id de
+     * plataforma (para la fila de Room) y hash (para verificar el reintento),
+     * además del destino original para reanudar el `.part` donde quedó.
      *
-     * @param romsRootPath destino original si se conoce (mantiene el parcial en
-     *   la misma ruta para poder reanudar); null = decide el worker con la
-     *   configuración actual.
+     * @return id del nuevo trabajo, o null si la tarea no identifica un ROM.
      */
-    fun retryDownload(
-        romId: Int,
-        romName: String,
-        fileName: String,
-        platformSlug: String,
-        romsRootPath: String? = null,
-    ): String {
-        // Cancel the old failed work first so it gets cleaned up. No es una
-        // cancelación del usuario: se conserva el parcial para reanudar.
-        workManager.cancelAllWorkByTag(workTagForRom(romId))
-
-        val inputData = Data.Builder()
-            .putInt(DownloadWorker.KEY_ROM_ID, romId)
-            .putString(DownloadWorker.KEY_ROM_NAME, romName)
-            .putString(DownloadWorker.KEY_FILE_NAME, fileName)
-            .putInt(DownloadWorker.KEY_PLATFORM_ID, 0)
-            .putString(DownloadWorker.KEY_PLATFORM_SLUG, platformSlug)
-            .putString(DownloadWorker.KEY_ROMS_ROOT_PATH, romsRootPath)
-            .build()
-
-        // "Solo WiFi": UNMETERED evita datos móviles; saves siempre CONNECTED
-        val wifiOnly = runCatching {
-            kotlinx.coroutines.runBlocking {
-                com.davidadrianrg.atril.data.local.SettingsDataStore.get(context)
-                    .settings.first()
-            }.wifiOnlyDownloads
-        }.getOrDefault(false)
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
-            .build()
-
-        val request = OneTimeWorkRequestBuilder<DownloadWorker>()
-            .setInputData(inputData)
-            .setConstraints(constraints)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-            .addTag(TAG_DOWNLOAD)
-            .addTag(workTagForRom(romId))
-            .build()
-
+    suspend fun retryDownload(task: DownloadTask): String? {
+        if (task.romId < 0) return null
+        // No es una cancelación del usuario: se conserva el parcial para reanudar.
+        workManager.cancelAllWorkByTag(workTagForRom(task.romId))
+        val request = buildRequest(DownloadRequestSpec.of(task), wifiOnly())
         // REPLACE: sustituye cualquier resto del work anterior de ese ROM.
-        workManager.enqueueUniqueWork(workTagForRom(romId), ExistingWorkPolicy.REPLACE, request)
+        workManager.enqueueUniqueWork(workTagForRom(task.romId), ExistingWorkPolicy.REPLACE, request)
         return request.id.toString()
     }
 
-    private fun workTagForRom(romId: Int) = "rom_$romId"
+    private fun workTagForRom(romId: Int) = "$ROM_TAG_PREFIX$romId"
 
-    /**
-     * Converts a WorkInfo to a DownloadTask.
-     * Reads metadata from progress Data (which includes rom info + progress updates).
-     */
-    private fun WorkInfo.toDownloadTask(): DownloadTask {
-        val progressData = progress
-        val outputData = outputData
-
-        val romId = progressData.getInt(DownloadWorker.KEY_ROM_ID, -1)
-        val romName = progressData.getString(DownloadWorker.KEY_ROM_NAME)
-            ?: outputData.getString(DownloadWorker.KEY_ROM_NAME)
-            ?: com.davidadrianrg.atril.core.i18n.tr("android.downloads.unknown_game")
-        val fileName = progressData.getString(DownloadWorker.KEY_FILE_NAME)
-            ?: outputData.getString(DownloadWorker.KEY_FILE_NAME)
-            ?: ""
-        val platformSlug = progressData.getString(DownloadWorker.KEY_PLATFORM_SLUG)
-            ?: outputData.getString(DownloadWorker.KEY_PLATFORM_SLUG)
-            ?: ""
-        val romsRootPath = progressData.getString(DownloadWorker.KEY_ROMS_ROOT_PATH)
-            ?: outputData.getString(DownloadWorker.KEY_ROMS_ROOT_PATH)
-
-        return DownloadTask(
-            romId = romId,
-            romName = romName,
-            fileName = fileName,
-            platformSlug = platformSlug,
-            romsRootPath = romsRootPath,
-            workId = id.toString(),
-            progress = progressData.getInt(DownloadWorker.KEY_PROGRESS, 0),
-            isIndeterminate = progressData.getBoolean(DownloadWorker.KEY_INDETERMINATE, false),
-            progressText = progressData.getString(DownloadWorker.KEY_PROGRESS_TEXT),
-            isRunning = state == WorkInfo.State.RUNNING,
-            isCompleted = state == WorkInfo.State.SUCCEEDED,
-            isFailed = state == WorkInfo.State.FAILED,
-            errorMessage = outputData.getString(DownloadWorker.KEY_ERROR_MESSAGE),
-            downloadedBytes = progressData.getLong(DownloadWorker.KEY_DOWNLOADED_BYTES, 0L),
-            totalBytes = progressData.getLong(DownloadWorker.KEY_TOTAL_BYTES, 0L),
-            speedBps = progressData.getLong(DownloadWorker.KEY_SPEED_BPS, 0L),
-        )
+    private fun buildRequest(spec: DownloadRequestSpec, wifiOnly: Boolean): OneTimeWorkRequest {
+        // "Solo WiFi": UNMETERED evita datos móviles; saves siempre CONNECTED
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+            .build()
+        return OneTimeWorkRequestBuilder<DownloadWorker>()
+            .setInputData(spec.toData())
+            .setConstraints(constraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .addTag(TAG_DOWNLOAD)
+            .addTag(workTagForRom(spec.romId))
+            .build()
     }
+
+    /** Converts a WorkInfo to a DownloadTask. */
+    private fun WorkInfo.toDownloadTask(): DownloadTask = taskFrom(
+        progress = progress,
+        output = outputData,
+        tags = tags,
+        workId = id.toString(),
+        state = state,
+    )
 
     companion object {
         private const val TAG_DOWNLOAD = "romm_download"
+        internal const val ROM_TAG_PREFIX = "rom_"
+
+        /**
+         * Construye la tarea de la UI. Mientras corre, los datos vienen en el
+         * progreso; al terminar el progreso queda vacío y mandan los datos de
+         * salida (el worker incluye en ellos la identidad completa). Como
+         * último recurso el id sale de la etiqueta `rom_<id>`.
+         */
+        internal fun taskFrom(
+            progress: Data,
+            output: Data,
+            tags: Set<String>,
+            workId: String,
+            state: WorkInfo.State,
+        ): DownloadTask {
+            fun string(key: String): String? = progress.getString(key) ?: output.getString(key)
+            fun int(key: String): Int? = when {
+                progress.keyValueMap.containsKey(key) -> progress.getInt(key, 0)
+                output.keyValueMap.containsKey(key) -> output.getInt(key, 0)
+                else -> null
+            }
+            val romId = int(DownloadWorker.KEY_ROM_ID)?.takeIf { it >= 0 }
+                ?: tags.firstNotNullOfOrNull { tag ->
+                    tag.takeIf { it.startsWith(ROM_TAG_PREFIX) }?.removePrefix(ROM_TAG_PREFIX)?.toIntOrNull()
+                }
+                ?: -1
+            return DownloadTask(
+                romId = romId,
+                romName = string(DownloadWorker.KEY_ROM_NAME)
+                    ?: com.davidadrianrg.atril.core.i18n.tr("android.downloads.unknown_game"),
+                fileName = string(DownloadWorker.KEY_FILE_NAME) ?: "",
+                platformSlug = string(DownloadWorker.KEY_PLATFORM_SLUG) ?: "",
+                romsRootPath = string(DownloadWorker.KEY_ROMS_ROOT_PATH),
+                platformId = int(DownloadWorker.KEY_PLATFORM_ID) ?: 0,
+                fileHash = string(DownloadWorker.KEY_FILE_HASH),
+                workId = workId,
+                progress = progress.getInt(DownloadWorker.KEY_PROGRESS, 0),
+                isIndeterminate = progress.getBoolean(DownloadWorker.KEY_INDETERMINATE, false),
+                progressText = progress.getString(DownloadWorker.KEY_PROGRESS_TEXT),
+                isRunning = state == WorkInfo.State.RUNNING,
+                isCompleted = state == WorkInfo.State.SUCCEEDED,
+                isFailed = state == WorkInfo.State.FAILED,
+                errorMessage = output.getString(DownloadWorker.KEY_ERROR_MESSAGE),
+                downloadedBytes = progress.getLong(DownloadWorker.KEY_DOWNLOADED_BYTES, 0L),
+                totalBytes = progress.getLong(DownloadWorker.KEY_TOTAL_BYTES, 0L),
+                speedBps = progress.getLong(DownloadWorker.KEY_SPEED_BPS, 0L),
+            )
+        }
+    }
+}
+
+/**
+ * Datos de entrada de un [DownloadWorker]. Un único sitio construye el `Data`
+ * tanto para la primera descarga como para el reintento, así ninguno de los
+ * dos olvida el hash o el id de plataforma.
+ */
+internal data class DownloadRequestSpec(
+    val romId: Int,
+    val romName: String,
+    val fileName: String,
+    val platformId: Int,
+    val platformSlug: String,
+    val fileHash: String?,
+    val serverUrl: String?,
+    val romsRootPath: String?,
+) {
+    fun toData(): Data = Data.Builder()
+        .putInt(DownloadWorker.KEY_ROM_ID, romId)
+        .putString(DownloadWorker.KEY_ROM_NAME, romName)
+        .putString(DownloadWorker.KEY_FILE_NAME, fileName)
+        .putInt(DownloadWorker.KEY_PLATFORM_ID, platformId)
+        .putString(DownloadWorker.KEY_PLATFORM_SLUG, platformSlug)
+        .putString(DownloadWorker.KEY_SERVER_URL, serverUrl)
+        .putString(DownloadWorker.KEY_FILE_HASH, fileHash)
+        .putString(DownloadWorker.KEY_ROMS_ROOT_PATH, romsRootPath)
+        .build()
+
+    companion object {
+        fun of(rom: Rom, serverUrl: String, romsRootPath: String?) = DownloadRequestSpec(
+            romId = rom.id,
+            romName = rom.name,
+            fileName = rom.fileName,
+            platformId = rom.platformId,
+            platformSlug = rom.platformSlug,
+            fileHash = rom.files.firstOrNull()?.hash,
+            serverUrl = serverUrl,
+            romsRootPath = romsRootPath,
+        )
+
+        /** Reintento: el worker lee la URL del servidor de los ajustes actuales. */
+        fun of(task: DownloadTask) = DownloadRequestSpec(
+            romId = task.romId,
+            romName = task.romName,
+            fileName = task.fileName,
+            platformId = task.platformId,
+            platformSlug = task.platformSlug,
+            fileHash = task.fileHash,
+            serverUrl = null,
+            romsRootPath = task.romsRootPath,
+        )
     }
 }

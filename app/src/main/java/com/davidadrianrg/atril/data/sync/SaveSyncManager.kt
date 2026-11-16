@@ -186,6 +186,23 @@ class SaveSyncManager(
         runCatching { SaveSyncWatchService.start(context) }
     }
 
+    /**
+     * Atril vuelve a primer plano: si la vigilancia está activada pero Android
+     * la paró (cupo diario de Android 15) o no la dejó arrancar en segundo
+     * plano, se reanuda ahora, que es cuando el sistema lo permite.
+     */
+    suspend fun resumeWatchIfNeeded(settings: com.davidadrianrg.atril.data.local.SettingsDataStore) {
+        val (watch, sync) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            settings.getSaveSyncWatchEnabledBlocking() to settings.getSaveSyncEnabledBlocking()
+        }
+        if (com.davidadrianrg.atril.core.sync.SaveWatchState.shouldResumeOnForeground(
+                watch, sync, SaveWatchStatus.state.value,
+            )
+        ) {
+            startWatchService()
+        }
+    }
+
     /** Detiene la vigilancia en tiempo real. */
     fun stopWatchService() {
         runCatching { SaveSyncWatchService.stop(context) }

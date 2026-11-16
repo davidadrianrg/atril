@@ -366,9 +366,8 @@ class LibraryViewModel(
             return
         }
         viewModelScope.launch {
-            toEnqueue.forEach { rom ->
-                manager.enqueueDownload(rom = rom, serverUrl = serverUrl, romsRootPath = romsRootPath)
-            }
+            // Una sola lectura de ajustes para todo el lote, sin bloquear el hilo principal.
+            manager.enqueueDownloads(roms = toEnqueue, serverUrl = serverUrl, romsRootPath = romsRootPath)
             _events.emit(LibraryEvent.BatchDownloadStarted(toEnqueue.size))
         }
     }

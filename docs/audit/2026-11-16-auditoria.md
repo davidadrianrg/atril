@@ -285,6 +285,22 @@ Esfuerzo relativo: **S** ≤ 1 día · **M** 2–4 días · **L** ≥ 1 semana. 
 
 ---
 
+## Seguimiento
+
+**Fase 1** (merge `31bbe2e`, `e4e3109`, `e341489`, `ab85bcc`): A1 (parcial: sin caché persistente), A2, A3, A4, A5, A6, M3 (parcial), M6, M7, M8, B1, B6, B7, UX 3–4.
+
+**Fase 2** (`feat/audit-fase2`):
+
+- Revisión de la Fase 1: portada local desde el selector que no se guardaba (stream cerrado antes de leerse), último juego perdido al recrear Play, estado vacío por filtro con la estantería vacía.
+- M1/F3: `.part` + renombrado atómico (Android y escritorio), identidad completa en reintentos (antes `romId = -1`), encolado sin `runBlocking`.
+- M4: `singleTask` + `onNewIntent` (Home → Play sin overlays; notificaciones navegan).
+- M2/F11: estado real de la vigilancia de saves en Sync; se reanuda al abrir Atril; `startForeground` denegado ya no tumba el proceso.
+- B3/F9: sesión de juego persistida (diario en disco), tope de 8 h por sesión.
+- B4: ids de juegos locales persistidos y únicos, compatibles con los anteriores.
+- UX 4/11: estado de error con «Reintentar» en Emuladores; `focusRing` en Emuladores y en el buscador.
+
+**Pendiente:** F1 (caché persistente de metadatos y carátulas), M3 resto (`EmulatorsViewModel` + WorkManager, ETag, validación de paquete), M5, M9/F7 (paridad de escritorio), M10/F5, M11 resto (tests de `ShelfViewModel`, `HtmlReleaseResolver`, `BackupManager`), UX 1–2, 5–19, B2, B5, B8, B9. Verificación en dispositivo de M4 y M2 (ver anexo).
+
 ## Anexo — Elementos a verificar en dispositivo
 
 1. **A2:** abrir «+» en Play (Android), elegir un fichero y comprobar si el desplegable de plataforma tiene opciones.
@@ -293,3 +309,5 @@ Esfuerzo relativo: **S** ≤ 1 día · **M** 2–4 días · **L** ≥ 1 semana. 
 4. **M4:** abrir desde el icono, navegar a Biblioteca y pulsar Home con Atril como launcher; revisar `adb shell dumpsys activity activities` por si hay instancias duplicadas.
 5. **M3:** instalar un emulador de fuente HTML o APK directo y comprobar la notificación diaria.
 6. **UX 19:** contraste del texto de Play con `CRIMSON_LIGHT` y fondo fanart.
+7. **M2:** con la vigilancia activa en Android 15, agotar el límite (reduciéndolo con `device_config` según la guía de Android 15 sobre el timeout de `dataSync`, o esperando 6 h) y comprobar el estado en Sync y su reanudación al abrir Atril.
+8. **M1:** cortar la red a mitad de descarga y comprobar que solo existe `<fichero>.part`; reintentar desde Descargas y verificar que reanuda y renombra.

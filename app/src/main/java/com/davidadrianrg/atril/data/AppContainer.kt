@@ -58,6 +58,12 @@ class AppContainer(private val appContext: Context) {
         store = com.davidadrianrg.atril.core.playstats.JsonPlayStatsStore(
             java.io.File(appContext.filesDir, "play_stats.json"),
         ),
+        // La partida en curso sobrevive si Android mata Atril con el emulador delante (B3).
+        tracker = com.davidadrianrg.atril.core.playstats.PlaySessionTracker(
+            journal = com.davidadrianrg.atril.core.playstats.FilePlaySessionJournal(
+                java.io.File(appContext.filesDir, "play_session"),
+            ),
+        ),
     )
 
     /** Lanza juegos descargados en el emulador que toque. */

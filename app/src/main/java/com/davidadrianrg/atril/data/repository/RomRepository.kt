@@ -558,7 +558,10 @@ class RomRepository(
     private fun findRomFileOnDisk(romsRootPath: String, rom: Rom): File? {
         val platformDir = PathMapper.getPlatformDir(romsRootPath, rom.platformSlug)
         if (!platformDir.isDirectory) return null
-        val entries = platformDir.listFiles() ?: return null
+        // Una descarga a medias (`.part`) nunca cuenta como el ROM.
+        val entries = platformDir.listFiles()
+            ?.filterNot { it.name.endsWith(com.davidadrianrg.atril.core.download.PartialDownload.SUFFIX) }
+            ?: return null
         if (entries.isEmpty()) return null
 
         // 1. Match exacto por fileName

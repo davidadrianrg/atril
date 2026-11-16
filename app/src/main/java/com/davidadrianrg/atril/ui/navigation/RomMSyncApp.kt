@@ -66,7 +66,13 @@ import com.davidadrianrg.atril.ui.screens.SyncScreen
 import com.davidadrianrg.atril.util.hasAllFilesAccess
 
 @Composable
-fun RomMSyncApp(startInUpdates: Boolean = false, startInEmulators: Boolean = false) {
+fun RomMSyncApp(
+    startInUpdates: Boolean = false,
+    startInEmulators: Boolean = false,
+    /** Petición llegada por `onNewIntent` (Home, notificación); null = ninguna. */
+    navRequest: NavRequestEvent? = null,
+    onNavRequestHandled: (Long) -> Unit = {},
+) {
     val context = LocalContext.current
     val container = (context.applicationContext as RomMSyncApplication).container
 
@@ -115,6 +121,32 @@ fun RomMSyncApp(startInUpdates: Boolean = false, startInEmulators: Boolean = fal
         com.davidadrianrg.atril.ui.input.PadEvents.menu.collect { if (menuAllowed) appMenuOpen = !appMenuOpen }
     }
     androidx.activity.compose.BackHandler(enabled = appMenuOpen) { appMenuOpen = false }
+
+    // Intents con la actividad ya abierta (singleTask): Home vuelve a Play y
+    // cierra menús y diálogos; las notificaciones llevan a su pantalla.
+    // Durante el primer arranque guiado no se sale de Ajustes.
+    var configCategoryRequest by remember { mutableStateOf<ConfigCategoryRequest?>(null) }
+    val onboardingNow by androidx.compose.runtime.rememberUpdatedState(needsOnboarding)
+    LaunchedEffect(navRequest) {
+        val event = navRequest ?: return@LaunchedEffect
+        onNavRequestHandled(event.id)
+        if (onboardingNow) return@LaunchedEffect
+        appMenuOpen = false
+        when (event.request) {
+            NavRequest.HOME -> {
+                navigateTo(Screen.Play.route, navController)
+                com.davidadrianrg.atril.ui.input.PadEvents.home.tryEmit(Unit)
+            }
+            NavRequest.UPDATES -> {
+                configCategoryRequest = ConfigCategoryRequest(
+                    com.davidadrianrg.atril.core.settings.SettingsCategory.ABOUT,
+                    event.id,
+                )
+                navigateTo(Screen.Config.route, navController)
+            }
+            NavRequest.EMULATORS -> navigateTo(Screen.Emulators.route, navController)
+        }
+    }
     androidx.compose.runtime.SideEffect {
         if (!immersive) com.davidadrianrg.atril.ui.input.PadEvents.menuOpen = appMenuOpen
     }
@@ -138,6 +170,7 @@ fun RomMSyncApp(startInUpdates: Boolean = false, startInEmulators: Boolean = fal
                 needsOnboarding = needsOnboarding,
                 startInUpdates = startInUpdates,
                 startInEmulators = startInEmulators,
+                configCategoryRequest = configCategoryRequest,
                 menuItems = navItems,
                 onNavigate = { route -> navigateTo(route, navController) },
                 modifier = Modifier
@@ -175,6 +208,7 @@ private fun AppNavHost(
     needsOnboarding: Boolean,
     startInUpdates: Boolean,
     startInEmulators: Boolean,
+    configCategoryRequest: ConfigCategoryRequest?,
     menuItems: List<Screen>,
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -219,6 +253,7 @@ private fun AppNavHost(
                 } else {
                     com.davidadrianrg.atril.core.settings.SettingsCategory.CONNECTION
                 },
+                categoryRequest = configCategoryRequest,
             )
         }
     }

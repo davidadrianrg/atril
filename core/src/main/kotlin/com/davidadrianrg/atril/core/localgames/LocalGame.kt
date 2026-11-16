@@ -25,6 +25,13 @@ data class LocalGame(
     val scrapeSource: String? = null,
     val scrapeStatus: ScrapeStatus = ScrapeStatus.NONE,
     val addedAt: Long = 0L,
+    /**
+     * Id numérico (negativo) del juego en la estantería: clave de favoritos,
+     * tiempo jugado y fondos por juego. Lo asigna [LocalRomIds] una sola vez
+     * y se persiste, así nunca colisiona con otro juego local (B4). null solo
+     * en ficheros de versiones anteriores, hasta la primera carga.
+     */
+    val romId: Int? = null,
 )
 
 /** Se persiste por nombre: `@JsonClass` evita que R8 renombre las constantes. */

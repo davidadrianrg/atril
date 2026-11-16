@@ -275,7 +275,19 @@ fun PlayScreen(
     val initialPage = visibleItems.indexOfFirst { it.rom.id == lastRomId }
         .coerceIn(0, (visibleItems.size - 1).coerceAtLeast(0))
     val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { visibleItems.size })
-    LaunchedEffect(pagerState.currentPage, visibleItems) {
+    // Si Play se recrea con la lista aún vacía (proceso restaurado, VM nuevo),
+    // los juegos llegan después de la primera composición: se recoloca una vez
+    // en el último juego antes de empezar a registrar la página actual. Sin
+    // esto la página 0 sobrescribía `lastRomId` con el primer juego.
+    var lastRestored by remember { mutableStateOf(false) }
+    LaunchedEffect(visibleItems.isNotEmpty()) {
+        if (lastRestored || visibleItems.isEmpty()) return@LaunchedEffect
+        val index = visibleItems.indexOfFirst { it.rom.id == lastRomId }
+        if (index >= 0 && index != pagerState.currentPage) pagerState.scrollToPage(index)
+        lastRestored = true
+    }
+    LaunchedEffect(pagerState.currentPage, visibleItems, lastRestored) {
+        if (!lastRestored) return@LaunchedEffect
         visibleItems.getOrNull(pagerState.currentPage)?.let { lastRomId = it.rom.id }
     }
     // Juego elegido desde «Seguir jugando»: se lleva el carrusel a su página.
@@ -400,6 +412,16 @@ fun PlayScreen(
     // Start / Menu del mando abre o cierra el menú del launcher.
     LaunchedEffect(Unit) {
         com.davidadrianrg.atril.ui.input.PadEvents.menu.collect { if (insertion == null) menuOpen = !menuOpen }
+    }
+    // Home del sistema (Atril como launcher): volver al carrusel limpio.
+    LaunchedEffect(Unit) {
+        com.davidadrianrg.atril.ui.input.PadEvents.home.collect {
+            menuOpen = false
+            showSearch = false
+            selectedRomId = null
+            mediaPick = null
+            pendingDelete = null
+        }
     }
     // Start abre el buscador de juegos descargados.
     LaunchedEffect(Unit) {
@@ -616,7 +638,10 @@ fun PlayScreen(
                     contentAlignment = Alignment.Center,
                 ) { CircularProgressIndicator(color = LauncherAmber) }
 
-                visibleItems.isEmpty() && (quickFilter != null || platformFilter != null) -> Box(
+                // Solo si hay juegos que el filtro oculta: con la estantería
+                // vacía manda EmptyLauncher aunque quede un filtro guardado.
+                items.isNotEmpty() && visibleItems.isEmpty() &&
+                    (quickFilter != null || platformFilter != null) -> Box(
                     Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -1021,13 +1046,19 @@ fun PlayScreen(
                             notify(tr("media.background.failed"))
                         }
                     } else {
-                        val file = com.davidadrianrg.atril.data.media.MediaCache.saveTemp(context, candidate.url)
-                        if (file != null && item.localGame != null) {
-                            file.inputStream().use { viewModel.setLocalCover(item.localGame!!.id, it) }
-                            notify(tr("local.scrape.done", candidate.provider))
+                        val localId = item.localGame?.id
+                        val file = if (localId != null) {
+                            com.davidadrianrg.atril.data.media.MediaCache.saveTemp(context, candidate.url)
                         } else {
-                            notify(tr("media.background.failed"))
+                            null
                         }
+                        val ok = file != null && localId != null &&
+                            viewModel.setLocalCoverFromFile(localId, file)
+                        // El temporal ya se copió a la portada del juego: no se acumula.
+                        file?.delete()
+                        notify(
+                            if (ok) tr("local.scrape.done", candidate.provider) else tr("media.background.failed"),
+                        )
                     }
                 }
             },
@@ -1363,6 +1394,8 @@ private fun GameSearchDialog(
                                 Modifier
                                     .fillMaxWidth()
                                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                                    // D-pad: se ve qué resultado elegirá la A.
+                                    .focusRing(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                                     .clickable { onSelect(item) }
                                     .padding(horizontal = 10.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,

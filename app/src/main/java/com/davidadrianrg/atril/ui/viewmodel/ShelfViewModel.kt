@@ -377,9 +377,9 @@ class ShelfViewModel(
         .currentFamily(item.rom.platformSlug, item.launchOverride, item.platformEmulatorId)
         ?.displayName
 
-    /** Id estable y NEGATIVO para un juego local: nunca choca con un id de RomM. */
+    /** Id estable, único y NEGATIVO para un juego local (persistido, ver LocalRomIds). */
     private fun com.davidadrianrg.atril.core.localgames.LocalGame.syntheticRomId(): Int =
-        -((id.hashCode().toLong() and 0x7FFFFFFF).toInt().coerceAtLeast(1))
+        com.davidadrianrg.atril.core.localgames.LocalRomIds.of(this)
 
     private fun com.davidadrianrg.atril.core.localgames.LocalGame.toShelfItem(
         platformLabel: String,
@@ -514,7 +514,16 @@ class ShelfViewModel(
             group?.let { settingsRepository.setLocalDiscChoice(it.key, null) }
         }
     }
+    /** [input] lo cierra el repositorio al terminar: el llamante no debe envolverlo en `use`. */
     fun setLocalCover(id: String, input: java.io.InputStream) { viewModelScope.launch { localGames.setManualCover(id, input) } }
+
+    /**
+     * Copia una portada ya descargada y espera al resultado. Envolver
+     * [setLocalCover] en `use {}` cerraba el stream antes de que la corrutina
+     * de IO lo leyera: la portada no se guardaba y la UI decía que sí.
+     */
+    suspend fun setLocalCoverFromFile(id: String, file: File): Boolean =
+        localGames.setManualCover(id, file.inputStream())
 
     suspend fun prepareLaunch(item: ShelfItem): GameLaunchPlan {
         // Pull de saves con tope de 8 s: nunca impide ni retrasa más el lanzamiento.

@@ -14,6 +14,8 @@ object PadEvents {
     val page = MutableSharedFlow<Int>(extraBufferCapacity = 1)
     /** X: marca o desmarca como favorito el juego actual (Play). */
     val favorite = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** Botón Home del sistema con Atril como launcher: Play cierra menús y diálogos. */
+    val home = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     /**
      * true mientras el menú del launcher está abierto: el D-pad y la A del
