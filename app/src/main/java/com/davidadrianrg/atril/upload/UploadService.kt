@@ -105,7 +105,7 @@ class UploadService : Service() {
         folderName: String,
         displayName: String,
     ): String {
-        val settings = SettingsDataStore(this)
+        val settings = SettingsDataStore.get(this)
         val serverUrl = settings.getServerUrlBlocking()
         val apiKey = settings.getApiKeyBlocking()
         require(serverUrl.isNotBlank() && apiKey.isNotBlank()) { tr("common.server_not_configured") }

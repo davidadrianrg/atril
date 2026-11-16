@@ -23,7 +23,7 @@ class ManualSaveDownloader(private val context: Context) {
     suspend fun download(romId: Int, saveId: Int, fileName: String, destDir: String? = null): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val settings = SettingsDataStore(context)
+                val settings = SettingsDataStore.get(context)
                 val database = RomSyncDatabase.getDatabase(context)
 
                 val rom = database.romDao().getDownloadedRom(romId)

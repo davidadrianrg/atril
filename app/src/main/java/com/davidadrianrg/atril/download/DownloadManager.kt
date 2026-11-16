@@ -52,7 +52,7 @@ class DownloadManager(private val context: Context) {
         // "Solo WiFi": UNMETERED evita datos móviles; saves siempre CONNECTED
         val wifiOnly = runCatching {
             kotlinx.coroutines.runBlocking {
-                com.davidadrianrg.atril.data.local.SettingsDataStore(context)
+                com.davidadrianrg.atril.data.local.SettingsDataStore.get(context)
                     .settings.first()
             }.wifiOnlyDownloads
         }.getOrDefault(false)
@@ -142,7 +142,7 @@ class DownloadManager(private val context: Context) {
         // "Solo WiFi": UNMETERED evita datos móviles; saves siempre CONNECTED
         val wifiOnly = runCatching {
             kotlinx.coroutines.runBlocking {
-                com.davidadrianrg.atril.data.local.SettingsDataStore(context)
+                com.davidadrianrg.atril.data.local.SettingsDataStore.get(context)
                     .settings.first()
             }.wifiOnlyDownloads
         }.getOrDefault(false)

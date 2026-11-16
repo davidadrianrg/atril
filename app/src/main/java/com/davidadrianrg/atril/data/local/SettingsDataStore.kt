@@ -26,6 +26,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -41,9 +42,23 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
  * [EncryptedSharedPreferences] (AES256-GCM) so that it is never persisted in
  * plaintext and is never passed through WorkManager `Data`.
  */
-class SettingsDataStore(private val context: Context) {
+class SettingsDataStore private constructor(private val context: Context) {
 
     companion object {
+        @Volatile
+        private var instance: SettingsDataStore? = null
+
+        /**
+         * Única instancia del proceso. Cada instancia abre el Keystore y
+         * guarda su propia copia de la API key: con varias, un cambio hecho en
+         * una (p. ej. al importar un backup) no lo veía el resto hasta
+         * reiniciar. Todo el código debe pasar por aquí o por el contenedor.
+         */
+        fun get(context: Context): SettingsDataStore =
+            instance ?: synchronized(this) {
+                instance ?: SettingsDataStore(context.applicationContext ?: context).also { instance = it }
+            }
+
         // ── DataStore keys (non-sensitive settings) ────────────────────
         val SERVER_URL = stringPreferencesKey("server_url")
         val ROMS_ROOT_PATH = stringPreferencesKey("roms_root_path")
@@ -128,23 +143,44 @@ class SettingsDataStore(private val context: Context) {
 
     // ── Encrypted storage ─────────────────────────────────────────────
 
-    private val masterKey: MasterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
+    /**
+     * Prefs cifradas. Un Keystore corrupto (fallo conocido de
+     * `security-crypto`) hacía fallar `EncryptedSharedPreferences.create` y
+     * tumbaba `Application.onCreate` en bucle. Ahora se borra el fichero y se
+     * reintenta una vez (el usuario solo tendrá que volver a dar la API key);
+     * si aun así falla, la clave vive solo en memoria durante la sesión.
+     */
+    private val securePrefs: SharedPreferences? = openSecurePrefs()
 
-    private val securePrefs: SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        SECURE_PREFS_FILE,
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
+    private fun createSecurePrefs(): SharedPreferences {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return EncryptedSharedPreferences.create(
+            context,
+            SECURE_PREFS_FILE,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    }
+
+    private fun openSecurePrefs(): SharedPreferences? = runCatching { createSecurePrefs() }
+        .recoverCatching { first ->
+            android.util.Log.w("SettingsDataStore", "Secure prefs unreadable, resetting", first)
+            context.deleteSharedPreferences(SECURE_PREFS_FILE)
+            createSecurePrefs()
+        }
+        .onFailure { android.util.Log.e("SettingsDataStore", "Secure prefs unavailable", it) }
+        .getOrNull()
 
     /**
      * Hot, reactive holder for the API key. Seeded synchronously from the
      * encrypted store on construction and updated whenever [setApiKey] runs.
      */
-    private val _apiKeyFlow = MutableStateFlow(securePrefs.getString(SECURE_KEY_API_KEY, "") ?: "")
+    private val _apiKeyFlow = MutableStateFlow(
+        runCatching { securePrefs?.getString(SECURE_KEY_API_KEY, "") }.getOrNull() ?: "",
+    )
 
     init {
         // One-time migration: if a previous app version stored the API key in
@@ -158,8 +194,9 @@ class SettingsDataStore(private val context: Context) {
         if (legacyKey.isNullOrEmpty()) return
 
         // Only copy if the encrypted store doesn't already have one.
-        if (securePrefs.getString(SECURE_KEY_API_KEY, "").isNullOrEmpty()) {
-            securePrefs.edit().putString(SECURE_KEY_API_KEY, legacyKey).apply()
+        val prefs = securePrefs ?: return // sin almacén cifrado no se borra la copia antigua
+        if (prefs.getString(SECURE_KEY_API_KEY, "").isNullOrEmpty()) {
+            prefs.edit().putString(SECURE_KEY_API_KEY, legacyKey).apply()
             _apiKeyFlow.value = legacyKey
         }
         // Always wipe the plaintext copy.
@@ -292,7 +329,10 @@ class SettingsDataStore(private val context: Context) {
             dualRomsPathsEnabled = prefs[DUAL_ROMS_PATHS_ENABLED] ?: false,
             secondaryRomsPath = prefs[SECONDARY_ROMS_PATH] ?: DEFAULT_SECONDARY_ROMS_PATH,
         )
-    }
+        // Cualquier escritura en DataStore re-emite `data`: sin esto, cambiar
+        // un ajuste ajeno (p. ej. carta/medio físico) relanzaba toda la
+        // hidratación de Play contra el servidor.
+    }.distinctUntilChanged()
 
     // ── Writers ───────────────────────────────────────────────────────
 
@@ -311,7 +351,7 @@ class SettingsDataStore(private val context: Context) {
 
     /** Forget the RomM server + token. Local games are untouched. */
     suspend fun disconnectRomM() {
-        securePrefs.edit().remove(SECURE_KEY_API_KEY).apply()
+        securePrefs?.edit()?.remove(SECURE_KEY_API_KEY)?.apply()
         _apiKeyFlow.value = ""
         context.dataStore.edit {
             it.remove(SERVER_URL)
@@ -328,7 +368,7 @@ class SettingsDataStore(private val context: Context) {
      * Also updates the reactive [_apiKeyFlow] so UI consumers refresh.
      */
     suspend fun setApiKey(key: String) {
-        securePrefs.edit().putString(SECURE_KEY_API_KEY, key).apply()
+        securePrefs?.edit()?.putString(SECURE_KEY_API_KEY, key)?.apply()
         _apiKeyFlow.value = key
     }
 
@@ -625,11 +665,7 @@ class SettingsDataStore(private val context: Context) {
      * Safe to call from a Worker's `doWork()` since SharedPreferences access
      * is already blocking and the data is already decrypted in memory.
      */
-    fun getApiKeyBlocking(): String {
-        return runCatching {
-            securePrefs.getString(SECURE_KEY_API_KEY, "") ?: ""
-        }.getOrDefault("")
-    }
+    fun getApiKeyBlocking(): String = _apiKeyFlow.value
 
     /**
      * Synchronous read of the server URL for use in WorkManager.
@@ -675,10 +711,15 @@ class SettingsDataStore(private val context: Context) {
     }.getOrDefault(emptyMap())
 
     suspend fun setInstalledLink(romId: Int, packageName: String?) {
-        val links = getInstalledLinksBlocking().toMutableMap()
-        if (packageName.isNullOrBlank()) links.remove(romId.toString()) else links[romId.toString()] = packageName
-        val value = links.entries.joinToString(";") { "${it.key}=${it.value}" }
+        // Lectura y escritura en la misma transacción: dos llamadas seguidas
+        // ya no se pisan.
         context.dataStore.edit { prefs ->
+            val links = prefs[INSTALLED_LINKS].orEmpty().split(';')
+                .filter { it.contains('=') }
+                .associate { it.substringBefore('=') to it.substringAfter('=') }
+                .toMutableMap()
+            if (packageName.isNullOrBlank()) links.remove(romId.toString()) else links[romId.toString()] = packageName
+            val value = links.entries.joinToString(";") { "${it.key}=${it.value}" }
             if (value.isBlank()) prefs.remove(INSTALLED_LINKS) else prefs[INSTALLED_LINKS] = value
         }
     }
@@ -695,13 +736,12 @@ class SettingsDataStore(private val context: Context) {
     }.getOrNull()
 
     suspend fun setGameBackground(romId: Int, path: String?) {
-        val current = runCatching {
-            runBlocking { context.dataStore.data.first()[GAME_BACKGROUNDS] }.orEmpty()
-                .split(';').filter { it.contains('=') && it.substringBefore('=') != romId.toString() }
-        }.getOrDefault(emptyList()).toMutableList()
-        if (path != null) current += "$romId=$path"
-        val value = current.joinToString(";")
         context.dataStore.edit { prefs ->
+            val current = prefs[GAME_BACKGROUNDS].orEmpty()
+                .split(';').filter { it.contains('=') && it.substringBefore('=') != romId.toString() }
+                .toMutableList()
+            if (path != null) current += "$romId=$path"
+            val value = current.joinToString(";")
             if (value.isBlank()) prefs.remove(GAME_BACKGROUNDS) else prefs[GAME_BACKGROUNDS] = value
         }
     }

@@ -68,7 +68,7 @@ fun ServerAssetsSection(
     var downloadTarget by remember { mutableStateOf<SaveDto?>(null) }
     var deleteTarget by remember { mutableStateOf<SaveDto?>(null) }
     var useCustomDir by remember { mutableStateOf(false) }
-    var customDir by remember { mutableStateOf(SettingsDataStore(context).getSaveDownloadDirBlocking()) }
+    var customDir by remember { mutableStateOf(SettingsDataStore.get(context).getSaveDownloadDirBlocking()) }
     var showFolderPicker by remember { mutableStateOf(false) }
 
     fun reload() {
@@ -263,7 +263,7 @@ fun ServerAssetsSection(
                 customDir = path
                 useCustomDir = true
                 showFolderPicker = false
-                scope.launch { SettingsDataStore(context).setSaveDownloadDir(path) } // se recuerda
+                scope.launch { SettingsDataStore.get(context).setSaveDownloadDir(path) } // se recuerda
             },
         )
     }

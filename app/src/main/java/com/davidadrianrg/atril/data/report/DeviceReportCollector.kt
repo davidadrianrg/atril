@@ -17,7 +17,7 @@ import java.util.Locale
 object DeviceReportCollector {
 
     fun collect(context: Context, rommConfigured: Boolean): String {
-        val settings = com.davidadrianrg.atril.data.local.SettingsDataStore(context)
+        val settings = com.davidadrianrg.atril.data.local.SettingsDataStore.get(context)
         val theme = settings.getThemeBlocking().ifBlank { "default" }
         val launcherBackground = settings.getLauncherBackgroundBlocking()
         val pm = context.packageManager

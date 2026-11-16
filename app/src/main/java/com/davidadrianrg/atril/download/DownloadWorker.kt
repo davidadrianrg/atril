@@ -84,7 +84,7 @@ class DownloadWorker(
 
         // Read configuration directly from storage (API key lives in
         // EncryptedSharedPreferences — never passed through WorkManager Data).
-        val dataStore = SettingsDataStore(applicationContext)
+        val dataStore = SettingsDataStore.get(applicationContext)
         // Destino: si el WorkRequest trae ruta explícita (modo dos rutas o
         // retry que conserva su destino) se usa; si no, la raíz configurada.
         val romsRootPath = inputData.getString(KEY_ROMS_ROOT_PATH)
@@ -410,7 +410,7 @@ class DownloadWorker(
             // Media genérica del juego (opcional, desactivada por defecto): trabajo aparte,
             // nunca afecta al resultado de la descarga del ROM.
             runCatching {
-                if (com.davidadrianrg.atril.data.local.SettingsDataStore(applicationContext)
+                if (com.davidadrianrg.atril.data.local.SettingsDataStore.get(applicationContext)
                         .getMediaDownloadEnabledBlocking()
                 ) {
                     com.davidadrianrg.atril.data.metadata.GameMediaWorker.enqueue(applicationContext, romId)
@@ -419,7 +419,7 @@ class DownloadWorker(
 
             // Medio físico automático (opcional, solo con el launcher en modo físico).
             runCatching {
-                val st = com.davidadrianrg.atril.data.local.SettingsDataStore(applicationContext)
+                val st = com.davidadrianrg.atril.data.local.SettingsDataStore.get(applicationContext)
                 if (st.getAutoPhysicalMediaBlocking() && st.getLauncherDefaultDisplayBlocking() == "physical") {
                     com.davidadrianrg.atril.data.metadata.AutoPhysicalMediaWorker.enqueue(applicationContext, romId, romName)
                 }

@@ -35,7 +35,7 @@ class GameMediaWorker(
         val romId = inputData.getInt(KEY_ROM_ID, -1)
         if (romId < 0) return@withContext Result.failure()
 
-        val store = SettingsDataStore(applicationContext)
+        val store = SettingsDataStore.get(applicationContext)
         // Re-lee los ajustes: si el usuario apagó la opción o desconectó RomM, no hace nada.
         if (!store.getMediaDownloadEnabledBlocking()) return@withContext Result.success()
         val serverUrl = store.getServerUrlBlocking()

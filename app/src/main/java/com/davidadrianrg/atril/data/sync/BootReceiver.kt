@@ -14,7 +14,7 @@ import com.davidadrianrg.atril.data.local.SettingsDataStore
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
-        val settings = SettingsDataStore(context)
+        val settings = SettingsDataStore.get(context)
         if (settings.getSaveSyncWatchEnabledBlocking() &&
             settings.getSaveSyncEnabledBlocking()
         ) {

@@ -145,7 +145,7 @@ class MainActivity : ComponentActivity() {
 
         // Idioma guardado ("" = sistema) antes de componer la primera pantalla.
         val languageTag = runBlocking {
-            SettingsDataStore(applicationContext).getLanguageBlocking()
+            SettingsDataStore.get(applicationContext).getLanguageBlocking()
         }
         LocaleController.apply(languageTag)
 
@@ -158,7 +158,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val revision by LocaleController.revision.collectAsState()
             key(revision) {
-                val themeId by remember { SettingsDataStore(applicationContext).theme }.collectAsState(initial = "")
+                val themeId by remember { SettingsDataStore.get(applicationContext).theme }.collectAsState(initial = "")
                 RomMSyncTheme(theme = com.davidadrianrg.atril.core.theme.AppTheme.fromId(themeId)) {
                     RomMSyncApp(startInUpdates = openUpdates, startInEmulators = openEmulators)
                     com.davidadrianrg.atril.ui.components.CrashReportDialog()
