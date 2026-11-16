@@ -126,13 +126,6 @@ class SettingsDataStore private constructor(private val context: Context) {
         private val LEGACY_API_KEY = stringPreferencesKey("api_key")
 
         // ── EncryptedSharedPreferences key ─────────────────────────────
-        private val BACKUP_BLOCKED_KEYS = setOf(
-            "client_device_id", "sync_device_id", "sync_device_id_string",
-            "last_sync_timestamp", "last_sync_summary", "last_sync_conflicts_json",
-            "last_sync_failed_json", "skipped_version", "last_notified_update_version",
-            "save_sync_watch_enabled",
-        )
-
         private const val SECURE_PREFS_FILE = "romsync_secure_prefs"
         private const val SECURE_KEY_API_KEY = "api_key"
 
@@ -713,35 +706,26 @@ class SettingsDataStore private constructor(private val context: Context) {
      * ajustes de sync, descargas, biblioteca, filtros, emuladores, vínculos y
      * fondos; excluye credenciales e identificadores de dispositivo.
      */
-    suspend fun exportPreferences(): Map<String, String> {
-        val prefs = context.dataStore.data.first().asMap()
-        val out = linkedMapOf<String, String>()
-        prefs.forEach { (key, value) ->
-            val name = key.name
-            if (name in BACKUP_BLOCKED_KEYS || name.startsWith("scraper_") || name == "api_key") return@forEach
-            when (value) {
-                is String -> out[name] = "s:" + value
-                is Boolean -> out[name] = "b:" + value
-                is Int -> out[name] = "i:" + value
-                is Long -> out[name] = "l:" + value
-                is Float -> out[name] = "f:" + value
-            }
-        }
-        return out
-    }
+    suspend fun exportPreferences(): Map<String, String> =
+        com.davidadrianrg.atril.data.backup.PreferenceSnapshot.encode(
+            context.dataStore.data.first().asMap().mapKeys { it.key.name },
+        )
 
-    /** Aplica un snapshot de [exportPreferences]; ignora claves desconocidas o bloqueadas. */
-    suspend fun importPreferences(values: Map<String, String>) {
+    /**
+     * Aplica un snapshot de [exportPreferences] en una sola transacción;
+     * ignora claves bloqueadas y valores mal formados.
+     */
+    suspend fun importPreferences(values: Map<*, *>) {
+        val decoded = com.davidadrianrg.atril.data.backup.PreferenceSnapshot.decode(values)
+        if (decoded.isEmpty()) return
         context.dataStore.edit { prefs ->
-            values.forEach { (name, tagged) ->
-                if (name in BACKUP_BLOCKED_KEYS || name.startsWith("scraper_") || name == "api_key") return@forEach
-                val value = tagged.substringAfter(':', "")
-                when (tagged.substringBefore(':')) {
-                    "s" -> prefs[stringPreferencesKey(name)] = value
-                    "b" -> prefs[booleanPreferencesKey(name)] = value.toBoolean()
-                    "i" -> value.toIntOrNull()?.let { prefs[intPreferencesKey(name)] = it }
-                    "l" -> value.toLongOrNull()?.let { prefs[longPreferencesKey(name)] = it }
-                    "f" -> value.toFloatOrNull()?.let { prefs[floatPreferencesKey(name)] = it }
+            decoded.forEach { (name, value) ->
+                when (value) {
+                    is String -> prefs[stringPreferencesKey(name)] = value
+                    is Boolean -> prefs[booleanPreferencesKey(name)] = value
+                    is Int -> prefs[intPreferencesKey(name)] = value
+                    is Long -> prefs[longPreferencesKey(name)] = value
+                    is Float -> prefs[floatPreferencesKey(name)] = value
                 }
             }
         }

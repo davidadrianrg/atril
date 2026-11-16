@@ -217,6 +217,28 @@ class SaveSyncManager(
         workManager.cancelUniqueWork(SaveSyncWorker.WORK_NAME)
         workManager.cancelUniqueWork(SaveSyncWorker.CONFLICT_WORK_NAME)
     }
+
+    /**
+     * Ajusta el trabajo periódico a lo que dicen los ajustes persistidos.
+     * Bloquea leyendo DataStore: llamar desde el arranque o desde un hilo IO.
+     *
+     * @param replace false al arrancar (KEEP: no reinicia el temporizador);
+     *   true tras restaurar una copia, cuando intervalo y restricciones
+     *   pueden haber cambiado o desactivarse.
+     */
+    fun applyPeriodicSyncFromSettings(replace: Boolean) {
+        if (!settings.getSaveSyncEnabledBlocking()) {
+            cancelAllSyncWork()
+            if (replace) stopWatchService()
+            return
+        }
+        val interval = settings.getSyncIntervalMinutesBlocking()
+        if (interval > 0) {
+            schedulePeriodicSync(interval, replace = replace)
+        } else if (replace) {
+            workManager.cancelUniqueWork(PERIODIC_WORK_NAME)
+        }
+    }
 }
 
 sealed class SyncState {

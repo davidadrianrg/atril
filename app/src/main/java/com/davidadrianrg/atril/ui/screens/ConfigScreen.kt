@@ -1013,6 +1013,9 @@ fun ConfigScreen(
                         context = context,
                         settings = container.settingsDataStore,
                         onServerChanged = { url, key -> container.configureApi(url, key) },
+                        onPreferencesRestored = {
+                            container.saveSyncManager.applyPeriodicSyncFromSettings(replace = true)
+                        },
                     )
                 }
                 val backupScope = androidx.compose.runtime.rememberCoroutineScope()

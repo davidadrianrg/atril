@@ -86,14 +86,7 @@ class RomMSyncApplication : Application(), Configuration.Provider, ImageLoaderFa
         // Si el usuario desactivó el sync de saves, no re-registramos el
         // trabajo periódico en el arranque (y limpiamos el que pudiera quedar
         // de una versión anterior).
-        if (!container.settingsDataStore.getSaveSyncEnabledBlocking()) {
-            container.saveSyncManager.cancelAllSyncWork()
-            return
-        }
-        val interval = container.settingsDataStore.getSyncIntervalMinutesBlocking()
-        if (interval > 0) {
-            container.saveSyncManager.schedulePeriodicSync(interval)
-        }
+        container.saveSyncManager.applyPeriodicSyncFromSettings(replace = false)
     }
 
     /** Reanuda la vigilancia de saves si el usuario la tenía activada. */
