@@ -10,6 +10,10 @@ data class DownloadTask(
     val platformSlug: String,
     /** Ruta raíz destino de esta descarga (null = la principal configurada). */
     val romsRootPath: String? = null,
+    /** Id de plataforma en RomM: se conserva al reintentar para la fila de Room. */
+    val platformId: Int = 0,
+    /** Hash del servidor: se conserva al reintentar para verificar integridad. */
+    val fileHash: String? = null,
     val workId: String,
     val progress: Int = 0,
     val isIndeterminate: Boolean = false,

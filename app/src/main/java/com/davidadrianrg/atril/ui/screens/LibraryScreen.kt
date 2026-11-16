@@ -377,6 +377,7 @@ fun LibraryScreen(onOpenDownloads: () -> Unit = {}) {
                     rom = r,
                     serverUrl = settings.serverUrl,
                     romsRootPath = rootPath,
+                    wifiOnly = settings.wifiOnlyDownloads,
                 )
             }
             viewModel.onDownloadEnqueued(rom.name)

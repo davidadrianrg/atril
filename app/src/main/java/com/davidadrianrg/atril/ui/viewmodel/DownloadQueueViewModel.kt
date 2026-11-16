@@ -7,6 +7,7 @@ import com.davidadrianrg.atril.domain.model.DownloadTask
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 class DownloadQueueViewModel(
     private val downloadManager: DownloadManager,
@@ -41,12 +42,6 @@ class DownloadQueueViewModel(
      * there instead of restarting on internal storage).
      */
     fun retryDownload(task: DownloadTask) {
-        downloadManager.retryDownload(
-            romId = task.romId,
-            romName = task.romName,
-            fileName = task.fileName,
-            platformSlug = task.platformSlug,
-            romsRootPath = task.romsRootPath,
-        )
+        viewModelScope.launch { downloadManager.retryDownload(task) }
     }
 }

@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.desktop
 
+import com.davidadrianrg.atril.core.download.PartialDownload
 import com.davidadrianrg.atril.core.download.PathMapper
 import com.davidadrianrg.atril.core.download.ZipStreamExtractor
 import com.davidadrianrg.atril.core.i18n.tr
@@ -21,8 +22,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * Cancelación: los streams comprueban el Job de la corrutina llamante en cada
  * reporte de progreso; al cancelar se lanza CancellationException y se cierra
  * la conexión. Si la cancelación es explícita del usuario ([discardPartialOnCancel])
- * se borra el parcial, para que ES-DE o un emulador no vean una ROM truncada con
- * su nombre final; en otro caso queda en disco para reanudar con Range.
+ * se borra el `.part`; en otro caso queda en disco para reanudar con Range. En
+ * ningún caso un ROM truncado lleva su nombre final ([PartialDownload]).
  */
 class DownloadEngine(
     private val api: RomMApiService,
@@ -52,9 +53,12 @@ class DownloadEngine(
         }
 
         // Fichero objetivo y parcial previo (para reanudar) se calculan ANTES
-        // de la petición: el Range depende de lo que ya hay en disco.
+        // de la petición: el Range depende de lo que ya hay en disco. Los
+        // bytes viven en `<fichero>.part` hasta completar y verificar (mismo
+        // helper que Android), así ES-DE nunca ve un ROM truncado.
         val target = File(targetDir, fileName)
-        val existing = if (target.isFile) target.length() else 0L
+        val resumePoint = PartialDownload.resumePoint(target)
+        val existing = resumePoint.bytes
         val range = if (existing > 0L) "bytes=$existing-" else null
 
         val response = api.downloadRom(rom.id, fileName, range)
@@ -62,6 +66,15 @@ class DownloadEngine(
             when (response.code()) {
                 416 -> {
                     // Range insatisfiable: el fichero ya está completo en disco.
+                    response.raw().close()
+                    if (existing <= 0L) {
+                        return@withContext Result(tr("download.http_error", 416), failed = true)
+                    }
+                    verifyHash(rom, resumePoint.file)?.let { error ->
+                        resumePoint.file.delete()
+                        return@withContext Result(error, failed = true)
+                    }
+                    PartialDownload.commit(resumePoint.file, target)
                     registerInLibrary(rom, target)
                     return@withContext Result(tr("download.done_already_complete", rom.name))
                 }
@@ -80,17 +93,18 @@ class DownloadEngine(
         val isZipStream = body.contentLength() == -1L
         if (isZipStream) {
             val created = extractZipStream(body, targetDir, job, onProgress)
+            // Un parcial de fichero único ya no sirve: el servidor lo sirve como zip.
+            PartialDownload.discard(target)
             registerInLibrary(rom, targetDir)
             return@withContext Result(tr("download.done_extracted", rom.name, created.size))
         }
 
         // Fichero único — con reanudación: si hay un parcial de una descarga
         // previa (fallida o cancelada) se pide Range y se concatena (206);
-        // si el servidor ignora el Range (200) se empieza de cero.
+        // si el servidor ignora el Range (200) se empieza de cero en `.part`
+        // y el ROM anterior, si lo hay, sigue intacto hasta el renombrado.
         val resumed = existing > 0L && response.code() == 206
-        if (existing > 0L && !resumed && target.isFile) {
-            target.delete() // 200 ignorando Range: descartar el parcial
-        }
+        val part = PartialDownload.prepareAppend(resumePoint, target, resume = resumed)
         // En 206 Content-Length es lo que QUEDA, no el total.
         val total = if (resumed) existing + body.contentLength() else body.contentLength()
         val baseBytes = if (resumed) existing else 0L
@@ -99,20 +113,25 @@ class DownloadEngine(
             onProgress(Progress(read, total, speed))
         }
         try {
-            FileOutputStream(target, resumed).use { out -> counting.copyTo(out) }
+            FileOutputStream(part, resumed).use { out ->
+                counting.copyTo(out)
+                out.fd.sync()
+            }
         } catch (e: CancellationException) {
-            if (discardPartialOnCancel() && target.isFile) target.delete()
+            if (discardPartialOnCancel()) PartialDownload.discard(target)
             throw e
         }
 
         // Verificación de integridad contra el hash del servidor (mismo
         // criterio que Android: algoritmo por longitud hex; desconocida = skip).
-        val hashError = verifyHash(rom, target)
+        val hashError = verifyHash(rom, part)
         if (hashError != null) {
-            target.delete() // corrupto: no dejarlo en la biblioteca
+            part.delete() // corrupto: no dejarlo en la biblioteca
             return@withContext Result(hashError, failed = true)
         }
 
+        // Completo y verificado: ahora sí recibe su nombre definitivo.
+        PartialDownload.commit(part, target)
         registerInLibrary(rom, target)
         return@withContext Result(tr("download.done_path", rom.name, target.absolutePath))
     }

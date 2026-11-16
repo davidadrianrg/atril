@@ -1,5 +1,6 @@
 package com.davidadrianrg.atril.desktop
 
+import com.davidadrianrg.atril.core.download.PartialDownload
 import com.davidadrianrg.atril.core.download.PathMapper
 import com.davidadrianrg.atril.core.remote.RomMApiService
 import com.davidadrianrg.atril.core.remote.dto.RomDto
@@ -75,6 +76,7 @@ class DownloadEngineCancelTest {
         } as RomMApiService
 
     private fun targetFile(root: File) = File(PathMapper.getPlatformDir(root.absolutePath, "testplat"), "test.bin")
+    private fun partFile(root: File) = PartialDownload.partFileFor(targetFile(root))
 
     /** Descarga y cancela el Job tras el primer progreso. */
     private fun downloadAndCancel(engine: DownloadEngine) = runBlocking {
@@ -91,6 +93,7 @@ class DownloadEngineCancelTest {
         val engine = DownloadEngine(fakeApi(4_000_000), root, tmp.newFolder("cache"), discardPartialOnCancel = { true })
         downloadAndCancel(engine)
         assertFalse(targetFile(root).exists())
+        assertFalse(partFile(root).exists())
     }
 
     @Test
@@ -98,8 +101,10 @@ class DownloadEngineCancelTest {
         val root = tmp.newFolder("roms")
         val engine = DownloadEngine(fakeApi(4_000_000), root, tmp.newFolder("cache"), discardPartialOnCancel = { false })
         downloadAndCancel(engine)
-        assertTrue(targetFile(root).isFile)
-        assertTrue(targetFile(root).length() > 0)
+        assertTrue(partFile(root).isFile)
+        assertTrue(partFile(root).length() > 0)
+        // M1: un ROM a medias nunca lleva el nombre que buscan ES-DE y los emuladores.
+        assertFalse(targetFile(root).exists())
     }
 
     @Test
@@ -109,6 +114,7 @@ class DownloadEngineCancelTest {
         val engine = DownloadEngine(fakeApi(4_000_000), root, tmp.newFolder("cache"), discardPartialOnCancel = { true })
         downloadAndCancel(engine)
         assertFalse(target.exists())
+        assertFalse(partFile(root).exists())
     }
 
     @Test
@@ -118,5 +124,17 @@ class DownloadEngineCancelTest {
         val result = runBlocking { engine.download(rom) { } }
         assertFalse(result.failed)
         assertEquals(100_000L, targetFile(root).length())
+        assertFalse(partFile(root).exists())
+    }
+
+    @Test
+    fun resumeAppendsToThePartAndPublishesTheFinalName() {
+        val root = tmp.newFolder("roms")
+        partFile(root).also { it.parentFile.mkdirs(); it.writeBytes(ByteArray(1024)) }
+        val engine = DownloadEngine(fakeApi(2_048, slow = false), root, tmp.newFolder("cache"))
+        val result = runBlocking { engine.download(rom) { } }
+        assertFalse(result.failed)
+        assertEquals(3_072L, targetFile(root).length())
+        assertFalse(partFile(root).exists())
     }
 }
