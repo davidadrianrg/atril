@@ -34,6 +34,7 @@ class EmulatorRepository(
     }
 
     private val packFile = File(context.filesDir, "emulator_pack.json")
+    private val packEtagFile = File(context.filesDir, "emulator_pack.etag")
     private val customStore = CustomEmulatorStore(File(context.filesDir, "custom_emulators.json"))
     private val packageMap = PackageMapStore(File(context.filesDir, "package_names.json"))
     private val htmlResolver = HtmlReleaseResolver(client)
@@ -50,9 +51,26 @@ class EmulatorRepository(
     }
 
     private fun downloadPack(): List<EmulatorEntry> {
-        val body = getText(PACK_URL)
-        return PackParser.parse(body).also { entries ->
-            if (entries.isNotEmpty()) packFile.writeText(body)
+        val cached = packFile.takeIf { it.isFile }?.readText()
+        val etag = packEtagFile.takeIf { it.isFile }?.readText()?.trim()?.takeIf { it.isNotBlank() }
+        val request = Request.Builder()
+            .url(PACK_URL)
+            .header("User-Agent", "Atril")
+            .apply { if (etag != null && cached != null) header("If-None-Match", etag) }
+            .build()
+        client.newCall(request).execute().use { response ->
+            // 304: el pack no cambió; no se gasta ancho de banda ni cuota.
+            if (response.code == 304 && cached != null) {
+                return PackParser.parse(cached)
+            }
+            if (!response.isSuccessful) error("HTTP ${response.code}")
+            val body = response.body?.string().orEmpty()
+            return PackParser.parse(body).also { entries ->
+                if (entries.isNotEmpty()) {
+                    packFile.writeText(body)
+                    response.header("ETag")?.let { packEtagFile.writeText(it) }
+                }
+            }
         }
     }
 

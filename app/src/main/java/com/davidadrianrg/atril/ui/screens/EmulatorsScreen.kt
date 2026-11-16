@@ -99,11 +99,11 @@ fun EmulatorsScreen() {
 
     var entries by remember { mutableStateOf<List<EmulatorEntry>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var dual by remember { mutableStateOf(false) }
-    var category by remember { mutableStateOf("Emulator") }
-    var query by remember { mutableStateOf("") }
-    var installedOnly by remember { mutableStateOf(false) }
-    var searchOpen by remember { mutableStateOf(false) }
+    var dual by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var category by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("Emulator") }
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var installedOnly by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var searchOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(searchOpen) {
         if (searchOpen) {
