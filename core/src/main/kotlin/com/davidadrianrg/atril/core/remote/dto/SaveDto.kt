@@ -26,6 +26,13 @@ data class StateDto(
     @Json(name = "updated_at") val updatedAt: String? = null,
 )
 
+/** Body de POST /api/saves/delete. DTO concreto: R8 full-mode corrompe la
+ * firma genérica de `Map<String, List<Int>>` y Retrofit la rechaza en release. */
+@JsonClass(generateAdapter = true)
+data class SaveDeleteRequest(
+    @Json(name = "saves") val saves: List<Int> = emptyList(),
+)
+
 /** Body opcional de POST /api/roms/upload/start (subida a ROM existente). */
 @JsonClass(generateAdapter = true)
 data class UploadStartRequest(

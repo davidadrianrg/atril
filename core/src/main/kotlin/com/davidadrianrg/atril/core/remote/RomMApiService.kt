@@ -137,7 +137,7 @@ interface RomMApiService {
 
     /** POST /api/saves/delete {"saves":[ids]} → borra guardados del servidor. */
     @POST("api/saves/delete")
-    suspend fun deleteSaves(@Body body: Map<String, List<Int>>): ResponseBody
+    suspend fun deleteSaves(@Body body: com.davidadrianrg.atril.core.remote.dto.SaveDeleteRequest): ResponseBody
 
     // ── Assets en el servidor (listado + subida manual) ─────────────────
 

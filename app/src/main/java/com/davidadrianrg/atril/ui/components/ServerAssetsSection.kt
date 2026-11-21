@@ -339,7 +339,7 @@ fun ServerAssetsSection(
                         deleteTarget = null
                         scope.launch {
                             val result = runCatching {
-                                NetworkModule.createApiService(serverUrl, apiKey).deleteSaves(mapOf("saves" to listOf(save.id)))
+                                NetworkModule.createApiService(serverUrl, apiKey).deleteSaves(com.davidadrianrg.atril.core.remote.dto.SaveDeleteRequest(saves = listOf(save.id)))
                             }.recoverCatching { e ->
                                 // 404: el save ya no existía (doble borrado o id
                                 // caducado) → se trata como éxito, no como fallo.

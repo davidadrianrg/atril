@@ -666,7 +666,7 @@ class DesktopAppState(private val scope: CoroutineScope) {
     suspend fun deleteServerSave(saveId: Int): Result<Unit> = runCatching {
         val svc = api ?: error(tr("common.server_not_configured"))
         try {
-            svc.deleteSaves(mapOf("saves" to listOf(saveId)))
+            svc.deleteSaves(com.davidadrianrg.atril.core.remote.dto.SaveDeleteRequest(saves = listOf(saveId)))
         } catch (e: retrofit2.HttpException) {
             // 404: el save ya no existía → éxito idempotente.
             if (e.code() != 404) throw e
