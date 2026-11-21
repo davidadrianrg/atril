@@ -84,19 +84,34 @@ fun RomMSyncApp(
     val settingsLoaded = loadedSettings != null
     val needsOnboarding = loadedSettings == null ||
         StartupGate.needsOnboarding(loadedSettings, hasStorageAccess)
-    val startRoute = StartupGate.startRoute(loadedSettings, hasStorageAccess, startInUpdates, startInEmulators)
+    val startRoute = StartupGate.startRoute(
+        loadedSettings,
+        hasStorageAccess,
+        startInUpdates,
+        startInEmulators,
+        companionMode = container.settingsRepository.getCompanionModeBlocking(),
+    )
     val windowInfo = rememberWindowInfo()
 
     // La pestaña Sync solo existe si la función de sincronizar saves está
     // activada en Configuración (por defecto sí).
     val saveSyncEnabled by container.settingsRepository.saveSyncEnabled.collectAsState(initial = true)
-    val navItems = if (saveSyncEnabled) bottomNavItems else bottomNavItems.filter { it != Screen.Sync }
+    // Modo compañero: la app se convierte en herramienta de gestión (Descargas,
+    // Saves, Emuladores) y desaparecen las secciones de launcher (Jugar, Apps).
+    val companionMode by container.settingsRepository.companionMode.collectAsState(initial = false)
+    val navItems = (if (saveSyncEnabled) bottomNavItems else bottomNavItems.filter { it != Screen.Sync })
+        .let { if (companionMode) it.filter { s -> s != Screen.Play && s != Screen.Apps } else it }
 
     // Si el usuario desactiva el sync mientras está en esa pestaña, lo
     // devolvemos a Biblioteca para no dejar un destino inalcanzable.
-    LaunchedEffect(saveSyncEnabled) {
-        if (!saveSyncEnabled && currentDestination?.route == Screen.Sync.route) {
-            navigateTo(Screen.Play.route, navController)
+    // Igual con el modo compañero: fuera de Jugar y Aplicaciones.
+    LaunchedEffect(saveSyncEnabled, companionMode) {
+        val route = currentDestination?.route
+        when {
+            !saveSyncEnabled && route == Screen.Sync.route ->
+                navigateTo(Screen.Library.route, navController)
+            companionMode && (route == Screen.Play.route || route == Screen.Apps.route) ->
+                navigateTo(Screen.Library.route, navController)
         }
     }
 

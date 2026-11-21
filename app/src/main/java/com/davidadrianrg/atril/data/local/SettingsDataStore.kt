@@ -72,6 +72,7 @@ class SettingsDataStore private constructor(private val context: Context) {
         val DEVICE_ID = intPreferencesKey("sync_device_id")
         val DEVICE_ID_STRING = stringPreferencesKey("sync_device_id_string")
         val SAVE_SYNC_ENABLED = stringPreferencesKey("save_sync_enabled")
+        val COMPANION_MODE = stringPreferencesKey("companion_mode")
         /** Presentación por defecto en el launcher: `card` | `physical`. */
         val LAUNCHER_DEFAULT_DISPLAY = stringPreferencesKey("launcher_default_display")
         /** Emulador de lanzamiento por plataforma: `slug=familia;slug=familia`. */
@@ -254,6 +255,11 @@ class SettingsDataStore private constructor(private val context: Context) {
     val language: Flow<String> = context.dataStore.data.map { it[LANGUAGE] ?: "" }
     val syncDeviceId: Flow<Int?> = context.dataStore.data.map { it[DEVICE_ID] }
     val syncDeviceIdString: Flow<String?> = context.dataStore.data.map { it[DEVICE_ID_STRING] }
+    /** Modo compañero: sin Jugar ni Aplicaciones (solo gestión). */
+    val companionMode: Flow<Boolean> = context.dataStore.data.map {
+        (it[COMPANION_MODE] ?: "false") == "true"
+    }
+
     val saveSyncEnabled: Flow<Boolean> = context.dataStore.data.map {
         // Ausencia de valor = activado (opt-out): nadie ha escrito esta clave
         // antes de que existiera el toggle, así que el comportamiento por
@@ -598,6 +604,10 @@ class SettingsDataStore private constructor(private val context: Context) {
             if (key.isEmpty() || value.isEmpty()) null else key to value
         }.toMap()
 
+    suspend fun setCompanionMode(enabled: Boolean) {
+        context.dataStore.edit { it[COMPANION_MODE] = if (enabled) "true" else "false" }
+    }
+
     suspend fun setSaveSyncEnabled(enabled: Boolean) {
         context.dataStore.edit { it[SAVE_SYNC_ENABLED] = if (enabled) "true" else "false" }
     }
@@ -797,6 +807,12 @@ class SettingsDataStore private constructor(private val context: Context) {
     }
 
     /** Lectura síncrona del toggle de sync de saves (para Workers y Application). */
+    fun getCompanionModeBlocking(): Boolean {
+        return runCatching {
+            runBlocking { (context.dataStore.data.first()[COMPANION_MODE] ?: "false") == "true" }
+        }.getOrDefault(false)
+    }
+
     fun getSaveSyncEnabledBlocking(): Boolean {
         return runCatching {
             runBlocking { (context.dataStore.data.first()[SAVE_SYNC_ENABLED] ?: "true") == "true" }

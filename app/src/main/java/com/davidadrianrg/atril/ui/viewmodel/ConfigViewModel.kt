@@ -290,6 +290,16 @@ class ConfigViewModel(
      * cancela cualquier trabajo de sync encolado; al reactivar restaura el
      * periodo configurado si existía.
      */
+    /** Modo compañero: solo gestión (descargas, saves, emuladores). */
+    fun setCompanionMode(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setCompanionMode(enabled)
+            // Al activarlo (o desactivarlo) se reinicia el arranque para que
+            // la ruta inicial vuelva a ser coherente con el modo elegido.
+            if (enabled) saveSyncManager?.schedulePeriodicSync(settingsRepository.saveSyncIntervalMinutes.first())
+        }
+    }
+
     fun setSaveSyncEnabled(enabled: Boolean) {
         val manager = saveSyncManager ?: return
         viewModelScope.launch {

@@ -176,6 +176,50 @@ class EmulatorRepository(
         ReleaseSelector.select(releases, entry.settings, deviceAbi(), dualScreen)
     }
 
+    /**
+     * APKs entre los que el usuario puede elegir en la release a instalar
+     * (como Obtainium). Null = sin ambigüedad (una sola opción o fuente HTML):
+     * se puede instalar automático. Devuelve la release elegible y TODOS sus
+     * candidatos ordenados por preferencia.
+     */
+    data class ReleaseOptions(val release: SelectedRelease, val alternatives: List<SelectedRelease>)
+
+    suspend fun releaseOptions(
+        entry: EmulatorEntry,
+        dualScreen: Boolean = false,
+    ): ReleaseOptions? = withContext(Dispatchers.IO) {
+        if (!entry.isGitHub) return@withContext null
+        val url = "https://api.github.com/repos/${entry.owner}/${entry.repo}/releases?per_page=20"
+        val json = runCatching { getText(url) }.getOrNull() ?: return@withContext null
+        val releases = runCatching { releasesAdapter.fromJson(json) }.getOrNull() ?: return@withContext null
+        val usable = releases.filter { !it.draft && (entry.settings.includePrereleases || !it.prerelease) }
+        for (release in usable) {
+            val assets = ReleaseSelector.options(release, entry.settings, deviceAbi(), dualScreen)
+            if (assets.isEmpty()) continue
+            val chosen = assets.first()
+            val selected = assets.map { asset ->
+                SelectedRelease(
+                    version = ReleaseSelector.versionOf(release, entry.settings),
+                    assetName = asset.name,
+                    downloadUrl = asset.downloadUrl,
+                    sizeBytes = asset.size,
+                    tagName = release.tagName,
+                )
+            }
+            return@withContext ReleaseOptions(
+                release = SelectedRelease(
+                    version = ReleaseSelector.versionOf(release, entry.settings),
+                    assetName = chosen.name,
+                    downloadUrl = chosen.downloadUrl,
+                    sizeBytes = chosen.size,
+                    tagName = release.tagName,
+                ),
+                alternatives = selected,
+            )
+        }
+        null
+    }
+
     suspend fun download(
         release: SelectedRelease,
         expectedPackage: String? = null,

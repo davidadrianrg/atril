@@ -25,6 +25,10 @@ data class EmulatorJob(
     val version: String? = null,
     val apkPath: String? = null,
     val error: String? = null,
+    /** Asset elegido a mano (URL); el worker lo usa en vez de auto-seleccionar. */
+    val assetUrl: String? = null,
+    val assetName: String? = null,
+    val assetVersion: String? = null,
 )
 
 /**
@@ -67,6 +71,33 @@ class EmulatorInstallQueue(private val file: File) {
                 else -> continue
             }
             added += id
+        }
+        result to added
+    }
+
+    /** Encola (o re-encola un FAILED) fijando el asset elegido por el usuario. */
+    fun enqueueWithAsset(
+        entryId: String,
+        name: String,
+        dualScreen: Boolean,
+        assetUrl: String,
+        assetName: String,
+        assetVersion: String,
+    ): Boolean = mutate { jobs ->
+        val existing = jobs.indexOfFirst { it.entryId == entryId }
+        val job = EmulatorJob(
+            entryId = entryId,
+            name = name,
+            dualScreen = dualScreen,
+            assetUrl = assetUrl,
+            assetName = assetName,
+            assetVersion = assetVersion,
+        )
+        val result = jobs.toMutableList()
+        var added = false
+        if (existing < 0 || jobs[existing].state == EmulatorJobState.FAILED) {
+            if (existing >= 0) result[existing] = job else result += job
+            added = true
         }
         result to added
     }
@@ -167,6 +198,9 @@ class EmulatorInstallQueue(private val file: File) {
         "version" to version,
         "apkPath" to apkPath,
         "error" to error,
+        "assetUrl" to assetUrl,
+        "assetName" to assetName,
+        "assetVersion" to assetVersion,
     )
 
     private fun Map<String, Any?>.toJob(): EmulatorJob? {
@@ -180,6 +214,9 @@ class EmulatorInstallQueue(private val file: File) {
             dualScreen = this["dualScreen"] as? Boolean ?: false,
             state = state,
             progress = if (state == EmulatorJobState.READY) 1f else 0f,
+            assetUrl = this["assetUrl"] as? String,
+            assetName = this["assetName"] as? String,
+            assetVersion = this["assetVersion"] as? String,
             version = this["version"] as? String,
             apkPath = this["apkPath"] as? String,
             error = this["error"] as? String,

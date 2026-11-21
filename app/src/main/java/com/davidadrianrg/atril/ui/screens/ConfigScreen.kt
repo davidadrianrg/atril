@@ -760,6 +760,8 @@ fun ConfigScreen(
             // con el valor inicial por defecto mientras carga DataStore.
             var saveSyncEnabledLocal by remember { mutableStateOf<Boolean?>(null) }
             val saveSyncEnabled by container.settingsRepository.saveSyncEnabled.collectAsState(initial = true)
+            val companionMode by container.settingsRepository.companionMode.collectAsState(initial = false)
+            var companionModeLocal by remember { mutableStateOf<Boolean?>(null) }
             SettingsSection(
                 icon = Icons.Outlined.Sync,
                 title = tr("common.save_sync"),
@@ -783,6 +785,30 @@ fun ConfigScreen(
                         onCheckedChange = { enabled ->
                             saveSyncEnabledLocal = enabled
                             viewModel.setSaveSyncEnabled(enabled)
+                        },
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(tr("config.companion.title"), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            tr("config.companion.hint"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = companionModeLocal ?: companionMode,
+                        onCheckedChange = { enabled ->
+                            companionModeLocal = enabled
+                            viewModel.setCompanionMode(enabled)
                         },
                     )
                 }

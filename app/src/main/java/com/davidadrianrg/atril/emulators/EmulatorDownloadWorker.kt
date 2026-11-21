@@ -71,7 +71,15 @@ class EmulatorDownloadWorker(
             try {
                 val entry = catalog().firstOrNull { it.id == job.entryId }
                     ?: error(tr("emulators.queue.missing", job.name))
-                val release = repository.latestRelease(entry, dualScreen = job.dualScreen)
+                val release = job.assetUrl?.let {
+                    com.davidadrianrg.atril.core.emulators.SelectedRelease(
+                        version = job.assetVersion ?: "",
+                        assetName = job.assetName ?: it.substringAfterLast('/'),
+                        downloadUrl = it,
+                        sizeBytes = 0L,
+                        tagName = "",
+                    )
+                } ?: repository.latestRelease(entry, dualScreen = job.dualScreen)
                     ?: error(tr("emulators.no_release", entry.name))
                 var lastPercent = -1
                 val file = repository.download(release, repository.expectedPackageOf(entry)) { p ->

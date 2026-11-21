@@ -73,13 +73,25 @@ object ReleaseSelector {
         settings: PackSettings,
         deviceAbi: String,
         dualScreen: Boolean = false,
-    ): GhAsset? {
+    ): GhAsset? = options(release, settings, deviceAbi, dualScreen).firstOrNull()
+
+    /**
+     * Todos los APKs utilizables de una release, en el mismo orden de
+     * preferencia que usa [pickAsset] (variante de pantalla y arquitectura).
+     * La UI los ofrece al usuario cuando hay varios (como Obtainium).
+     */
+    fun options(
+        release: GhRelease,
+        settings: PackSettings,
+        deviceAbi: String,
+        dualScreen: Boolean = false,
+    ): List<GhAsset> {
         val regex = runCatching { settings.apkFilterRegEx.takeIf { it.isNotBlank() }?.let(::Regex) }.getOrNull()
         val apks = release.assets.filter { asset ->
             asset.name.endsWith(".apk", ignoreCase = true) &&
                 (regex == null || regex.containsMatchIn(asset.name))
         }
-        if (apks.isEmpty()) return null
+        if (apks.isEmpty()) return emptyList()
         // Variante de pantalla: si la release publica builds "dual", se elige
         // según el perfil; el resto de assets queda como respaldo.
         val dualAssets = apks.filter { it.name.contains("dual", ignoreCase = true) }
@@ -101,7 +113,8 @@ object ReleaseSelector {
         } else {
             variantOrdered
         }
-        return ordered.getOrNull(settings.preferredApkIndex.coerceAtLeast(0)) ?: ordered.first()
+        val index = settings.preferredApkIndex.coerceAtLeast(0)
+        return ordered.drop(index) + ordered.take(index)
     }
 
     private fun abiTokens(abi: String): List<String> = when (abi) {

@@ -45,6 +45,7 @@ class SettingsRepository(private val dataStore: SettingsDataStore) {
     suspend fun setLanguage(tag: String) = dataStore.setLanguage(tag)
     suspend fun setTheme(id: String) = dataStore.setTheme(id)
     val theme: Flow<String> = dataStore.theme
+    val companionMode: Flow<Boolean> = dataStore.companionMode
     val launcherBackground: Flow<String> = dataStore.launcherBackground
     val launcherBlur: Flow<Float> = dataStore.launcherBlur
     val scraperCredentials = dataStore.scraperCredentials
@@ -52,6 +53,10 @@ class SettingsRepository(private val dataStore: SettingsDataStore) {
         dataStore.setScraperCredentials(c)
 
     suspend fun setLauncherBackground(mode: String) = dataStore.setLauncherBackground(mode)
+
+    suspend fun setCompanionMode(enabled: Boolean) = dataStore.setCompanionMode(enabled)
+
+    fun getCompanionModeBlocking(): Boolean = dataStore.getCompanionModeBlocking()
 
     suspend fun setLauncherBlur(radiusDp: Float) = dataStore.setLauncherBlur(radiusDp)
     suspend fun setSaveSyncEnabled(enabled: Boolean) = dataStore.setSaveSyncEnabled(enabled)

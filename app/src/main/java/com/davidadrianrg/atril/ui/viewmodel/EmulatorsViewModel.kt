@@ -197,7 +197,8 @@ class EmulatorsViewModel(
         if (job?.state == EmulatorJobState.READY) {
             installReady(entry.id)
         } else {
-            enqueue(listOf(entry))
+            // Como Obtainium: si la release tiene varios APKs, se pregunta.
+            installAsking(listOf(entry))
         }
     }
 
@@ -205,8 +206,70 @@ class EmulatorsViewModel(
         val ids = selected.value
         val chosen = visible.value.filter { it.id in ids }
         clearSelection()
-        enqueue(chosen)
+        installAsking(chosen)
     }
+
+    /** Resuelve cada entrada y aparta las que tienen varios APKs para preguntar. */
+    private fun installAsking(entries: List<EmulatorEntry>) {
+        if (entries.isEmpty()) return
+        viewModelScope.launch {
+            val dual = filters.value.dual
+            val automatic = mutableListOf<EmulatorEntry>()
+            val ambiguous = mutableListOf<Pair<EmulatorEntry, EmulatorRepository.ReleaseOptions>>()
+            for (entry in entries) {
+                val job = queue.get(entry.id)
+                if (job?.state == EmulatorJobState.READY) {
+                    installReady(entry.id)
+                    continue
+                }
+                val options = runCatching { repository.releaseOptions(entry, dual) }.getOrNull()
+                if (options != null && options.alternatives.size > 1) {
+                    ambiguous += entry to options
+                } else {
+                    automatic += entry
+                }
+            }
+            if (automatic.isNotEmpty()) enqueue(automatic)
+            pendingChoices.addAll(ambiguous)
+            if (pendingChoices.isNotEmpty()) {
+                val (entry, options) = pendingChoices.first()
+                _assetChoice.value = entry to options
+            }
+        }
+    }
+
+    /** El usuario eligió un APK concreto (como Obtainium). */
+    fun chooseAsset(entry: EmulatorEntry, release: com.davidadrianrg.atril.core.emulators.SelectedRelease) {
+        popChoice()
+        val ok = queue.enqueueWithAsset(
+            entryId = entry.id,
+            name = entry.name,
+            dualScreen = filters.value.dual,
+            assetUrl = release.downloadUrl,
+            assetName = release.assetName,
+            assetVersion = release.version,
+        )
+        if (ok) {
+            EmulatorDownloadWorker.enqueue(app)
+            _messages.trySend(tr("emulators.queue.added", 1))
+        }
+    }
+
+    /** Salta la pregunta y deja que la app elija automático. */
+    fun skipAssetChoice() = popChoice()
+
+    private fun popChoice() {
+        if (pendingChoices.isEmpty()) return
+        pendingChoices.removeAt(0)
+        _assetChoice.value = pendingChoices.firstOrNull()?.let { it.first to it.second }
+    }
+
+    /** Preguntas pendientes de «¿qué APK quieres?» (entrada + opciones). */
+    private val pendingChoices = mutableListOf<Pair<EmulatorEntry, EmulatorRepository.ReleaseOptions>>()
+    val assetChoice: StateFlow<Pair<EmulatorEntry, EmulatorRepository.ReleaseOptions>?> =
+        MutableStateFlow<Pair<EmulatorEntry, EmulatorRepository.ReleaseOptions>?>(null)
+            .asStateFlow()
+    private val _assetChoice = MutableStateFlow<Pair<EmulatorEntry, EmulatorRepository.ReleaseOptions>?>(null)
 
     private fun enqueue(entries: List<EmulatorEntry>) {
         val added = queue.enqueue(entries.map { it.id to it.name }, filters.value.dual)

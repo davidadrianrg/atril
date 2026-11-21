@@ -25,11 +25,13 @@ object StartupGate {
         hasStorageAccess: Boolean,
         startInUpdates: Boolean,
         startInEmulators: Boolean,
+        companionMode: Boolean = false,
     ): String? = when {
         settings == null -> null
         needsOnboarding(settings, hasStorageAccess) -> Screen.Config.route
         startInUpdates -> Screen.Config.route
         startInEmulators -> Screen.Emulators.route
+        companionMode -> Screen.Library.route
         else -> Screen.Play.route
     }
 
