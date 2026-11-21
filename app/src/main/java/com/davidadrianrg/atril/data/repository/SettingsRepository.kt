@@ -46,6 +46,11 @@ class SettingsRepository(private val dataStore: SettingsDataStore) {
     suspend fun setTheme(id: String) = dataStore.setTheme(id)
     val theme: Flow<String> = dataStore.theme
     val companionMode: Flow<Boolean> = dataStore.companionMode
+    val webdavUrl: Flow<String> = dataStore.webdavUrl
+    val webdavUser: Flow<String> = dataStore.webdavUser
+    val webdavPass: Flow<String> = dataStore.webdavPass
+    val webdavEnabled: Flow<Boolean> = dataStore.webdavEnabled
+    val webdavLastSync: Flow<String> = dataStore.webdavLastSync
     val launcherBackground: Flow<String> = dataStore.launcherBackground
     val launcherBlur: Flow<Float> = dataStore.launcherBlur
     val scraperCredentials = dataStore.scraperCredentials
@@ -57,6 +62,16 @@ class SettingsRepository(private val dataStore: SettingsDataStore) {
     suspend fun setCompanionMode(enabled: Boolean) = dataStore.setCompanionMode(enabled)
 
     fun getCompanionModeBlocking(): Boolean = dataStore.getCompanionModeBlocking()
+
+    suspend fun setWebDav(url: String, user: String, pass: String) {
+        dataStore.setWebDavUrl(url); dataStore.setWebDavUser(user); dataStore.setWebDavPass(pass)
+    }
+    suspend fun setWebDavEnabled(enabled: Boolean) = dataStore.setWebDavEnabled(enabled)
+    suspend fun setWebDavLastSync(summary: String) = dataStore.setWebDavLastSync(summary)
+    fun getWebDavUrlBlocking(): String = dataStore.getWebDavUrlBlocking()
+    fun getWebDavUserBlocking(): String = dataStore.getWebDavUserBlocking()
+    fun getWebDavPassBlocking(): String = dataStore.getWebDavPassBlocking()
+    fun getWebDavEnabledBlocking(): Boolean = dataStore.getWebDavEnabledBlocking()
 
     suspend fun setLauncherBlur(radiusDp: Float) = dataStore.setLauncherBlur(radiusDp)
     suspend fun setSaveSyncEnabled(enabled: Boolean) = dataStore.setSaveSyncEnabled(enabled)

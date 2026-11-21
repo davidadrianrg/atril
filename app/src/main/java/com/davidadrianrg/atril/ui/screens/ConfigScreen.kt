@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.DownloadForOffline
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Wallpaper
@@ -811,6 +812,86 @@ fun ConfigScreen(
                             viewModel.setCompanionMode(enabled)
                         },
                     )
+                }
+
+                // ── Saves locales vía WebDAV ───────────────────────────
+                val webdavUrl by viewModel.webdavUrl.collectAsState()
+                val webdavUser by viewModel.webdavUser.collectAsState()
+                val webdavEnabled by viewModel.webdavEnabled.collectAsState()
+                var webdavUrlLocal by remember { mutableStateOf(webdavUrl) }
+                var webdavUserLocal by remember { mutableStateOf(webdavUser) }
+                var webdavPassLocal by remember { mutableStateOf("") }
+                var webdavTesting by remember { mutableStateOf(false) }
+                var webdavTestResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+                SettingsSection(
+                    icon = Icons.Outlined.CloudSync,
+                    title = tr("config.webdav.title"),
+                ) {
+                    Text(
+                        tr("config.webdav.hint"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = webdavUrlLocal,
+                        onValueChange = { webdavUrlLocal = it },
+                        label = { Text(tr("config.webdav.url")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = webdavUserLocal,
+                        onValueChange = { webdavUserLocal = it },
+                        label = { Text(tr("config.webdav.user")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = webdavPassLocal,
+                        onValueChange = { webdavPassLocal = it },
+                        label = { Text(tr("config.webdav.pass")) },
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.Button(
+                            onClick = {
+                                webdavTesting = true
+                                webdavTestResult = null
+                                viewModel.testWebDav(
+                                    webdavUrlLocal, webdavUserLocal, webdavPassLocal.ifBlank { webdavPassLocal },
+                                ) { ok, msg ->
+                                    webdavTesting = false
+                                    webdavTestResult = ok to msg
+                                }
+                            },
+                            enabled = !webdavTesting && webdavUrlLocal.isNotBlank(),
+                        ) {
+                            Text(tr("config.webdav.test"))
+                        }
+                        Switch(
+                            checked = webdavEnabled,
+                            onCheckedChange = { viewModel.setWebDavEnabled(it) },
+                        )
+                        Text(tr("common.enabled"), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    webdavTestResult?.let { (ok, msg) ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            if (ok) tr("config.webdav.test_ok") else tr("config.webdav.test_error", msg),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
 
                 if (saveSyncEnabledLocal ?: saveSyncEnabled) {

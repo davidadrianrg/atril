@@ -138,6 +138,27 @@ object DesktopConfig {
         get() = prefs.get("conflict_policy", "ask")
         set(v) = prefs.put("conflict_policy", v)
 
+    // ── Saves de juegos locales vía WebDAV ──────────────────────────────
+    var webdavUrl: String
+        get() = prefs.get("webdav_url", "")
+        set(v) = prefs.put("webdav_url", v.trim())
+
+    var webdavUser: String
+        get() = prefs.get("webdav_user", "")
+        set(v) = prefs.put("webdav_user", v.trim())
+
+    var webdavPass: String
+        get() = prefs.get("webdav_pass", "")
+        set(v) = prefs.put("webdav_pass", v)
+
+    var webdavEnabled: Boolean
+        get() = prefs.getBoolean("webdav_enabled", false)
+        set(v) = prefs.putBoolean("webdav_enabled", v)
+
+    var webdavLastSync: String
+        get() = prefs.get("webdav_last_sync", "")
+        set(v) = prefs.put("webdav_last_sync", v)
+
     /** Cerrar a la bandeja del sistema en vez de salir (sync en background). */
     var closeToTray: Boolean
         get() = prefs.getBoolean("close_to_tray", false)

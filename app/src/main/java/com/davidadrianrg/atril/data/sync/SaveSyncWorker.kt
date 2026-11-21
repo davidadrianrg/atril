@@ -13,6 +13,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.davidadrianrg.atril.core.i18n.tr
 import com.davidadrianrg.atril.data.local.RomSyncDatabase
+import com.davidadrianrg.atril.data.AppContainer
 import com.davidadrianrg.atril.data.local.SettingsDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -85,6 +86,7 @@ class SaveSyncWorker(
         }
 
         val result = coordinator.runSync()
+        runLocalSaveSync(dataStore, database)
 
         if (result.isSuccess) {
             Log.i(TAG, "Sync completed: ${result.message}")
@@ -115,6 +117,44 @@ class SaveSyncWorker(
                 Result.failure(workDataOf(KEY_MESSAGE to (result.error ?: tr("android.sync.error.unknown"))))
             }
         }
+    }
+
+    /**
+     * Sync WebDAV de los JUEGOS LOCALES (no gestionados por RomM), cuando el
+     * usuario lo configura. Corre en el mismo ciclo que el sync de RomM y
+     * persiste el resumen para la tarjeta de la pantalla Saves.
+     */
+    private suspend fun runLocalSaveSync(
+        dataStore: SettingsDataStore,
+        database: RomSyncDatabase,
+    ) {
+        if (!dataStore.getWebDavEnabledBlocking()) return
+        val url = dataStore.getWebDavUrlBlocking()
+        if (url.isBlank()) return
+        val webdav = com.davidadrianrg.atril.core.sync.webdav.WebDavClient(
+            baseUrl = url,
+            username = dataStore.getWebDavUserBlocking(),
+            password = dataStore.getWebDavPassBlocking(),
+        )
+        val provider = LocalSaveSyncProvider(
+            context = applicationContext,
+            database = database,
+            settingsDataStore = dataStore,
+            localGames = (applicationContext as com.davidadrianrg.atril.RomMSyncApplication).container.localGamesRepository,
+        )
+        val result = try {
+            com.davidadrianrg.atril.core.sync.localsave.LocalSaveSync(webdav, provider).syncAll()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            dataStore.setWebDavLastSync(
+                "${java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date())} · error: ${e.message ?: ""}",
+            )
+            return
+        }
+        val stamp = java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date())
+        val detail = result.messages.take(3).joinToString(" · ")
+        dataStore.setWebDavLastSync("$stamp · ${result.summary}" + detail.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty())
     }
 
     private fun createForegroundInfo(): ForegroundInfo {

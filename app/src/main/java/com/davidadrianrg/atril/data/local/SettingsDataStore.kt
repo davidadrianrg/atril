@@ -73,6 +73,11 @@ class SettingsDataStore private constructor(private val context: Context) {
         val DEVICE_ID_STRING = stringPreferencesKey("sync_device_id_string")
         val SAVE_SYNC_ENABLED = stringPreferencesKey("save_sync_enabled")
         val COMPANION_MODE = stringPreferencesKey("companion_mode")
+        val WEBDAV_URL = stringPreferencesKey("webdav_url")
+        val WEBDAV_USER = stringPreferencesKey("webdav_user")
+        val WEBDAV_PASS = stringPreferencesKey("webdav_pass")
+        val WEBDAV_ENABLED = stringPreferencesKey("webdav_enabled")
+        val WEBDAV_LAST_SYNC = stringPreferencesKey("webdav_last_sync")
         /** Presentación por defecto en el launcher: `card` | `physical`. */
         val LAUNCHER_DEFAULT_DISPLAY = stringPreferencesKey("launcher_default_display")
         /** Emulador de lanzamiento por plataforma: `slug=familia;slug=familia`. */
@@ -603,6 +608,36 @@ class SettingsDataStore private constructor(private val context: Context) {
             val value = entry.substringAfter('=', "").trim()
             if (key.isEmpty() || value.isEmpty()) null else key to value
         }.toMap()
+
+    // ── Saves locales vía WebDAV ────────────────────────────────────────
+    val webdavUrl: Flow<String> = context.dataStore.data.map { it[WEBDAV_URL] ?: "" }
+    val webdavUser: Flow<String> = context.dataStore.data.map { it[WEBDAV_USER] ?: "" }
+    val webdavPass: Flow<String> = context.dataStore.data.map { it[WEBDAV_PASS] ?: "" }
+    val webdavEnabled: Flow<Boolean> = context.dataStore.data.map { (it[WEBDAV_ENABLED] ?: "false") == "true" }
+    val webdavLastSync: Flow<String> = context.dataStore.data.map { it[WEBDAV_LAST_SYNC] ?: "" }
+
+    suspend fun setWebDavUrl(url: String) { context.dataStore.edit { it[WEBDAV_URL] = url.trim() } }
+    suspend fun setWebDavUser(user: String) { context.dataStore.edit { it[WEBDAV_USER] = user.trim() } }
+    suspend fun setWebDavPass(pass: String) { context.dataStore.edit { it[WEBDAV_PASS] = pass } }
+    suspend fun setWebDavEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[WEBDAV_ENABLED] = if (enabled) "true" else "false" }
+    }
+    suspend fun setWebDavLastSync(summary: String) {
+        context.dataStore.edit { it[WEBDAV_LAST_SYNC] = summary }
+    }
+
+    fun getWebDavUrlBlocking(): String = runCatching {
+        runBlocking { context.dataStore.data.first()[WEBDAV_URL] ?: "" }
+    }.getOrDefault("")
+    fun getWebDavUserBlocking(): String = runCatching {
+        runBlocking { context.dataStore.data.first()[WEBDAV_USER] ?: "" }
+    }.getOrDefault("")
+    fun getWebDavPassBlocking(): String = runCatching {
+        runBlocking { context.dataStore.data.first()[WEBDAV_PASS] ?: "" }
+    }.getOrDefault("")
+    fun getWebDavEnabledBlocking(): Boolean = runCatching {
+        runBlocking { (context.dataStore.data.first()[WEBDAV_ENABLED] ?: "false") == "true" }
+    }.getOrDefault(false)
 
     suspend fun setCompanionMode(enabled: Boolean) {
         context.dataStore.edit { it[COMPANION_MODE] = if (enabled) "true" else "false" }

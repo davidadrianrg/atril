@@ -3,6 +3,7 @@ package com.davidadrianrg.atril.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.davidadrianrg.atril.core.i18n.tr
+import com.davidadrianrg.atril.data.local.RomSyncDatabase
 import com.davidadrianrg.atril.data.local.SettingsDataStore
 import com.davidadrianrg.atril.data.local.dao.PlatformDao
 import com.davidadrianrg.atril.data.local.dao.RomDao
@@ -106,6 +107,50 @@ class SyncViewModel(
             settingsRepository.lastSyncFailedJson.collect { json ->
                 _failedOps.value = parseFailuresJson(json)
             }
+        }
+    }
+
+    // ── Saves de juegos locales (WebDAV) ────────────────────────────────
+    val webdavLastSync: kotlinx.coroutines.flow.StateFlow<String> =
+        settingsRepository.webdavLastSync.stateIn(
+            viewModelScope,
+            kotlinx.coroutines.flow.SharingStarted.Eagerly,
+            "",
+        )
+    val webdavEnabled: kotlinx.coroutines.flow.StateFlow<Boolean> =
+        settingsRepository.webdavEnabled.stateIn(
+            viewModelScope,
+            kotlinx.coroutines.flow.SharingStarted.Eagerly,
+            false,
+        )
+
+    /** Sync manual de los saves de los juegos locales (WebDAV). */
+    fun syncLocalSavesNow() {
+        viewModelScope.launch {
+            val dataStore = SettingsDataStore.get(appContext)
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val webdav = com.davidadrianrg.atril.core.sync.webdav.WebDavClient(
+                        baseUrl = dataStore.getWebDavUrlBlocking(),
+                        username = dataStore.getWebDavUserBlocking(),
+                        password = dataStore.getWebDavPassBlocking(),
+                    )
+                    val provider = com.davidadrianrg.atril.data.sync.LocalSaveSyncProvider(
+                        context = appContext,
+                        database = RomSyncDatabase.getDatabase(appContext),
+                        settingsDataStore = dataStore,
+                        localGames = (appContext as com.davidadrianrg.atril.RomMSyncApplication).container.localGamesRepository,
+                    )
+                    com.davidadrianrg.atril.core.sync.localsave.LocalSaveSync(webdav, provider).syncAll()
+                }
+            }
+            val stamp = java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date())
+            settingsRepository.setWebDavLastSync(
+                result.fold(
+                    { r -> "$stamp · ${r.summary}" },
+                    { e -> "$stamp · error: ${e.message ?: ""}" },
+                ),
+            )
         }
     }
 

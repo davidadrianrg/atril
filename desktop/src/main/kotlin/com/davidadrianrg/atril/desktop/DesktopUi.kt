@@ -2342,6 +2342,99 @@ fun SettingsScreen(state: DesktopAppState) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             }
+
+            // ── Saves de juegos locales (WebDAV) ──
+            SettingsSection(icon = AppIcons.Sync, title = tr("config.webdav.title")) {
+                val webdavScope = rememberCoroutineScope()
+                Text(
+                    tr("config.webdav.hint"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                var url by remember { mutableStateOf(DesktopConfig.webdavUrl) }
+                var user by remember { mutableStateOf(DesktopConfig.webdavUser) }
+                var pass by remember { mutableStateOf(DesktopConfig.webdavPass) }
+                var testing by remember { mutableStateOf(false) }
+                var result by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text(tr("config.webdav.url")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = user,
+                    onValueChange = { user = it },
+                    label = { Text(tr("config.webdav.user")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = pass,
+                    onValueChange = { pass = it },
+                    label = { Text(tr("config.webdav.pass")) },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(
+                        enabled = !testing && url.isNotBlank(),
+                        onClick = {
+                            testing = true
+                            result = null
+                            webdavScope.launch {
+                                val outcome = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    runCatching {
+                                        com.davidadrianrg.atril.core.sync.webdav.WebDavClient(url, user, pass)
+                                            .testConnection().getOrThrow()
+                                    }
+                                }
+                                testing = false
+                                result = if (outcome.isSuccess) true to "OK" else false to (outcome.exceptionOrNull()?.message ?: "")
+                                if (outcome.isSuccess) {
+                                    DesktopConfig.webdavUrl = url
+                                    DesktopConfig.webdavUser = user
+                                    DesktopConfig.webdavPass = pass
+                                    DesktopConfig.webdavEnabled = true
+                                }
+                            }
+                        },
+                    ) {
+                        if (testing) CircularProgressIndicator(Modifier.height(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(6.dp))
+                        Text(tr("config.webdav.test"))
+                    }
+                    Switch(
+                        checked = DesktopConfig.webdavEnabled,
+                        onCheckedChange = { DesktopConfig.webdavEnabled = it },
+                    )
+                    Text(tr("common.enabled"), style = MaterialTheme.typography.bodyMedium)
+                }
+                result?.let { (ok, msg) ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (ok) tr("config.webdav.test_ok") else tr("config.webdav.test_error", msg),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = state::syncLocalSavesNow) { Text(tr("saves.webdav.sync_now")) }
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        DesktopConfig.webdavLastSync.ifBlank { tr("saves.webdav.never") },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         }
 

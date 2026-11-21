@@ -1741,6 +1741,46 @@ class DesktopAppState(private val scope: CoroutineScope) {
     val syncError: StateFlow<String?> = _syncError
 
     /** Sincroniza saves con el servidor. */
+    /** Sync WebDAV de los saves de juegos locales (si está configurado). */
+    private suspend fun runLocalSaveSync() {
+        if (!DesktopConfig.webdavEnabled || DesktopConfig.webdavUrl.isBlank()) return
+        try {
+            val webdav = com.davidadrianrg.atril.core.sync.webdav.WebDavClient(
+                baseUrl = DesktopConfig.webdavUrl,
+                username = DesktopConfig.webdavUser,
+                password = DesktopConfig.webdavPass,
+            )
+            val result = com.davidadrianrg.atril.core.sync.localsave.LocalSaveSync(
+                webdav,
+                DesktopLocalSaveSyncProvider(this),
+            ).syncAll()
+            val stamp = java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date())
+            val detail = result.messages.take(3).joinToString(" · ")
+            DesktopConfig.webdavLastSync = "$stamp · ${result.summary}" + detail.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+            if (result.conflicts > 0 || result.messages.isNotEmpty()) {
+                DesktopNotifier.notify("Atril", "${tr("saves.webdav.title")}: ${result.summary}")
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val stamp = java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date())
+            DesktopConfig.webdavLastSync = "$stamp · error: ${e.message ?: ""}"
+        }
+    }
+
+    /** Sync manual inmediato de los saves de juegos locales. */
+    fun syncLocalSavesNow() {
+        scope.launch {
+            _syncing.value = true
+            try {
+                runLocalSaveSync()
+                showSnackbar(DesktopConfig.webdavLastSync.ifBlank { tr("saves.webdav.never") })
+            } finally {
+                _syncing.value = false
+            }
+        }
+    }
+
     fun syncSaves() {
         if (_syncing.value || !_saveSyncEnabled.value) return
         _syncing.value = true
@@ -1750,6 +1790,7 @@ class DesktopAppState(private val scope: CoroutineScope) {
             try {
                 val coordinator = makeSyncCoordinator()
                 val result = coordinator.runSync()
+                runLocalSaveSync()
                 val summary = buildString {
                     if (result.error != null) append(result.error)
                     else append(result.message ?: tr("sync.completed"))

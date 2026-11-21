@@ -290,6 +290,35 @@ class ConfigViewModel(
      * cancela cualquier trabajo de sync encolado; al reactivar restaura el
      * periodo configurado si existía.
      */
+    // ── Saves locales vía WebDAV ────────────────────────────────────────
+    val webdavUrl: StateFlow<String> = settingsRepository.webdavUrl.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+    val webdavUser: StateFlow<String> = settingsRepository.webdavUser.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+    val webdavEnabled: StateFlow<Boolean> = settingsRepository.webdavEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun setWebDav(url: String, user: String, pass: String) {
+        viewModelScope.launch { settingsRepository.setWebDav(url, user, pass) }
+    }
+
+    fun setWebDavEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setWebDavEnabled(enabled) }
+    }
+
+    /** Prueba la conexión y la guarda si va bien; devuelve el mensaje para la UI. */
+    fun testWebDav(url: String, user: String, pass: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    com.davidadrianrg.atril.core.sync.webdav.WebDavClient(url, user, pass).testConnection().getOrThrow()
+                }
+            }
+            if (result.isSuccess) {
+                settingsRepository.setWebDav(url, user, pass)
+                settingsRepository.setWebDavEnabled(true)
+            }
+            onResult(result.isSuccess, result.exceptionOrNull()?.message ?: "OK")
+        }
+    }
+
     /** Modo compañero: solo gestión (descargas, saves, emuladores). */
     fun setCompanionMode(enabled: Boolean) {
         viewModelScope.launch {

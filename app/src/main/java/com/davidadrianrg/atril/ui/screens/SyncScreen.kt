@@ -126,6 +126,8 @@ fun SyncScreen() {
     val pathWarnings by viewModel.pathWarnings.collectAsState()
     val scanChecked by viewModel.scanCheckedCount.collectAsState()
     val conflicts by viewModel.conflicts.collectAsState()
+    val webdavLastSync by viewModel.webdavLastSync.collectAsState()
+    val webdavEnabled by viewModel.webdavEnabled.collectAsState()
     val failedOps by viewModel.failedOps.collectAsState()
     val resolvingConflict by viewModel.resolvingConflict.collectAsState()
 
@@ -173,6 +175,13 @@ fun SyncScreen() {
         ) {
             // -- Estado actual
             item { StatusCard(syncState, lastTimestamp, lastSummary, onCancel = viewModel::cancelSync, onRetry = viewModel::triggerSync) }
+
+            // -- Saves de juegos locales (WebDAV)
+            if (webdavEnabled) {
+                item(key = "webdav_section") {
+                    WebDavCard(lastSync = webdavLastSync, onSync = viewModel::syncLocalSavesNow)
+                }
+            }
 
             // -- Conflictos pendientes de resolución
             if (conflicts.isNotEmpty()) {
@@ -1015,4 +1024,32 @@ private fun formatTimestamp(millis: Long): String {
     // Mismo formato que escritorio ("28 sep 2026 18:45"), en el idioma elegido para la UI.
     val sdf = SimpleDateFormat("d MMM yyyy HH:mm", com.davidadrianrg.atril.core.i18n.I18n.textLocale)
     return sdf.format(Date(millis))
+}
+
+/** Tarjeta del sync WebDAV de los saves de juegos locales (bajo el estado general). */
+@Composable
+private fun WebDavCard(lastSync: String, onSync: () -> Unit) {
+    androidx.compose.material3.Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    tr("saves.webdav.title"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                FilledTonalButton(onClick = onSync) {
+                    Text(tr("saves.webdav.sync_now"))
+                }
+            }
+            Text(
+                lastSync.ifBlank { tr("saves.webdav.never") },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
