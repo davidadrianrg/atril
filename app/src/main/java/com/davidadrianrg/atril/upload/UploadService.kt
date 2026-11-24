@@ -111,12 +111,20 @@ class UploadService : Service() {
         require(serverUrl.isNotBlank() && apiKey.isNotBlank()) { tr("common.server_not_configured") }
 
         val uploader = RomUploader(NetworkModule.createApiService(serverUrl, apiKey))
+        // id más alto de la plataforma antes de subir: si RomM renombra la ROM
+        // al scrapear, el fallback detecta la nueva por id y no por nombre.
+        val maxBefore = uploader.maxRomId(platformId)
 
         if (singleUri != null) {
             SafUploadSource.from(this, Uri.parse(singleUri)).use { source ->
-                uploader.upload(source, platformId) { percent ->
-                    publish(percent, tr("library.upload.uploading", percent))
-                }.getOrThrow()
+                uploader.upload(
+                    source,
+                    platformId,
+                    onProgress = { percent ->
+                        publish(percent, tr("library.upload.uploading", percent))
+                    },
+                    maxIdBefore = maxBefore,
+                ).getOrThrow()
             }
             val scanned = uploader.triggerQuickScan(platformId)
             return if (scanned) {
@@ -133,17 +141,21 @@ class UploadService : Service() {
         val total = docs.sumOf { it.length() }.coerceAtLeast(1)
         var done = 0L
         val count = docs.size
-        val maxBefore = uploader.maxRomId(platformId)
 
         val first = docs.first()
         publish(0, tr("library.upload.phase_file", 1, count, 0))
         SafUploadSource.from(this, first).use { source ->
-            uploader.upload(source, platformId) { percent ->
-                publish(
-                    ((done + first.length() * percent / 100) * 100 / total).toInt(),
-                    tr("library.upload.phase_file", 1, count, percent),
-                )
-            }.getOrThrow()
+            uploader.upload(
+                source,
+                platformId,
+                onProgress = { percent ->
+                    publish(
+                        ((done + first.length() * percent / 100) * 100 / total).toInt(),
+                        tr("library.upload.phase_file", 1, count, percent),
+                    )
+                },
+                maxIdBefore = maxBefore,
+            ).getOrThrow()
         }
         done += first.length()
 

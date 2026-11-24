@@ -37,13 +37,15 @@ class RomUploaderTest {
             server.enqueue(MockResponse().setResponseCode(500)) // primer chunk falla
             server.enqueue(MockResponse().setBody("{}"))       // reintento OK
             server.enqueue(MockResponse().setBody("{}"))       // segundo chunk
+            server.enqueue(MockResponse().setBody("{}"))       // tercer chunk
             server.enqueue(MockResponse().setBody("{}"))       // complete
 
             val api = NetworkModule.createApiService(server.url("/").toString(), "test-key")
             val result = RomUploader(api).upload(file, platformId = 1)
 
+            // 4 MB por chunk: 9 MB = 3 chunks → 1 start + 1 fallo + 1 reintento + 2 chunks + complete
             assertTrue(result.isSuccess)
-            assertEquals(5, server.requestCount)
+            assertEquals(6, server.requestCount)
         } finally {
             file.delete()
         }

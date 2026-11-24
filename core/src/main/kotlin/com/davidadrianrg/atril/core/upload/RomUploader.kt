@@ -39,6 +39,7 @@ class RomUploader(private val api: RomMApiService) {
         source: UploadSource,
         platformId: Int,
         onProgress: (Int) -> Unit = {},
+        maxIdBefore: Long? = null,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val started = try {
@@ -56,7 +57,7 @@ class RomUploader(private val api: RomMApiService) {
                 throw IllegalStateException("HTTP ${e.code()}: ${detail ?: e.message()}", e)
             }
             sendChunks(source, started.uploadId, onProgress)
-            completeNewRom(started.uploadId, platformId, source.name)
+            completeNewRom(started.uploadId, platformId, source.name, maxIdBefore)
             onProgress(100)
         }
     }
@@ -96,11 +97,17 @@ class RomUploader(private val api: RomMApiService) {
         target: UploadStartRequest,
     ) = api.startRomUpload(
         platformId = platformId.toString(),
-        filename = source.name,
+        // La cabecera no puede llevar nada fuera de Latin-1 (ñ, acentos):
+        // RomM lee el nombre REAL del body (filename), que sí soporta UTF-8.
+        filename = asciiSafe(source.name),
         totalSize = source.size,
         totalChunks = totalChunks(source.size),
-        target = target,
+        target = target.copy(filename = source.name),
     )
+
+    /** Sólo ASCII imprimible, para la cabecera x-upload-filename. */
+    private fun asciiSafe(name: String): String =
+        name.filter { it.code in 32..126 }.ifBlank { "upload" }
 
     private suspend fun sendChunks(
         source: UploadSource,
@@ -151,9 +158,19 @@ class RomUploader(private val api: RomMApiService) {
         }
     }
 
-    private suspend fun completeNewRom(uploadId: String, platformId: Int, fileName: String) {
+    private suspend fun completeNewRom(
+        uploadId: String,
+        platformId: Int,
+        fileName: String,
+        maxIdBefore: Long? = null,
+    ) {
         val err = tryComplete(uploadId) ?: return
-        if (awaitRomId(platformId, fileName) == null) {
+        // 1º por nombre; si el escaneo renombró fs_name (metadata match),
+        // fallback por id nuevo — el fichero SÍ está, no hay que fallar.
+        val found = awaitRomId(platformId, fileName) ?: run {
+            if (maxIdBefore == null) null else awaitNewRomId(platformId, maxIdBefore)
+        }
+        if (found == null) {
             throw IllegalStateException(tr("library.upload.timeout"), err)
         }
     }
@@ -202,7 +219,7 @@ class RomUploader(private val api: RomMApiService) {
     }.getOrNull()
 
     /** Id de la ROM más reciente de la plataforma (0 si no hay). */
-    suspend fun maxRomId(platformId: Int): Int = runCatching {
+    suspend fun maxRomId(platformId: Int): Long = runCatching {
         api.getRoms(
             mapOf(
                 "platform_ids" to platformId.toString(),
@@ -210,8 +227,8 @@ class RomUploader(private val api: RomMApiService) {
                 "order_dir" to "desc",
                 "limit" to "1",
             ),
-        ).items.firstOrNull()?.id ?: 0
-    }.getOrDefault(0)
+        ).items.firstOrNull()?.id?.toLong() ?: 0L
+    }.getOrDefault(0L)
 
     /**
      * Espera a que el escaneo registre una ROM nueva. Se detecta por id
@@ -220,7 +237,7 @@ class RomUploader(private val api: RomMApiService) {
      */
     suspend fun awaitNewRomId(
         platformId: Int,
-        maxIdBefore: Int,
+        maxIdBefore: Long,
         onElapsed: (seconds: Int) -> Unit = {},
     ): Int? {
         triggerQuickScan(platformId)
@@ -230,7 +247,7 @@ class RomUploader(private val api: RomMApiService) {
             onElapsed(((System.currentTimeMillis() - started) / 1000).toInt())
             if (attempt > 0 && attempt % 20 == 0) triggerQuickScan(platformId)
             val newest = maxRomId(platformId)
-            if (newest > maxIdBefore) return newest
+            if (newest > maxIdBefore) return newest.toInt()
         }
         return null
     }
@@ -315,7 +332,7 @@ class RomUploader(private val api: RomMApiService) {
         /** 30 × 10 s = 5 min de margen para que el servidor termine de ensamblar. */
         const val VERIFY_ATTEMPTS = 30
         const val VERIFY_DELAY_MS = 10_000L
-        const val CHUNK_TARGET = 8L * 1024 * 1024
+        const val CHUNK_TARGET = 4L * 1024 * 1024
         /** 4 intentos: 1 s + 2 s + 4 s de margen ante baches cortos. */
         const val CHUNK_MAX_ATTEMPTS = 4
         const val CHUNK_RETRY_BASE_MS = 1_000L
